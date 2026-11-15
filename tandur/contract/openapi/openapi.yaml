@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: >
     Spesifikasi REST API TANDUR sebagai kontrak komunikasi antara Frontend dan Backend.
-    Mendukung operasional rantai pasok komoditas pertanian, agregasi stok petani, 
+    Mendukung operasional rantai pasok komoditas pertanian, agregasi stok petani,
     dan mekanisme kontrol margin harga.
 servers:
   - url: http://localhost:8080/api/v1
@@ -17,7 +17,7 @@ paths:
       summary: Healthcheck Status Server
       description: Memeriksa ketersediaan API backend dan koneksi database.
       responses:
-        '200':
+        "200":
           description: Server beroperasi normal
           content:
             application/json:
@@ -44,7 +44,7 @@ paths:
       summary: Daftar Seluruh Komoditas
       description: Mengambil daftar komoditas pertanian beserta acuan harga dasar dan harga pasar.
       responses:
-        '200':
+        "200":
           description: Berhasil mengambil daftar komoditas
           content:
             application/json:
@@ -54,7 +54,7 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: './schemas/commodity.yaml#/Commodity'
+                      $ref: "./schemas/commodity.yaml#/Commodity"
   /commodities/{id}:
     get:
       summary: Detail Komoditas
@@ -65,7 +65,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Detail komoditas ditemukan
           content:
             application/json:
@@ -73,10 +73,10 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: './schemas/commodity.yaml#/Commodity'
-        '404':
+                    $ref: "./schemas/commodity.yaml#/Commodity"
+        "404":
           description: Komoditas tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: './schemas/error.yaml#/ErrorResponse'
+                $ref: "./schemas/error.yaml#/ErrorResponse"

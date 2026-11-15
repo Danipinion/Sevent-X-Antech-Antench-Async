@@ -12,10 +12,13 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"*"},
+		AllowOrigins: []string{"http://localhost:5173", "http://localhost", "*"},
 		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization"},
 		AllowMethods: []string{"GET, POST, PUT, DELETE, OPTIONS"},
 	}))
+
+	// Root Healthcheck
+	app.Get("/health", handler.HealthCheck)
 
 	// API v1 Routing
 	v1 := app.Group("/api/v1")

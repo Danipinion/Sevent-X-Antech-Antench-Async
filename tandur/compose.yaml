@@ -23,12 +23,14 @@ services:
       target: dev
     container_name: tandur-web
     restart: unless-stopped
+    ports:
+      - "5173:5173"
     volumes:
       - ./apps/web:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - VITE_API_BASE_URL=/api/v1
+      - VITE_API_BASE_URL=http://localhost:8080/api/v1
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=PathPrefix(`/`)"
@@ -46,12 +48,14 @@ services:
       target: dev
     container_name: tandur-api
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     volumes:
       - ./apps/api:/app
     environment:
       - APP_ENV=development
       - APP_PORT=8080
-      - APP_URL=http://localhost
+      - APP_URL=http://localhost:8080
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_NAME=tandur
@@ -83,6 +87,8 @@ services:
     image: postgis/postgis:16-3.4-alpine
     container_name: tandur-postgres
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: tandur
       POSTGRES_USER: tandur
@@ -103,6 +109,8 @@ services:
     image: redis:7-alpine
     container_name: tandur-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -117,6 +125,9 @@ services:
     image: dxflrs/garage:v1.0.1
     container_name: tandur-garage
     restart: unless-stopped
+    ports:
+      - "3900:3900"
+      - "3903:3903"
     volumes:
       - garage_data:/var/lib/garage/data
     networks:

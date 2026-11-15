@@ -17,3 +17,4 @@ Dokumentasi arsitektur observability untuk TANDUR menggunakan LGTM Stack (Loki, 
 2. **Business Metrics:** Jumlah transaksi komoditas, volume agregasi stok, rata-rata margin harga.
 3. **Database Metrics:** Connection pool usage, execution time query PostGIS geospasial.
 4. **Cache Metrics:** Redis cache hit ratio untuk kuotasi harga komoditas terkini.
+

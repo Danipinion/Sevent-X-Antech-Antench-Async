@@ -38,3 +38,4 @@ TANDUR dibangun dengan prinsip:
   - *Keputusan:* Memilih Modular Monolith untuk fase MVP agar percepatan pengembangan dan integrasi tim tetap efisien tanpa kompleksitas operasional service terpisah.
 - **ADR-002: PostGIS untuk Geospasial**
   - *Keputusan:* Menggunakan ekstensi PostGIS pada PostgreSQL guna mendukung pencarian radius komoditas terdekat dan optimasi rute logistik secara terpadu dalam satu basis data.
+

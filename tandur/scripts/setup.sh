@@ -21,3 +21,4 @@ cd ../..
 
 echo "✅ Lingkungan pengembangan TANDUR siap digunakan!"
 echo "Jalankan 'make up' untuk menyalakan seluruh service docker."
+

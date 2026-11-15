@@ -13,3 +13,4 @@ make up
 ```
 
 Silakan baca [Panduan Lengkap TANDUR](./tandur/README.md) dan [Panduan Setup Tim](./tandur/setup.md).
+

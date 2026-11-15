@@ -30,3 +30,4 @@ type CommodityRepository interface {
 	Create(ctx context.Context, commodity *Commodity) error
 	Update(ctx context.Context, commodity *Commodity) error
 }
+

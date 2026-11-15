@@ -57,3 +57,4 @@ func (h *Handler) GetCommodity(c fiber.Ctx) error {
 		"data": commodity,
 	})
 }
+

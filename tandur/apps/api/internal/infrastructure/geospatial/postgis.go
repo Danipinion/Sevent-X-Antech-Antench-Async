@@ -23,3 +23,4 @@ func CalculateHaversineDistance(p1, p2 Coordinates) float64 {
 
 	return earthRadius * c
 }
+

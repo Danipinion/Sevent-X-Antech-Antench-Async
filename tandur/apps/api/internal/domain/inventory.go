@@ -26,3 +26,4 @@ type InventoryRepository interface {
 	Create(ctx context.Context, item *Inventory) error
 	UpdateStock(ctx context.Context, id string, quantity float64) error
 }
+

@@ -33,3 +33,4 @@ Spesifikasi resmi OpenAPI 3.0 tersedia di file:
 | `GET` | `/api/v1/market-prices` | Mengambil indeks harga pasar regional terkini |
 | `GET` | `/api/v1/inventories` | Mengambil daftar inventaris komoditas petani |
 | `POST` | `/api/v1/orders` | Membuat transaksi pesanan komoditas baru |
+

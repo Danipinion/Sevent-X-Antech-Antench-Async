@@ -264,3 +264,4 @@ make lint
 
 Dikembangkan oleh **Tim Sevent-X Antech** untuk kompetisi inovasi teknologi pertanian berkelanjutan.
 - Repositori: [https://github.com/Danipinion/Sevent-X-Antech-Antench-Async](https://github.com/Danipinion/Sevent-X-Antech-Antench-Async)
+

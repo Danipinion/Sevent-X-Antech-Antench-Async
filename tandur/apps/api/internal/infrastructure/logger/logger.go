@@ -17,3 +17,4 @@ func Init(env string) {
 	Log = slog.New(handler)
 	slog.SetDefault(Log)
 }
+

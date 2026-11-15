@@ -33,3 +33,4 @@ type OrderRepository interface {
 	Create(ctx context.Context, order *Order) error
 	UpdateStatus(ctx context.Context, id string, status OrderStatus) error
 }
+

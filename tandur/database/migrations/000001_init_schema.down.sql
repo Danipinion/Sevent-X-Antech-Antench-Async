@@ -11,3 +11,4 @@ DROP TYPE IF EXISTS quality_grade;
 DROP TYPE IF EXISTS user_role;
 
 DROP EXTENSION IF EXISTS postgis;
+

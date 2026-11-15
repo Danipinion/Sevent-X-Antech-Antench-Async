@@ -91,3 +91,4 @@ func CheckDBConnection(cfg *config.Config) (string, error) {
 
 	return "standby (ready for migrations)", nil
 }
+

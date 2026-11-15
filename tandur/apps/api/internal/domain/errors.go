@@ -9,3 +9,4 @@ var (
 	ErrCommodityNotFound = errors.New("komoditas tidak ditemukan")
 	ErrInsufficientStock = errors.New("stok komoditas tidak mencukupi")
 )
+

@@ -32,3 +32,4 @@ func (s *GarageStorage) Upload(ctx context.Context, key string, data io.Reader, 
 func (s *GarageStorage) GetURL(key string) string {
 	return s.endpoint + "/" + s.bucket + "/" + key
 }
+

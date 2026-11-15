@@ -13,3 +13,4 @@ else
   echo "Penggunaan: ./scripts/migrate.sh [up|down]"
   exit 1
 fi
+

@@ -45,3 +45,4 @@ func (s *CommodityService) CreateCommodity(ctx context.Context, name, category, 
 
 	return commodity, nil
 }
+

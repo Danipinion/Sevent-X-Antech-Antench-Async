@@ -75,3 +75,4 @@ CREATE TABLE IF NOT EXISTS market_prices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_market_prices_commodity_region ON market_prices (commodity_id, region);
+

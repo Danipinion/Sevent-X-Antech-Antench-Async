@@ -50,3 +50,4 @@ export interface MarketPrice {
   nationalAverage: number;
   updatedAt: string;
 }
+

@@ -15,3 +15,4 @@ Aplikasi dijalankan dalam kontainer Docker:
 - File `.env.example` menyediakan referensi default konfigurasi lokal.
 - Variabel rahasia (*credentials*, API keys, database password) **tidak boleh di-commit** ke repositori git.
 - Setiap environment (Development, Staging, Production) menggunakan file `.env` tersendiri yang dikelola melalui CI/CD secret manager.
+

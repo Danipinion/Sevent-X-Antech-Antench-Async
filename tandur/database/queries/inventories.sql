@@ -1,5 +1,5 @@
 -- name: ListInventoriesByCommodity :many
-SELECT 
+SELECT
     i.id,
     i.commodity_id,
     c.name as commodity_name,
@@ -21,9 +21,10 @@ ORDER BY i.harvest_date DESC;
 
 -- name: FindNearbyInventories :many
 -- Finds inventories within radius_meters using PostGIS ST_DWithin
-SELECT 
+SELECT
     id, commodity_id, owner_id, quantity, unit, quality_grade, location_name,
     ST_Distance(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as distance_meters
 FROM inventories
 WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
 ORDER BY distance_meters ASC;
+

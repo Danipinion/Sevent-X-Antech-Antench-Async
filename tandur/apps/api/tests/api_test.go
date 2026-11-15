@@ -21,3 +21,4 @@ func TestCommodityService(t *testing.T) {
 		t.Errorf("expected seeded commodities, got 0")
 	}
 }
+

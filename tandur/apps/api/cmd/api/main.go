@@ -55,3 +55,4 @@ func main() {
 	_ = app.Shutdown()
 	logger.Log.Info("Server API berhasil dihentikan.")
 }
+

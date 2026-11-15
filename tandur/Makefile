@@ -2,7 +2,7 @@
 # TANDUR Project Makefile
 # ==============================================================================
 
-.PHONY: help setup up down restart logs ps frontend backend test lint migrate-up migrate-down clean
+.PHONY: help setup up up-build build stop down restart logs ps frontend backend test lint migrate-up migrate-down clean
 
 # Warna terminal
 BLUE   := \033[36m
@@ -30,8 +30,21 @@ up: ## Menjalankan seluruh service development menggunakan Docker Compose
 	@echo "$(YELLOW)Menjalankan seluruh service development TANDUR...$(RESET)"
 	docker compose up -d
 	@echo "$(GREEN)Seluruh service berhasil berjalan!$(RESET)"
-	@echo "$(BLUE)Web Frontend: http://localhost$(RESET)"
+	@echo "$(BLUE)Web Frontend: http://localhost:5173 (atau http://localhost)$(RESET)"
+	@echo "$(BLUE)Backend API:  http://localhost:8080/health$(RESET)"
 	@echo "$(BLUE)Traefik Dash: http://localhost:8081$(RESET)"
+
+up-build: ## Menjalankan service dengan membangun ulang image
+	@echo "$(YELLOW)Membangun ulang image dan menjalankan service...$(RESET)"
+	docker compose up -d --build
+
+build: ## Membangun seluruh image Docker service
+	@echo "$(YELLOW)Membangun image docker service...$(RESET)"
+	docker compose build
+
+stop: ## Menghentikan service sementara tanpa menghapus container
+	@echo "$(YELLOW)Menghentikan sementara service container...$(RESET)"
+	docker compose stop
 
 down: ## Menghentikan seluruh service development
 	@echo "$(YELLOW)Menghentikan service development TANDUR...$(RESET)"

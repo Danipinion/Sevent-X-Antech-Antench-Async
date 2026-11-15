@@ -19,3 +19,4 @@ Mekanisme pengendalian margin dinamis yang memastikan transparansi harga:
 - `GRADE_A`: Komoditas kualitas prima, ukuran seragam, segar (< 24 jam panen), ditujukan untuk Horeka & ekspor.
 - `GRADE_B`: Komoditas pasar umum, kondisi baik, ukuran variatif.
 - `GRADE_C`: Komoditas untuk industri olahan (pasta cabai, saus, keripik).
+

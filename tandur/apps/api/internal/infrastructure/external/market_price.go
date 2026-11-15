@@ -29,3 +29,4 @@ func (c *MarketPriceClient) FetchLatestPrices(ctx context.Context) ([]MarketPric
 		{CommodityName: "Bawang Merah", Region: "Jawa Tengah", AveragePrice: 36000, RecordedAt: time.Now()},
 	}, nil
 }
+

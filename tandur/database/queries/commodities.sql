@@ -12,3 +12,4 @@ ORDER BY name ASC;
 INSERT INTO commodities (id, name, category, unit, base_price, current_market_price)
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+

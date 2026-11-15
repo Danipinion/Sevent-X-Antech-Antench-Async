@@ -27,3 +27,4 @@ func (r *RedisClient) Ping(ctx context.Context) error {
 	defer cancel()
 	return r.client.Ping(ctxTimeout).Err()
 }
+

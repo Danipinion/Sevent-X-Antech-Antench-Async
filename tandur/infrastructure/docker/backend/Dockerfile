@@ -28,3 +28,4 @@ RUN apk --no-cache add ca-certificates tzdata
 COPY --from=builder /bin/tandur-api /app/tandur-api
 EXPOSE 8080
 ENTRYPOINT ["/app/tandur-api"]
+

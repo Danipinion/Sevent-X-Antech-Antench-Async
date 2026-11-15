@@ -29,3 +29,4 @@ INSERT INTO market_prices (commodity_id, region, average_price, recorded_at) VAL
 ('cabai-merah', 'DKI Jakarta', 48000.00, NOW()),
 ('bawang-merah', 'Jawa Tengah', 36000.00, NOW()),
 ('bawang-merah', 'DKI Jakarta', 40000.00, NOW());
+

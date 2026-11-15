@@ -7,3 +7,4 @@ ErrorResponse:
       type: string
       description: Pesan deskripsi kesalahan
       example: Komoditas tidak ditemukan
+
