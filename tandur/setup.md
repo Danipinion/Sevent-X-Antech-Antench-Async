@@ -1,857 +1,1147 @@
-# Local Development Environment & Docker Compose
+# Database Initialization & Migration Setup
 
 ## 1. Tujuan
 
-Menyiapkan lingkungan pengembangan lokal berbasis Docker agar seluruh anggota tim TANDUR dapat menjalankan aplikasi dan dependensi utamanya secara konsisten tanpa perlu melakukan instalasi database, cache, dan object storage secara manual.
+Menyiapkan database development TANDUR menggunakan PostgreSQL dan PostGIS, termasuk sistem migration untuk mengelola perubahan struktur database secara terkontrol.
 
-Lingkungan development menggunakan Docker Compose untuk mengelola beberapa service dalam satu konfigurasi terpusat.
+Database harus dapat dibangun dari kondisi kosong hanya dengan menjalankan seluruh migration yang tersedia di repository.
 
-Dengan konfigurasi ini, setiap anggota tim cukup memiliki Docker Desktop atau Docker Engine beserta Docker Compose untuk menjalankan lingkungan pengembangan.
+Sistem migration digunakan agar seluruh anggota tim memiliki struktur database yang konsisten, perubahan skema dapat ditelusuri, dan proses rollback dapat dilakukan ketika terjadi kesalahan pada migration.
 
 ## 2. Teknologi yang Digunakan
 
-| Service          | Teknologi                    | Fungsi                                            |
-| ---------------- | ---------------------------- | ------------------------------------------------- |
-| Frontend         | React.js + TypeScript + Vite | Menjalankan aplikasi web TANDUR                   |
-| Backend          | Golang + Fiber v3            | Menjalankan REST API                              |
-| Database         | PostgreSQL + PostGIS         | Menyimpan data utama dan data geografis           |
-| Cache            | Redis                        | Menyimpan cache dan mendukung kebutuhan sementara |
-| Object Storage   | Garage                       | Menyimpan file dan objek menggunakan S3 API       |
-| Containerization | Docker                       | Menjalankan aplikasi dalam container              |
-| Orchestration    | Docker Compose               | Mengelola service dan jaringan container          |
+| Teknologi      | Fungsi                                                     |
+| -------------- | ---------------------------------------------------------- |
+| PostgreSQL     | Database relasional utama                                  |
+| PostGIS        | Mendukung penyimpanan dan pencarian data geografis         |
+| golang-migrate | Mengelola migration database                               |
+| SQL            | Mendefinisikan struktur tabel, constraint, index, dan seed |
+| Docker Compose | Menjalankan database development                           |
 
-## 3. Struktur File Docker
+## 3. Struktur Direktori Database
 
-Pastikan repository memiliki struktur berikut:
+Gunakan struktur berikut:
 
 ```text
-tandur/
-├── apps/
-│   ├── web/
-│   │   ├── Dockerfile
-│   │   ├── package.json
-│   │   └── ...
-│   │
-│   └── api/
-│       ├── Dockerfile
-│       ├── go.mod
-│       └── ...
+database/
+├── migrations/
+│   ├── 000001_enable_extensions.up.sql
+│   ├── 000001_enable_extensions.down.sql
+│   ├── 000002_create_users.up.sql
+│   ├── 000002_create_users.down.sql
+│   ├── 000003_create_commodities.up.sql
+│   ├── 000003_create_commodities.down.sql
+│   ├── 000004_create_listings.up.sql
+│   ├── 000004_create_listings.down.sql
+│   ├── 000005_create_purchases.up.sql
+│   ├── 000005_create_purchases.down.sql
+│   ├── 000006_create_inventory.up.sql
+│   ├── 000006_create_inventory.down.sql
+│   ├── 000007_create_orders.up.sql
+│   ├── 000007_create_orders.down.sql
+│   ├── 000008_create_transactions.up.sql
+│   ├── 000008_create_transactions.down.sql
+│   ├── 000009_create_market_prices.up.sql
+│   ├── 000009_create_market_prices.down.sql
+│   ├── 000010_create_notifications.up.sql
+│   └── 000010_create_notifications.down.sql
 │
-├── infrastructure/
-│   ├── docker/
-│   │   ├── frontend/
-│   │   │   └── Dockerfile
-│   │   └── backend/
-│   │       └── Dockerfile
-│   │
-│   └── garage/
-│       └── garage.toml
+├── seeds/
+│   ├── 001_roles.sql
+│   └── 002_commodities.sql
 │
-├── database/
-│   ├── migrations/
-│   └── seeds/
-│
-├── compose.yaml
-├── .env.example
-├── .env
-├── .dockerignore
-└── Makefile
+└── README.md
 ```
 
-Catatan: Dockerfile dapat ditempatkan langsung di dalam `apps/web` dan `apps/api`, atau mengikuti direktori `infrastructure/docker` di atas. Pilih satu pendekatan dan gunakan secara konsisten. Contoh berikut menggunakan Dockerfile di direktori `infrastructure/docker`.
+Aturan penamaan migration:
 
-## 4. Dockerfile Frontend
-
-File: `infrastructure/docker/frontend/Dockerfile`
-
-```dockerfile
-FROM node:22-alpine
-
-WORKDIR /app
-
-COPY apps/web/package*.json ./
-
-RUN npm install
-
-COPY apps/web/ .
-
-EXPOSE 5173
-
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+```text
+{version}_{descriptive_name}.up.sql
+{version}_{descriptive_name}.down.sql
 ```
 
-Penjelasan:
+Contoh:
 
-- Menggunakan Node.js sebagai runtime frontend.
-- Menyalin dependency manifest terlebih dahulu agar instalasi dependency dapat memanfaatkan Docker layer cache.
-- Menjalankan Vite development server.
-- Menggunakan `0.0.0.0` agar frontend dapat diakses dari luar container.
-- Port frontend menggunakan `5173`.
-
-Catatan: Contoh ini menggunakan npm. Jika proyek menggunakan pnpm, sesuaikan proses instalasi dan command-nya dengan package manager yang dipilih tim.
-
-## 5. Dockerfile Backend
-
-File: `infrastructure/docker/backend/Dockerfile`
-
-```dockerfile
-FROM golang:1.25-alpine
-
-WORKDIR /app
-
-RUN apk add --no-cache git ca-certificates tzdata
-
-COPY apps/api/go.mod apps/api/go.sum ./
-
-RUN go mod download
-
-COPY apps/api/ .
-
-EXPOSE 8080
-
-CMD ["go", "run", "./cmd/api"]
+```text
+000001_enable_extensions.up.sql
+000001_enable_extensions.down.sql
+000002_create_users.up.sql
+000002_create_users.down.sql
 ```
 
-Penjelasan:
+Setiap migration harus memiliki pasangan `up` dan `down`.
 
-- Menggunakan Golang sebagai runtime backend.
-- Mengunduh dependency berdasarkan `go.mod` dan `go.sum`.
-- Menyalin source code backend.
-- Menjalankan aplikasi melalui entry point `cmd/api`.
-- Backend menggunakan port `8080`.
+- `up` digunakan untuk menerapkan perubahan database.
+- `down` digunakan untuk membatalkan perubahan database.
+- Nomor migration harus berurutan dan tidak boleh digunakan kembali.
+- Migration yang sudah diterapkan bersama tim tidak boleh diedit secara sembarangan. Buat migration baru untuk perubahan berikutnya.
 
-Catatan:
+## 4. Membuat Database Development
 
-- Sesuaikan versi Go dengan versi yang ditetapkan di `go.mod` dan standar tim.
-- Pastikan entry point `./cmd/api` benar-benar tersedia.
-- Jika nama package atau lokasi entry point berubah, sesuaikan command pada Dockerfile.
-- Dockerfile ini ditujukan untuk development, bukan image production.
+Database development menggunakan konfigurasi PostgreSQL dengan PostGIS.
 
-## 6. Docker Compose
-
-File: `compose.yaml`
-
-```yaml
-services:
-  web:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/frontend/Dockerfile
-    container_name: tandur-web
-    restart: unless-stopped
-    ports:
-      - "${WEB_PORT:-5173}:5173"
-    volumes:
-      - ./apps/web:/app
-      - web_node_modules:/app/node_modules
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
-    depends_on:
-      api:
-        condition: service_healthy
-    networks:
-      - tandur-network
-
-  api:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/backend/Dockerfile
-    container_name: tandur-api
-    restart: unless-stopped
-    ports:
-      - "${API_PORT:-8080}:8080"
-    volumes:
-      - ./apps/api:/app
-      - go_modules:/go/pkg/mod
-    environment:
-      APP_ENV: development
-      APP_PORT: 8080
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT: http://garage:3900
-      S3_REGION: ${S3_REGION:-garage}
-      S3_BUCKET: ${S3_BUCKET:-tandur}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      garage:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - --spider
-        - -q
-        - http://localhost:8080/health
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    networks:
-      - tandur-network
-
-  postgres:
-    image: postgis/postgis:17-3.5
-    container_name: tandur-postgres
-    restart: unless-stopped
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - tandur-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: tandur-redis
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test:
-        - CMD
-        - redis-cli
-        - ping
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - tandur-network
-
-  garage:
-    image: dxflrs/garage:v2.1.0
-    container_name: tandur-garage
-    restart: unless-stopped
-    ports:
-      - "${GARAGE_S3_PORT:-3900}:3900"
-      - "${GARAGE_WEB_PORT:-3902}:3902"
-      - "${GARAGE_ADMIN_PORT:-3903}:3903"
-    volumes:
-      - garage_data:/var/lib/garage/data
-      - garage_meta:/var/lib/garage/meta
-      - ./infrastructure/garage/garage.toml:/etc/garage.toml:ro
-    healthcheck:
-      test:
-        - CMD
-        - /garage
-        - status
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-    networks:
-      - tandur-network
-
-volumes:
-  postgres_data:
-  redis_data:
-  garage_data:
-  garage_meta:
-  web_node_modules:
-  go_modules:
-
-networks:
-  tandur-network:
-    driver: bridge
-```
-
-Catatan penting:
-
-1. `depends_on` dengan `condition: service_healthy` memastikan service yang bergantung pada database, Redis, dan Garage menunggu health check dependency-nya.
-2. Health check backend mengasumsikan endpoint `GET /health` sudah dibuat.
-3. Health check Garage menggunakan perintah `garage status`. Pastikan perintah tersebut tersedia dan berfungsi pada versi image yang dipilih. Jika tidak, sesuaikan dengan mekanisme pemeriksaan yang didukung image.
-4. Port yang diekspos ke host dapat diubah melalui `.env`.
-5. Semua komunikasi antar-container menggunakan nama service, bukan `localhost`. Contohnya backend mengakses PostgreSQL melalui `postgres:5432`.
-6. Konfigurasi ini merupakan baseline development. Production harus menggunakan konfigurasi terpisah.
-
-## 7. Konfigurasi Garage
-
-File: `infrastructure/garage/garage.toml`
-
-```toml
-metadata_dir = "/var/lib/garage/meta"
-data_dir = "/var/lib/garage/data"
-
-db_engine = "lmdb"
-
-replication_factor = 1
-
-rpc_bind_addr = "[::]:3901"
-rpc_public_addr = "127.0.0.1:3901"
-
-rpc_secret = "CHANGE_THIS_TO_A_RANDOM_64_CHARACTER_HEX_SECRET"
-
-[s3_api]
-s3_region = "garage"
-api_bind_addr = "[::]:3900"
-root_domain = ".s3.localhost"
-
-[admin]
-api_bind_addr = "[::]:3903"
-```
-
-Penjelasan:
-
-- Garage digunakan sebagai object storage yang kompatibel dengan S3 API.
-- `replication_factor = 1` digunakan untuk lingkungan lokal satu node.
-- Port `3900` digunakan untuk S3 API.
-- Port `3903` digunakan untuk Admin API.
-- Direktori data dan metadata dipersistenkan melalui Docker volume.
-- `rpc_secret` harus berupa secret acak dan tidak boleh menggunakan nilai contoh di atas pada lingkungan bersama atau production.
-
-Catatan: Setelah Garage berjalan, node perlu diinisialisasi dan bucket serta access key perlu dibuat menggunakan CLI Garage. Proses bootstrap ini merupakan bagian dari setup awal, bukan otomatis dilakukan hanya dengan menjalankan Docker Compose.
-
-Contoh command inisialisasi (jalankan sesuai petunjuk CLI versi Garage yang digunakan):
-
-```bash
-docker compose exec garage /garage status
-docker compose exec garage /garage layout assign -z dc1 -c 1G <NODE_ID>
-docker compose exec garage /garage layout apply --version 1
-docker compose exec garage /garage bucket create tandur
-docker compose exec garage /garage key create tandur-dev
-docker compose exec garage /garage bucket allow --read --write tandur --key tandur-dev
-```
-
-Periksa kembali sintaks CLI sesuai versi Garage yang digunakan. Simpan access key dan secret key hasil pembuatan ke `.env` lokal.
-
-## 8. Environment Variables
-
-File: `.env.example`
+Contoh konfigurasi environment:
 
 ```env
-# Application
-APP_ENV=development
-
-# Frontend
-WEB_PORT=5173
-VITE_API_BASE_URL=http://localhost:8080
-
-# Backend
-API_PORT=8080
-
-# PostgreSQL
 POSTGRES_DB=tandur
 POSTGRES_USER=tandur
 POSTGRES_PASSWORD=change_me
 POSTGRES_PORT=5432
-
-# Redis
-REDIS_PORT=6379
-
-# Garage
-GARAGE_S3_PORT=3900
-GARAGE_WEB_PORT=3902
-GARAGE_ADMIN_PORT=3903
-
-S3_REGION=garage
-S3_BUCKET=tandur
-S3_ACCESS_KEY=replace_with_garage_access_key
-S3_SECRET_KEY=replace_with_garage_secret_key
 ```
 
-Aturan penggunaan environment variable:
-
-- `.env.example` menjadi template konfigurasi yang boleh masuk repository.
-- `.env` berisi konfigurasi lokal masing-masing anggota tim dan tidak boleh di-commit.
-- Jangan menyimpan password, access key, secret key, atau credential asli di repository.
-- Semua anggota tim harus membuat `.env` dari `.env.example`.
-- Jika ada perubahan environment variable, perbarui `.env.example` dan dokumentasikan perubahan tersebut.
-- Untuk production, gunakan secret management yang sesuai dan jangan menggunakan credential development.
-
-Command membuat file `.env`:
+Jika menggunakan Docker Compose yang telah disiapkan sebelumnya, service PostgreSQL dapat dijalankan menggunakan:
 
 ```bash
-cp .env.example .env
+docker compose up -d postgres
 ```
 
-## 9. Docker Ignore
-
-File: `.dockerignore`
-
-```dockerignore
-.git
-.gitignore
-
-.env
-.env.*
-!.env.example
-
-**/node_modules
-**/vendor
-**/dist
-**/build
-
-**/.idea
-**/.vscode
-
-**/*.log
-**/coverage
-**/tmp
-
-.DS_Store
-Thumbs.db
-```
-
-Tujuan `.dockerignore` adalah mencegah file yang tidak diperlukan masuk ke build context Docker, mengurangi ukuran build context, serta menghindari credential lokal ikut tersalin ke image.
-
-## 10. Volume Persistence
-
-Docker volume digunakan agar data penting tidak hilang ketika container dihentikan atau dibuat ulang.
-
-| Volume             | Service    | Fungsi                           |
-| ------------------ | ---------- | -------------------------------- |
-| `postgres_data`    | PostgreSQL | Menyimpan database               |
-| `redis_data`       | Redis      | Menyimpan data persistence Redis |
-| `garage_data`      | Garage     | Menyimpan objek/file             |
-| `garage_meta`      | Garage     | Menyimpan metadata Garage        |
-| `web_node_modules` | Frontend   | Menyimpan dependency Node.js     |
-| `go_modules`       | Backend    | Menyimpan cache dependency Go    |
-
-Aturan:
-
-- Jangan menggunakan `docker compose down -v` jika masih membutuhkan data lokal.
-- Gunakan `docker compose down` untuk menghentikan dan menghapus container tanpa menghapus named volume.
-- Backup database dan object storage secara berkala jika data development penting.
-- Volume dependency frontend dan backend dapat dihapus dan dibuat ulang jika terjadi masalah dependency.
-
-## 11. Network Antar-Container
-
-Seluruh service menggunakan satu bridge network bernama `tandur-network`.
-
-| Service    | Alamat yang Digunakan Antar-Container |
-| ---------- | ------------------------------------- |
-| Frontend   | `web:5173`                            |
-| Backend    | `api:8080`                            |
-| PostgreSQL | `postgres:5432`                       |
-| Redis      | `redis:6379`                          |
-| Garage S3  | `garage:3900`                         |
-
-Aturan:
-
-- Gunakan nama service Docker Compose sebagai hostname.
-- Jangan menggunakan `localhost` untuk komunikasi dari satu container ke container lain.
-- `localhost` di dalam container hanya merujuk ke container itu sendiri.
-- Browser pengguna mengakses frontend dan API melalui port host, misalnya `localhost:5173` dan `localhost:8080`.
-- Backend mengakses dependency internal melalui network Docker.
-
-## 12. Health Check
-
-Health check digunakan untuk memeriksa apakah service sudah siap menerima koneksi.
-
-| Service    | Pemeriksaan             | Tujuan                                    |
-| ---------- | ----------------------- | ----------------------------------------- |
-| Frontend   | HTTP development server | Memastikan frontend dapat diakses         |
-| Backend    | `GET /health`           | Memastikan API berjalan                   |
-| PostgreSQL | `pg_isready`            | Memastikan database siap menerima koneksi |
-| Redis      | `redis-cli ping`        | Memastikan Redis merespons                |
-| Garage     | `garage status`         | Memeriksa status node Garage              |
-
-Backend harus menyediakan endpoint sederhana:
-
-```http
-GET /health
-```
-
-Contoh respons:
-
-```json
-{
-  "status": "ok",
-  "service": "tandur-api"
-}
-```
-
-Health check service tidak otomatis menjamin seluruh fitur aplikasi berjalan dengan benar. Pengujian integrasi tetap diperlukan.
-
-## 13. Command Menjalankan Lingkungan Lokal
-
-### 13.1 Persiapan
-
-Pastikan perangkat sudah memiliki:
-
-- Docker Desktop atau Docker Engine.
-- Docker Compose.
-- Git.
-- Repository TANDUR.
-
-Periksa instalasi:
+Periksa status container:
 
 ```bash
-docker --version
-docker compose version
+docker compose ps postgres
 ```
 
-### 13.2 Membuat Environment File
-
-```bash
-cp .env.example .env
-```
-
-Sesuaikan credential lokal dan konfigurasi Garage sebelum menjalankan aplikasi.
-
-### 13.3 Build dan Menjalankan Semua Service
-
-```bash
-docker compose up -d --build
-```
-
-Command tersebut akan:
-
-- Membuat image frontend dan backend.
-- Mengunduh image dependency.
-- Membuat network.
-- Membuat volume.
-- Menjalankan seluruh container di background.
-
-### 13.4 Memeriksa Status Container
-
-```bash
-docker compose ps
-```
-
-Pastikan seluruh service berada dalam kondisi berjalan dan health check service yang memilikinya menunjukkan `healthy`.
-
-### 13.5 Melihat Log
-
-Semua service:
-
-```bash
-docker compose logs -f
-```
-
-Frontend:
-
-```bash
-docker compose logs -f web
-```
-
-Backend:
-
-```bash
-docker compose logs -f api
-```
-
-PostgreSQL:
-
-```bash
-docker compose logs -f postgres
-```
-
-Redis:
-
-```bash
-docker compose logs -f redis
-```
-
-Garage:
-
-```bash
-docker compose logs -f garage
-```
-
-### 13.6 Menghentikan Service
-
-```bash
-docker compose stop
-```
-
-Menghentikan sekaligus menghapus container dan network:
-
-```bash
-docker compose down
-```
-
-Data dalam named volume tetap dipertahankan.
-
-### 13.7 Menjalankan Ulang Service
-
-```bash
-docker compose restart
-```
-
-### 13.8 Rebuild Setelah Perubahan Dockerfile
-
-```bash
-docker compose up -d --build
-```
-
-### 13.9 Mengakses Container
-
-Frontend:
-
-```bash
-docker compose exec web sh
-```
-
-Backend:
-
-```bash
-docker compose exec api sh
-```
-
-PostgreSQL:
-
-```bash
-docker compose exec postgres sh
-```
-
-Redis:
-
-```bash
-docker compose exec redis sh
-```
-
-Garage:
-
-```bash
-docker compose exec garage sh
-```
-
-### 13.10 Mengakses PostgreSQL
+Masuk ke database:
 
 ```bash
 docker compose exec postgres psql -U tandur -d tandur
 ```
 
-### 13.11 Mengakses Redis
+Periksa database yang tersedia:
+
+```sql
+\l
+```
+
+Periksa koneksi database:
+
+```sql
+SELECT current_database();
+```
+
+Hasil yang diharapkan:
+
+```text
+tandur
+```
+
+## 5. Mengaktifkan Extension PostgreSQL
+
+TANDUR membutuhkan PostGIS untuk mendukung data lokasi petani, tengkulak, pembeli, dan pencarian berdasarkan jarak geografis.
+
+File: `000001_enable_extensions.up.sql`
+
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+```
+
+File: `000001_enable_extensions.down.sql`
+
+```sql
+DROP EXTENSION IF EXISTS postgis;
+DROP EXTENSION IF EXISTS pgcrypto;
+```
+
+Penjelasan:
+
+- `postgis` digunakan untuk menyimpan dan memproses data geografis.
+- `pgcrypto` digunakan untuk menyediakan fungsi kriptografi PostgreSQL, termasuk UUID melalui `gen_random_uuid()`.
+
+Catatan: Migration `down` ini hanya boleh dijalankan ketika tidak ada objek database yang masih bergantung pada extension tersebut.
+
+## 6. Desain Tabel Inti
+
+Database TANDUR menggunakan pendekatan relasional dengan pemisahan data berdasarkan tanggung jawab masing-masing entitas.
+
+### 6.1 Tabel `users`
+
+Menyimpan akun pengguna sistem.
+
+```sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    phone VARCHAR(20) UNIQUE,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT users_role_check
+        CHECK (role IN ('farmer', 'middleman', 'buyer'))
+);
+```
+
+Keterangan:
+
+- Satu akun hanya memiliki satu role utama.
+- Role yang diperbolehkan adalah farmer, middleman, dan buyer.
+- Password harus disimpan dalam bentuk hash, bukan plaintext.
+- Email digunakan sebagai identitas login yang unik.
+
+### 6.2 Tabel `user_locations`
+
+Menyimpan lokasi geografis pengguna.
+
+```sql
+CREATE TABLE user_locations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    label VARCHAR(100),
+    address TEXT NOT NULL,
+    village VARCHAR(100),
+    district VARCHAR(100),
+    city VARCHAR(100),
+    province VARCHAR(100),
+    location GEOGRAPHY(POINT, 4326) NOT NULL,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Keterangan:
+
+- Menggunakan `GEOGRAPHY(POINT, 4326)` untuk menyimpan koordinat longitude dan latitude.
+- Satu pengguna dapat memiliki beberapa lokasi.
+- Lokasi utama dapat digunakan sebagai lokasi default transaksi.
+- Validasi wilayah layanan dilakukan berdasarkan aturan geografis aplikasi.
+
+### 6.3 Tabel `commodities`
+
+Menyimpan daftar komoditas pertanian.
+
+```sql
+CREATE TABLE commodities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(150) NOT NULL UNIQUE,
+    description TEXT,
+    unit VARCHAR(30) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Contoh komoditas:
+
+- Padi.
+- Jagung.
+- Cabai.
+- Tomat.
+- Bawang merah.
+
+Satuan harus disepakati secara konsisten, misalnya kg, ton, atau ikat. Konversi satuan tidak boleh dilakukan secara implisit.
+
+### 6.4 Tabel `farmer_listings`
+
+Menyimpan penawaran atau pre-order komoditas yang dibuat petani.
+
+```sql
+CREATE TABLE farmer_listings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES users(id),
+    commodity_id UUID NOT NULL REFERENCES commodities(id),
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    estimated_quantity NUMERIC(14,2) NOT NULL,
+    available_quantity NUMERIC(14,2) NOT NULL,
+    unit VARCHAR(30) NOT NULL,
+    estimated_harvest_date DATE,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    location GEOGRAPHY(POINT, 4326) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT farmer_listings_quantity_check
+        CHECK (
+            estimated_quantity > 0
+            AND available_quantity >= 0
+            AND available_quantity <= estimated_quantity
+        ),
+
+    CONSTRAINT farmer_listings_status_check
+        CHECK (
+            status IN (
+                'draft',
+                'published',
+                'reserved',
+                'completed',
+                'cancelled'
+            )
+        )
+);
+```
+
+Keterangan:
+
+- Listing dibuat oleh pengguna dengan role farmer.
+- `estimated_quantity` menyimpan estimasi jumlah hasil panen.
+- `available_quantity` menyimpan jumlah yang masih tersedia untuk ditawarkan.
+- Harga transaksi final tidak ditetapkan melalui listing karena kesepakatan harga dilakukan secara offline.
+
+### 6.5 Tabel `farmer_purchases`
+
+Menyimpan pembelian tengkulak terhadap hasil panen petani.
+
+```sql
+CREATE TABLE farmer_purchases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    listing_id UUID NOT NULL REFERENCES farmer_listings(id),
+    middleman_id UUID NOT NULL REFERENCES users(id),
+    farmer_id UUID NOT NULL REFERENCES users(id),
+    quantity NUMERIC(14,2) NOT NULL,
+    agreed_price NUMERIC(14,2) NOT NULL,
+    total_price NUMERIC(18,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    agreement_date TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT farmer_purchases_quantity_check
+        CHECK (quantity > 0),
+
+    CONSTRAINT farmer_purchases_price_check
+        CHECK (
+            agreed_price >= 0
+            AND total_price >= 0
+        ),
+
+    CONSTRAINT farmer_purchases_status_check
+        CHECK (
+            status IN (
+                'pending',
+                'accepted',
+                'rejected',
+                'completed',
+                'cancelled'
+            )
+        )
+);
+```
+
+Keterangan:
+
+- Menyimpan hubungan pembelian antara tengkulak dan petani.
+- `agreed_price` merupakan harga final hasil kesepakatan offline.
+- `total_price` menyimpan nilai total pembelian.
+- Status transaksi digunakan untuk melacak proses pembelian.
+
+Catatan: Proses persetujuan, validasi kepemilikan listing, dan pengurangan ketersediaan harus dilakukan oleh backend dalam transaksi database.
+
+### 6.6 Tabel `inventory`
+
+Menyimpan stok komoditas yang dikelola tengkulak.
+
+```sql
+CREATE TABLE inventory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    middleman_id UUID NOT NULL REFERENCES users(id),
+    commodity_id UUID NOT NULL REFERENCES commodities(id),
+    quantity NUMERIC(14,2) NOT NULL DEFAULT 0,
+    unit VARCHAR(30) NOT NULL,
+    purchase_price NUMERIC(14,2) NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'available',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT inventory_quantity_check
+        CHECK (quantity >= 0),
+
+    CONSTRAINT inventory_price_check
+        CHECK (purchase_price >= 0),
+
+    CONSTRAINT inventory_status_check
+        CHECK (
+            status IN (
+                'available',
+                'empty',
+                'inactive'
+            )
+        )
+);
+```
+
+Keterangan:
+
+- Stok dimiliki dan dikelola oleh tengkulak.
+- Satu tengkulak dapat memiliki beberapa stok komoditas.
+- Stok tidak boleh bernilai negatif.
+- Stok yang berasal dari pembelian berbeda perlu tetap dapat ditelusuri.
+
+### 6.7 Tabel `inventory_movements`
+
+Mencatat perubahan jumlah stok.
+
+```sql
+CREATE TABLE inventory_movements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inventory_id UUID NOT NULL REFERENCES inventory(id),
+    movement_type VARCHAR(20) NOT NULL,
+    quantity NUMERIC(14,2) NOT NULL,
+    reference_id UUID,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT inventory_movements_type_check
+        CHECK (
+            movement_type IN (
+                'in',
+                'out',
+                'adjustment'
+            )
+        ),
+
+    CONSTRAINT inventory_movements_quantity_check
+        CHECK (quantity > 0)
+);
+```
+
+Keterangan:
+
+- `in` digunakan ketika stok bertambah.
+- `out` digunakan ketika stok berkurang.
+- `adjustment` digunakan untuk koreksi stok.
+- Perubahan stok harus tercatat agar riwayat inventori dapat ditelusuri.
+
+### 6.8 Tabel `buyer_orders`
+
+Menyimpan pesanan yang dibuat pembeli.
+
+```sql
+CREATE TABLE buyer_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id UUID NOT NULL REFERENCES users(id),
+    order_number VARCHAR(50) NOT NULL UNIQUE,
+    total_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    pickup_location_id UUID REFERENCES user_locations(id),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT buyer_orders_amount_check
+        CHECK (total_amount >= 0),
+
+    CONSTRAINT buyer_orders_status_check
+        CHECK (
+            status IN (
+                'pending',
+                'confirmed',
+                'processing',
+                'ready_for_pickup',
+                'completed',
+                'cancelled'
+            )
+        )
+);
+```
+
+Keterangan:
+
+- Satu pesanan dimiliki oleh satu pembeli.
+- Pesanan dapat terdiri dari beberapa sumber stok.
+- Sistem menggunakan Cash on Pickup.
+- Tidak ada integrasi payment gateway dalam ruang lingkup MVP.
+
+### 6.9 Tabel `buyer_order_items`
+
+Menyimpan detail item dalam pesanan pembeli.
+
+```sql
+CREATE TABLE buyer_order_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES buyer_orders(id) ON DELETE CASCADE,
+    inventory_id UUID NOT NULL REFERENCES inventory(id),
+    quantity NUMERIC(14,2) NOT NULL,
+    unit VARCHAR(30) NOT NULL,
+    unit_price NUMERIC(14,2) NOT NULL,
+    subtotal NUMERIC(18,2) NOT NULL,
+
+    CONSTRAINT buyer_order_items_quantity_check
+        CHECK (quantity > 0),
+
+    CONSTRAINT buyer_order_items_price_check
+        CHECK (
+            unit_price >= 0
+            AND subtotal >= 0
+        )
+);
+```
+
+Keterangan:
+
+- Setiap item terhubung dengan sumber stok tertentu.
+- Pesanan dapat menggabungkan beberapa sumber stok.
+- Subtotal dihitung berdasarkan jumlah dan harga satuan.
+- Harga pada item menjadi snapshot harga ketika pesanan dibuat.
+
+### 6.10 Tabel `order_suborders`
+
+Memisahkan pemenuhan pesanan berdasarkan tengkulak atau sumber stok.
+
+```sql
+CREATE TABLE order_suborders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES buyer_orders(id) ON DELETE CASCADE,
+    middleman_id UUID NOT NULL REFERENCES users(id),
+    suborder_number VARCHAR(50) NOT NULL UNIQUE,
+    subtotal NUMERIC(18,2) NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT order_suborders_subtotal_check
+        CHECK (subtotal >= 0),
+
+    CONSTRAINT order_suborders_status_check
+        CHECK (
+            status IN (
+                'pending',
+                'confirmed',
+                'processing',
+                'ready_for_pickup',
+                'completed',
+                'cancelled'
+            )
+        )
+);
+```
+
+Keterangan:
+
+- Satu pesanan utama dapat memiliki beberapa suborder.
+- Setiap suborder dikelola oleh tengkulak yang bersangkutan.
+- Pemenuhan pesanan dapat dilacak secara terpisah.
+- Hubungan antara item dan suborder perlu dijaga oleh backend atau ditambahkan melalui tabel penghubung jika satu item dapat dipecah ke beberapa sumber stok.
+
+### 6.11 Tabel `transactions`
+
+Menyimpan catatan transaksi Cash on Pickup.
+
+```sql
+CREATE TABLE transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL UNIQUE REFERENCES buyer_orders(id),
+    transaction_number VARCHAR(50) NOT NULL UNIQUE,
+    payment_method VARCHAR(30) NOT NULL DEFAULT 'cash_on_pickup',
+    payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
+    total_amount NUMERIC(18,2) NOT NULL,
+    paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT transactions_method_check
+        CHECK (payment_method = 'cash_on_pickup'),
+
+    CONSTRAINT transactions_status_check
+        CHECK (
+            payment_status IN (
+                'unpaid',
+                'paid',
+                'cancelled'
+            )
+        ),
+
+    CONSTRAINT transactions_amount_check
+        CHECK (total_amount >= 0)
+);
+```
+
+Keterangan:
+
+- Metode pembayaran MVP hanya Cash on Pickup.
+- Status `unpaid` menunjukkan pembayaran belum diterima.
+- Status `paid` menunjukkan pembayaran tunai sudah dikonfirmasi.
+- Konfirmasi pembayaran harus memiliki otorisasi sesuai alur bisnis.
+- Tabel ini mencatat transaksi, bukan memproses pembayaran elektronik.
+
+### 6.12 Tabel `market_prices`
+
+Menyimpan referensi harga pasar dari API eksternal atau input yang telah divalidasi.
+
+```sql
+CREATE TABLE market_prices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    commodity_id UUID NOT NULL REFERENCES commodities(id),
+    source VARCHAR(100) NOT NULL,
+    market_name VARCHAR(150),
+    region VARCHAR(150),
+    price NUMERIC(14,2) NOT NULL,
+    unit VARCHAR(30) NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT market_prices_price_check
+        CHECK (price >= 0)
+);
+```
+
+Keterangan:
+
+- Data digunakan sebagai indikator referensi harga pasar.
+- Harga pasar bukan harga transaksi wajib.
+- Data perlu menyimpan sumber dan waktu pencatatan agar informasi dapat ditelusuri.
+- Data dari API eksternal dapat mengalami keterlambatan atau kegagalan sinkronisasi.
+
+### 6.13 Tabel `notifications`
+
+Menyimpan notifikasi pengguna.
+
+```sql
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    reference_id UUID,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Keterangan:
+
+- Notifikasi ditujukan kepada pengguna tertentu.
+- `reference_id` dapat mengarah ke objek bisnis terkait, seperti listing atau pesanan.
+- Referensi tersebut dikelola oleh backend karena dapat mengarah ke beberapa jenis entitas.
+
+## 7. Relasi Antar-Tabel
+
+Relasi utama database TANDUR:
+
+| Entitas Utama     | Relasi      | Entitas Tujuan      |
+| ----------------- | ----------- | ------------------- |
+| users             | One-to-Many | user_locations      |
+| users             | One-to-Many | farmer_listings     |
+| commodities       | One-to-Many | farmer_listings     |
+| farmer_listings   | One-to-Many | farmer_purchases    |
+| users (middleman) | One-to-Many | farmer_purchases    |
+| users (middleman) | One-to-Many | inventory           |
+| commodities       | One-to-Many | inventory           |
+| inventory         | One-to-Many | inventory_movements |
+| users (buyer)     | One-to-Many | buyer_orders        |
+| buyer_orders      | One-to-Many | buyer_order_items   |
+| buyer_orders      | One-to-Many | order_suborders     |
+| buyer_orders      | One-to-One  | transactions        |
+| commodities       | One-to-Many | market_prices       |
+| users             | One-to-Many | notifications       |
+
+Catatan desain:
+
+- Relasi harus menggunakan foreign key.
+- Jangan menyimpan informasi yang sama berulang kali jika dapat direferensikan melalui relasi.
+- Data harga transaksi perlu disimpan sebagai snapshot agar perubahan harga stok tidak mengubah transaksi yang sudah dibuat.
+- Data transaksi dan riwayat pergerakan stok tidak boleh dihapus sembarangan.
+
+## 8. Index Database
+
+Index digunakan untuk mempercepat pencarian dan pengambilan data.
+
+Migration berikutnya dapat berisi:
+
+```sql
+-- User
+CREATE INDEX idx_users_role
+ON users(role);
+
+-- Lokasi pengguna
+CREATE INDEX idx_user_locations_user_id
+ON user_locations(user_id);
+
+CREATE INDEX idx_user_locations_geo
+ON user_locations USING GIST(location);
+
+-- Listing petani
+CREATE INDEX idx_farmer_listings_farmer_id
+ON farmer_listings(farmer_id);
+
+CREATE INDEX idx_farmer_listings_commodity_id
+ON farmer_listings(commodity_id);
+
+CREATE INDEX idx_farmer_listings_status
+ON farmer_listings(status);
+
+CREATE INDEX idx_farmer_listings_geo
+ON farmer_listings USING GIST(location);
+
+-- Pembelian petani
+CREATE INDEX idx_farmer_purchases_listing_id
+ON farmer_purchases(listing_id);
+
+CREATE INDEX idx_farmer_purchases_middleman_id
+ON farmer_purchases(middleman_id);
+
+CREATE INDEX idx_farmer_purchases_status
+ON farmer_purchases(status);
+
+-- Inventori
+CREATE INDEX idx_inventory_middleman_id
+ON inventory(middleman_id);
+
+CREATE INDEX idx_inventory_commodity_id
+ON inventory(commodity_id);
+
+-- Pergerakan inventori
+CREATE INDEX idx_inventory_movements_inventory_id
+ON inventory_movements(inventory_id);
+
+CREATE INDEX idx_inventory_movements_created_at
+ON inventory_movements(created_at);
+
+-- Pesanan
+CREATE INDEX idx_buyer_orders_buyer_id
+ON buyer_orders(buyer_id);
+
+CREATE INDEX idx_buyer_orders_status
+ON buyer_orders(status);
+
+CREATE INDEX idx_buyer_order_items_order_id
+ON buyer_order_items(order_id);
+
+-- Suborder
+CREATE INDEX idx_order_suborders_order_id
+ON order_suborders(order_id);
+
+CREATE INDEX idx_order_suborders_middleman_id
+ON order_suborders(middleman_id);
+
+-- Harga pasar
+CREATE INDEX idx_market_prices_commodity_recorded
+ON market_prices(commodity_id, recorded_at DESC);
+
+-- Notifikasi
+CREATE INDEX idx_notifications_user_created
+ON notifications(user_id, created_at DESC);
+
+CREATE INDEX idx_notifications_unread
+ON notifications(user_id)
+WHERE is_read = FALSE;
+```
+
+Catatan:
+
+- Index GIST digunakan untuk pencarian geografis PostGIS.
+- Index B-tree digunakan untuk pencarian berdasarkan ID, status, dan waktu.
+- Index tambahan harus didasarkan pada kebutuhan query aktual.
+- Hindari membuat terlalu banyak index karena dapat memperlambat operasi insert dan update.
+
+## 9. Constraint dan Integritas Data
+
+Database harus menjaga konsistensi data melalui constraint.
+
+Aturan minimum:
+
+1. Primary key wajib tersedia pada setiap tabel.
+2. Foreign key wajib digunakan untuk relasi antarentitas.
+3. Email pengguna tidak boleh duplikat.
+4. Role pengguna hanya boleh farmer, middleman, atau buyer.
+5. Jumlah stok tidak boleh negatif.
+6. Jumlah pembelian harus lebih besar dari nol.
+7. Harga transaksi tidak boleh negatif.
+8. Pesanan harus memiliki pembeli yang valid.
+9. Setiap transaksi hanya boleh terhubung ke satu pesanan utama.
+10. Metode pembayaran MVP hanya Cash on Pickup.
+11. Data lokasi harus menggunakan koordinat dengan SRID 4326.
+12. Data harga pasar harus memiliki sumber dan waktu pencatatan.
+
+### Pencegahan Overselling
+
+Validasi stok tidak boleh hanya dilakukan di frontend.
+
+Backend harus melakukan validasi dan perubahan stok dalam satu transaksi database.
+
+Contoh pendekatan:
+
+```sql
+BEGIN;
+
+UPDATE inventory
+SET
+    quantity = quantity - 10,
+    updated_at = NOW()
+WHERE
+    id = 'INVENTORY_UUID'
+    AND quantity >= 10;
+
+-- Backend harus memeriksa bahwa tepat satu baris berhasil diperbarui.
+-- Jika tidak, batalkan transaksi karena stok tidak mencukupi.
+
+COMMIT;
+```
+
+Jika jumlah baris yang diperbarui adalah nol, backend harus membatalkan proses dan memberikan respons bahwa stok tidak mencukupi.
+
+Pencatatan `inventory_movements`, pembuatan pesanan, dan perubahan stok harus dilakukan dalam transaksi yang konsisten agar tidak terjadi perbedaan data.
+
+## 10. Migration Tambahan untuk Index
+
+Agar perubahan database tetap terkontrol, pembuatan index dapat dipisahkan dari migration pembuatan tabel.
+
+Contoh:
+
+File: `000011_create_indexes.up.sql`
+
+```sql
+CREATE INDEX idx_users_role
+ON users(role);
+
+CREATE INDEX idx_user_locations_geo
+ON user_locations USING GIST(location);
+
+CREATE INDEX idx_farmer_listings_status
+ON farmer_listings(status);
+
+CREATE INDEX idx_farmer_listings_geo
+ON farmer_listings USING GIST(location);
+
+CREATE INDEX idx_inventory_middleman_id
+ON inventory(middleman_id);
+
+CREATE INDEX idx_buyer_orders_buyer_id
+ON buyer_orders(buyer_id);
+
+CREATE INDEX idx_buyer_orders_status
+ON buyer_orders(status);
+
+CREATE INDEX idx_market_prices_commodity_recorded
+ON market_prices(commodity_id, recorded_at DESC);
+
+CREATE INDEX idx_notifications_user_created
+ON notifications(user_id, created_at DESC);
+```
+
+File: `000011_create_indexes.down.sql`
+
+```sql
+DROP INDEX IF EXISTS idx_notifications_user_created;
+DROP INDEX IF EXISTS idx_market_prices_commodity_recorded;
+DROP INDEX IF EXISTS idx_buyer_orders_status;
+DROP INDEX IF EXISTS idx_buyer_orders_buyer_id;
+DROP INDEX IF EXISTS idx_inventory_middleman_id;
+DROP INDEX IF EXISTS idx_farmer_listings_geo;
+DROP INDEX IF EXISTS idx_farmer_listings_status;
+DROP INDEX IF EXISTS idx_user_locations_geo;
+DROP INDEX IF EXISTS idx_users_role;
+```
+
+## 11. Seed Data
+
+Seed digunakan untuk memasukkan data awal yang dibutuhkan aplikasi.
+
+Seed bukan pengganti migration. Migration bertanggung jawab atas struktur database, sedangkan seed bertanggung jawab atas data awal.
+
+### 11.1 Seed Komoditas
+
+File: `database/seeds/002_commodities.sql`
+
+```sql
+INSERT INTO commodities (name, description, unit)
+VALUES
+    ('Padi', 'Komoditas pertanian berupa padi', 'kg'),
+    ('Jagung', 'Komoditas pertanian berupa jagung', 'kg'),
+    ('Cabai', 'Komoditas pertanian berupa cabai', 'kg'),
+    ('Tomat', 'Komoditas pertanian berupa tomat', 'kg'),
+    ('Bawang Merah', 'Komoditas pertanian berupa bawang merah', 'kg')
+ON CONFLICT (name) DO NOTHING;
+```
+
+### 11.2 Aturan Seed
+
+- Seed harus dapat dijalankan lebih dari satu kali tanpa menghasilkan data duplikat.
+- Gunakan `ON CONFLICT` untuk data referensi yang memiliki unique key.
+- Jangan memasukkan password akun asli ke dalam seed.
+- Jangan menggunakan data pribadi nyata untuk kebutuhan development.
+- Gunakan data dummy untuk akun pengujian.
+
+## 12. Sistem Migration dengan golang-migrate
+
+TANDUR menggunakan `golang-migrate` untuk mengelola perubahan struktur database.
+
+Dokumentasi: https://github.com/golang-migrate/migrate
+
+Migration dapat dijalankan menggunakan CLI atau Makefile.
+
+### 12.1 Instalasi CLI
+
+Pastikan `golang-migrate` tersedia di perangkat pengembang.
+
+Contoh instalasi melalui Go:
 
 ```bash
-docker compose exec redis redis-cli
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 ```
 
-## 14. Akses Aplikasi Lokal
+Pastikan direktori binary Go sudah masuk ke PATH.
 
-Setelah seluruh service berhasil dijalankan:
-
-| Service              | Alamat                       |
-| -------------------- | ---------------------------- |
-| Frontend             | http://localhost:5173        |
-| Backend API          | http://localhost:8080        |
-| Backend Health Check | http://localhost:8080/health |
-| PostgreSQL           | localhost:5432               |
-| Redis                | localhost:6379               |
-| Garage S3 API        | http://localhost:3900        |
-| Garage Admin API     | http://localhost:3903        |
-
-Port database, Redis, dan Garage hanya untuk kebutuhan development lokal. Jangan mengekspos port tersebut ke jaringan publik.
-
-## 15. Integrasi Frontend dan Backend
-
-Frontend menggunakan:
-
-```env
-VITE_API_BASE_URL=http://localhost:8080
-```
-
-Backend menggunakan:
-
-```env
-DATABASE_URL=postgres://tandur:password@postgres:5432/tandur?sslmode=disable
-REDIS_URL=redis://redis:6379/0
-S3_ENDPOINT=http://garage:3900
-```
-
-Perbedaan alamat perlu diperhatikan:
-
-- Browser mengakses backend melalui `localhost:8080`.
-- Backend mengakses PostgreSQL melalui `postgres:5432`.
-- Backend mengakses Redis melalui `redis:6379`.
-- Backend mengakses Garage melalui `garage:3900`.
-
-Pastikan konfigurasi CORS backend mengizinkan origin frontend development, yaitu `http://localhost:5173`, jika frontend mengakses API secara langsung dari browser.
-
-## 16. Pengujian Startup Seluruh Service
-
-Lakukan pengujian berikut setelah konfigurasi Docker selesai.
-
-### Checklist Pengujian
-
-- [ ] Docker Compose berhasil membaca `compose.yaml`.
-- [ ] Semua image berhasil dibangun atau diunduh.
-- [ ] Container frontend berhasil berjalan.
-- [ ] Container backend berhasil berjalan.
-- [ ] PostgreSQL berhasil berjalan.
-- [ ] Extension PostGIS tersedia di PostgreSQL.
-- [ ] Redis berhasil berjalan.
-- [ ] Garage berhasil berjalan.
-- [ ] Garage dapat diinisialisasi sebagai single-node development.
-- [ ] Bucket dan access key Garage berhasil dibuat.
-- [ ] Backend berhasil terhubung ke PostgreSQL.
-- [ ] Backend berhasil terhubung ke Redis.
-- [ ] Backend berhasil terhubung ke Garage.
-- [ ] Frontend berhasil diakses melalui browser.
-- [ ] Frontend berhasil berkomunikasi dengan backend.
-- [ ] Health check service berjalan sesuai konfigurasi.
-- [ ] Data PostgreSQL tetap tersedia setelah container direstart.
-- [ ] Data Redis tetap tersedia sesuai konfigurasi persistence.
-- [ ] Data Garage tetap tersedia setelah container direstart.
-- [ ] Seluruh service dapat dihentikan dan dijalankan kembali.
-
-### Pengujian PostgreSQL dan PostGIS
+Periksa instalasi:
 
 ```bash
-docker compose exec postgres psql -U tandur -d tandur \
-  -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+migrate -version
 ```
 
-Periksa versi PostGIS:
+### 12.2 Menjalankan Migration Up
+
+Untuk menjalankan seluruh migration yang belum diterapkan:
+
+```bash
+migrate \
+  -path database/migrations \
+  -database "postgres://tandur:change_me@localhost:5432/tandur?sslmode=disable" \
+  up
+```
+
+Migration akan dijalankan secara berurutan berdasarkan nomor versinya.
+
+### 12.3 Menjalankan Migration Down
+
+Untuk membatalkan satu migration terakhir:
+
+```bash
+migrate \
+  -path database/migrations \
+  -database "postgres://tandur:change_me@localhost:5432/tandur?sslmode=disable" \
+  down 1
+```
+
+Perintah tersebut hanya membatalkan satu versi migration terakhir.
+
+Jangan menjalankan rollback pada database production tanpa prosedur backup dan persetujuan yang sesuai.
+
+### 12.4 Memeriksa Versi Migration
+
+```bash
+migrate \
+  -path database/migrations \
+  -database "postgres://tandur:change_me@localhost:5432/tandur?sslmode=disable" \
+  version
+```
+
+### 12.5 Force Version
+
+Perintah `force` digunakan untuk memperbaiki status versi migration secara manual ketika migration mengalami kondisi dirty.
+
+```bash
+migrate \
+  -path database/migrations \
+  -database "postgres://tandur:change_me@localhost:5432/tandur?sslmode=disable" \
+  force VERSION
+```
+
+Catatan: `force` tidak menjalankan SQL migration. Perintah ini hanya mengubah catatan versi migration. Gunakan hanya setelah kondisi database diperiksa dan diperbaiki secara manual.
+
+## 13. Menjalankan Migration dari Docker
+
+Jika backend dan PostgreSQL berjalan melalui Docker Compose, migration dapat dijalankan dari host menggunakan koneksi `localhost`.
+
+Pastikan PostgreSQL sudah berjalan:
+
+```bash
+docker compose up -d postgres
+```
+
+Periksa status:
+
+```bash
+docker compose ps postgres
+```
+
+Kemudian jalankan:
+
+```bash
+migrate \
+  -path database/migrations \
+  -database "postgres://tandur:change_me@localhost:5432/tandur?sslmode=disable" \
+  up
+```
+
+Alternatifnya, migration dapat dijalankan melalui container khusus yang memiliki binary `migrate` dan menggunakan hostname `postgres` sebagai alamat database.
+
+Jangan menggunakan hostname `localhost` ketika migration dijalankan dari container lain.
+
+## 14. Makefile untuk Database
+
+Tambahkan command berikut ke `Makefile` root repository:
+
+```makefile
+DATABASE_URL ?= postgres://tandur:change_me@localhost:5432/tandur?sslmode=disable
+MIGRATIONS_DIR = database/migrations
+
+.PHONY: db-up db-down db-version db-force db-seed db-reset
+
+db-up:
+	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" up
+
+db-down:
+	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" down 1
+
+db-version:
+	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" version
+
+db-force:
+	@echo "Gunakan: make db-force VERSION=nomor_versi"
+	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" force $(VERSION)
+
+db-seed:
+	docker compose exec -T postgres psql -U tandur -d tandur < database/seeds/001_roles.sql
+	docker compose exec -T postgres psql -U tandur -d tandur < database/seeds/002_commodities.sql
+
+db-reset:
+	@echo "PERINGATAN: Semua data database development akan dihapus."
+	docker compose down -v
+	docker compose up -d postgres
+```
+
+Catatan:
+
+- `db-up` menjalankan seluruh migration yang belum diterapkan.
+- `db-down` membatalkan satu migration terakhir.
+- `db-version` menampilkan versi migration.
+- `db-force` memperbaiki catatan versi secara manual.
+- `db-seed` memasukkan data awal.
+- `db-reset` menghapus volume database development sehingga seluruh data lokal hilang.
+
+Pastikan nilai `DATABASE_URL` menggunakan credential yang sesuai dengan `.env`. Untuk penggunaan tim, hindari menuliskan password berbeda secara permanen di banyak tempat. Gunakan satu sumber konfigurasi yang konsisten.
+
+## 15. Pengujian Migration
+
+Migration harus diuji dari database kosong untuk memastikan seluruh struktur dapat dibangun secara berurutan.
+
+### 15.1 Pengujian Migration Up
+
+1. Siapkan database development baru.
+2. Pastikan database belum memiliki tabel aplikasi.
+3. Jalankan seluruh migration.
+
+```bash
+make db-up
+```
+
+4. Periksa versi migration.
+
+```bash
+make db-version
+```
+
+5. Periksa daftar tabel.
+
+```bash
+docker compose exec postgres psql -U tandur -d tandur -c "\dt"
+```
+
+6. Periksa extension PostGIS.
 
 ```bash
 docker compose exec postgres psql -U tandur -d tandur \
   -c "SELECT PostGIS_Version();"
 ```
 
-### Pengujian Redis
+7. Periksa foreign key dan index yang telah dibuat.
+
+Migration dinyatakan berhasil jika seluruh tabel, relasi, index, dan extension terbentuk tanpa error.
+
+### 15.2 Pengujian Migration Down
+
+1. Pastikan database berisi struktur hasil migration.
+2. Catat versi migration saat ini.
+3. Jalankan rollback satu migration.
 
 ```bash
-docker compose exec redis redis-cli ping
+make db-down
 ```
 
-Hasil yang diharapkan:
-
-```text
-PONG
-```
-
-### Pengujian Backend
+4. Periksa versi migration.
 
 ```bash
-curl http://localhost:8080/health
+make db-version
 ```
 
-Hasil yang diharapkan adalah HTTP 200 dengan status aplikasi sehat.
-
-### Pengujian Frontend
-
-Buka:
-
-```text
-http://localhost:5173
-```
-
-Pastikan halaman frontend dapat dimuat tanpa error.
-
-## 17. Makefile (Opsional)
-
-Untuk mempermudah penggunaan command Docker, tim dapat menyediakan Makefile pada root repository.
-
-File: `Makefile`
-
-```makefile
-.PHONY: up down stop restart build logs ps clean
-
-up:
-	docker compose up -d
-
-build:
-	docker compose build
-
-up-build:
-	docker compose up -d --build
-
-down:
-	docker compose down
-
-stop:
-	docker compose stop
-
-restart:
-	docker compose restart
-
-logs:
-	docker compose logs -f
-
-ps:
-	docker compose ps
-
-clean:
-	docker compose down --remove-orphans
-```
-
-Penggunaan:
+5. Periksa apakah objek yang dibuat oleh migration terakhir telah dihapus.
+6. Jalankan kembali migration up.
 
 ```bash
-make up
-make up-build
-make ps
-make logs
-make down
+make db-up
 ```
 
-Catatan: `make clean` tidak menghapus named volume sehingga data development tetap tersimpan.
+7. Pastikan database kembali ke kondisi sebelumnya.
 
-## 18. Aturan Penggunaan Docker untuk Tim
+Catatan: Rollback dapat menghapus tabel atau data yang dibuat oleh migration tersebut. Gunakan database khusus pengujian dan jangan melakukan pengujian rollback pada database yang berisi data penting.
 
-1. Seluruh anggota tim wajib menggunakan konfigurasi Docker Compose yang tersedia di repository.
-2. Jangan mengubah port, credential, atau konfigurasi service secara sepihak tanpa memperbarui dokumentasi.
-3. Jangan melakukan commit terhadap file `.env`.
-4. Jangan menggunakan credential production untuk development.
-5. Jangan menghapus volume database tanpa memastikan data tidak lagi dibutuhkan.
-6. Setiap perubahan Dockerfile, Compose, atau environment variable harus disertai dokumentasi perubahan.
-7. Setiap anggota tim harus menguji startup service setelah melakukan perubahan konfigurasi.
-8. Jangan menggunakan `docker compose down -v` sembarangan karena dapat menghapus seluruh data pada named volume.
-9. Gunakan versi image yang ditentukan agar lingkungan pengembangan antaranggota tetap konsisten.
-10. Konfigurasi development dan production harus dipisahkan.
+### 15.3 Pengujian Fresh Database
 
-## 19. Batasan Lingkungan Development
+Pengujian paling penting adalah membangun database dari kondisi kosong.
 
-Konfigurasi ini hanya ditujukan untuk pengembangan lokal dan pengujian integrasi awal.
+Urutan:
 
-Hal-hal berikut belum menjadi bagian dari konfigurasi ini:
+```bash
+docker compose down -v
+docker compose up -d postgres
+make db-up
+make db-seed
+```
 
-- Deployment production.
-- High availability dan replikasi database.
-- Redis cluster.
-- Garage multi-node dan replikasi antar-node.
-- Reverse proxy production dengan HTTPS.
-- Backup otomatis production.
-- Monitoring dan observability production.
-- Secret management production.
+Setelah itu periksa seluruh tabel dan data awal.
 
-Kebutuhan tersebut akan ditangani pada tahap infrastruktur dan deployment production.
+Perintah `docker compose down -v` akan menghapus seluruh named volume pada project Compose. Pastikan tidak ada data lokal yang masih diperlukan sebelum menjalankannya.
 
-## 20. Kriteria Penyelesaian (Definition of Done)
+## 16. Aturan Pengelolaan Migration Tim
 
-Task dinyatakan selesai apabila:
+1. Setiap perubahan struktur database harus menggunakan migration baru.
+2. Jangan mengubah migration lama yang sudah digunakan anggota tim lain.
+3. Setiap migration wajib memiliki file `.up.sql` dan `.down.sql`.
+4. Gunakan nomor migration yang unik dan berurutan.
+5. Migration harus dapat dijalankan pada database kosong.
+6. Migration harus diuji sebelum Pull Request diajukan.
+7. Perubahan tabel harus memperhatikan relasi dan integritas data.
+8. Hindari menghapus kolom atau tabel yang masih digunakan aplikasi tanpa prosedur transisi.
+9. Perubahan database harus disertai pembaruan ERD dan dokumentasi jika mengubah desain data.
+10. Migration yang mengandung perubahan data harus menjelaskan dampaknya dan prosedur rollback.
+11. Jangan menggunakan migration untuk memasukkan data dummy yang bersifat sementara.
+12. Jangan menjalankan migration production secara manual tanpa prosedur deployment yang disepakati.
 
-- [ ] Dockerfile frontend tersedia dan dapat dibangun.
-- [ ] Dockerfile backend tersedia dan dapat dibangun.
-- [ ] Docker Compose berhasil mengelola seluruh service.
-- [ ] PostgreSQL dengan PostGIS berhasil berjalan.
-- [ ] Redis berhasil berjalan.
-- [ ] Garage berhasil berjalan dan dapat digunakan sebagai S3-compatible storage.
-- [ ] Environment variable terdokumentasi melalui `.env.example`.
-- [ ] File `.env` tidak masuk ke repository.
-- [ ] Health check tersedia dan berfungsi untuk service yang relevan.
-- [ ] Volume persistence telah dikonfigurasi.
-- [ ] Network antar-container telah dikonfigurasi.
-- [ ] Frontend berhasil berkomunikasi dengan backend.
-- [ ] Backend berhasil terhubung ke seluruh dependency utama.
-- [ ] Seluruh service berhasil dijalankan menggunakan Docker Compose.
-- [ ] Data tetap tersimpan setelah container direstart.
-- [ ] Dokumentasi command Docker tersedia dan dapat diikuti seluruh anggota tim.
-- [ ] Anggota tim dapat menjalankan lingkungan development tanpa instalasi dependency secara manual.
+## 17. Catatan Desain yang Perlu Dikunci
 
-## 21. Hasil Akhir
+Beberapa keputusan berikut perlu dikonfirmasi melalui ERD dan business rules sebelum migration dianggap final:
 
-Lingkungan pengembangan lokal TANDUR berhasil disiapkan menggunakan Docker Compose dengan service frontend, backend, PostgreSQL + PostGIS, Redis, dan Garage.
+| Area                 | Keputusan yang Perlu Dikonfirmasi                                            |
+| -------------------- | ---------------------------------------------------------------------------- |
+| Role pengguna        | Apakah satu akun hanya memiliki satu role atau dapat memiliki beberapa role? |
+| Lokasi               | Apakah satu pengguna boleh memiliki banyak lokasi?                           |
+| Listing petani       | Bagaimana aturan perubahan kuantitas setelah listing dipublikasikan?         |
+| Pembelian petani     | Apakah persetujuan petani diperlukan sebelum stok dianggap berpindah?        |
+| Inventori            | Apakah stok harus dipisahkan berdasarkan batch pembelian dan asal petani?    |
+| Konsolidasi stok     | Bagaimana pemetaan item pesanan ke beberapa sumber stok?                     |
+| Suborder             | Apakah satu suborder selalu dimiliki satu tengkulak?                         |
+| Cash on Pickup       | Siapa yang berwenang mengonfirmasi pembayaran tunai?                         |
+| Smart Margin Control | Bagaimana aturan harga dasar, biaya, dan batas margin ditetapkan?            |
+| Wilayah layanan      | Bagaimana batas wilayah geografis disimpan dan divalidasi?                   |
 
-Seluruh service dapat dijalankan melalui satu konfigurasi terpusat sehingga anggota tim memiliki lingkungan pengembangan yang konsisten, mudah direproduksi, dan lebih mudah dipelihara selama proses pengembangan aplikasi.
+Keputusan yang belum ditetapkan tidak boleh diasumsikan sebagai aturan final hanya karena telah dibuatkan struktur tabel sementara.
+
+## 18. Kriteria Penyelesaian (Definition of Done)
+
+- [ ] Database development PostgreSQL berhasil dibuat.
+- [ ] Extension PostGIS berhasil diaktifkan.
+- [ ] Sistem migration menggunakan `golang-migrate` berhasil disiapkan.
+- [ ] Struktur direktori migration tersedia.
+- [ ] Migration awal berhasil dibuat.
+- [ ] Tabel inti berdasarkan ERD berhasil dibuat.
+- [ ] Primary key dan foreign key telah ditentukan.
+- [ ] Constraint integritas data telah dibuat.
+- [ ] Index untuk kebutuhan pencarian telah dibuat.
+- [ ] Relasi antarentitas dapat diverifikasi.
+- [ ] Seed data awal tersedia.
+- [ ] Migration up berhasil dijalankan.
+- [ ] Migration down berhasil diuji pada database pengujian.
+- [ ] Database dapat dibangun dari kondisi kosong.
+- [ ] Prosedur menjalankan migration terdokumentasi.
+- [ ] Command database tersedia melalui Makefile.
+- [ ] Dokumentasi database diperbarui jika terdapat perubahan ERD.
+
+## 19. Hasil Akhir
+
+Database development TANDUR berhasil disiapkan menggunakan PostgreSQL dan PostGIS dengan sistem migration

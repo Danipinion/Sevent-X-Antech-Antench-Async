@@ -26,7 +26,7 @@ func (h *Handler) HealthCheck(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"status":    "ok",
-		"app":       "TANDUR Backend API",
+		"service":   "tandur-api",
 		"version":   "v1.0.0",
 		"database":  dbStatus,
 		"timestamp": time.Now().Format(time.RFC3339),
@@ -57,4 +57,3 @@ func (h *Handler) GetCommodity(c fiber.Ctx) error {
 		"data": commodity,
 	})
 }
-

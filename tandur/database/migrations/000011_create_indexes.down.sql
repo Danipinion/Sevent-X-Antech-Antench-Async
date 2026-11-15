@@ -1,0 +1,23 @@
+DROP INDEX IF EXISTS idx_notifications_unread;
+DROP INDEX IF EXISTS idx_notifications_user_created;
+DROP INDEX IF EXISTS idx_market_prices_commodity_recorded;
+DROP INDEX IF EXISTS idx_order_suborders_middleman_id;
+DROP INDEX IF EXISTS idx_order_suborders_order_id;
+DROP INDEX IF EXISTS idx_buyer_order_items_order_id;
+DROP INDEX IF EXISTS idx_buyer_orders_status;
+DROP INDEX IF EXISTS idx_buyer_orders_buyer_id;
+DROP INDEX IF EXISTS idx_inventory_movements_created_at;
+DROP INDEX IF EXISTS idx_inventory_movements_inventory_id;
+DROP INDEX IF EXISTS idx_inventory_commodity_id;
+DROP INDEX IF EXISTS idx_inventory_middleman_id;
+DROP INDEX IF EXISTS idx_farmer_purchases_status;
+DROP INDEX IF EXISTS idx_farmer_purchases_middleman_id;
+DROP INDEX IF EXISTS idx_farmer_purchases_listing_id;
+DROP INDEX IF EXISTS idx_farmer_listings_geo;
+DROP INDEX IF EXISTS idx_farmer_listings_status;
+DROP INDEX IF EXISTS idx_farmer_listings_commodity_id;
+DROP INDEX IF EXISTS idx_farmer_listings_farmer_id;
+DROP INDEX IF EXISTS idx_user_locations_geo;
+DROP INDEX IF EXISTS idx_user_locations_user_id;
+DROP INDEX IF EXISTS idx_users_role;
+

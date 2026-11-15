@@ -2,7 +2,19 @@
 # TANDUR Project Makefile
 # ==============================================================================
 
-.PHONY: help setup up up-build build stop down restart logs ps frontend backend test lint migrate-up migrate-down clean
+-include .env
+export
+
+POSTGRES_PORT ?= 5432
+POSTGRES_USER ?= tandur
+POSTGRES_PASSWORD ?= change_me
+POSTGRES_DB ?= tandur
+
+DATABASE_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
+MIGRATIONS_DIR = database/migrations
+MIGRATE ?= $(shell which migrate 2>/dev/null || echo $(HOME)/go/bin/migrate)
+
+.PHONY: help setup up up-build build stop down restart logs ps frontend backend test lint migrate-up migrate-down clean db-up db-down db-version db-force db-seed db-reset
 
 # Warna terminal
 BLUE   := \033[36m
@@ -30,9 +42,8 @@ up: ## Menjalankan seluruh service development menggunakan Docker Compose
 	@echo "$(YELLOW)Menjalankan seluruh service development TANDUR...$(RESET)"
 	docker compose up -d
 	@echo "$(GREEN)Seluruh service berhasil berjalan!$(RESET)"
-	@echo "$(BLUE)Web Frontend: http://localhost:5173 (atau http://localhost)$(RESET)"
+	@echo "$(BLUE)Web Frontend: http://localhost:5173$(RESET)"
 	@echo "$(BLUE)Backend API:  http://localhost:8080/health$(RESET)"
-	@echo "$(BLUE)Traefik Dash: http://localhost:8081$(RESET)"
 
 up-build: ## Menjalankan service dengan membangun ulang image
 	@echo "$(YELLOW)Membangun ulang image dan menjalankan service...$(RESET)"
@@ -66,7 +77,7 @@ frontend: ## Menjalankan server web frontend lokal (Vite)
 
 backend: ## Menjalankan server backend API lokal (Go)
 	@echo "$(YELLOW)Menjalankan backend dev server...$(RESET)"
-	cd apps/api && go run ./cmd/api/main.go
+	cd apps/api && go run ./cmd/api
 
 test: ## Menjalankan seluruh unit test (backend & frontend)
 	@echo "$(YELLOW)Menjalankan pengujian backend...$(RESET)"
@@ -81,15 +92,40 @@ lint: ## Menjalankan linting dan pengecekan tipe kode
 	cd apps/api && go vet ./...
 	@echo "$(GREEN)Seluruh pemeriksaan lint berhasil!$(RESET)"
 
-migrate-up: ## Menjalankan migration skema ke database PostgreSQL development
-	@echo "$(YELLOW)Mengeksekusi migration up ke database development...$(RESET)"
-	docker compose exec -T postgres psql -U tandur -d tandur -f /docker-entrypoint-initdb.d/01_schema.sql || true
-	@echo "$(GREEN)Migration selesai dijalankan.$(RESET)"
+# ------------------------------------------------------------------------------
+# Database Migration & Seed Commands (golang-migrate)
+# ------------------------------------------------------------------------------
 
-migrate-down: ## Melakukan rollback migration skema database development (destructive)
-	@echo "$(RED)PERINGATAN: Operasi ini akan menghapus tabel pada database development!$(RESET)"
-	docker compose exec -T postgres psql -U tandur -d tandur -f /docker-entrypoint-initdb.d/000001_init_schema.down.sql || true
-	@echo "$(YELLOW)Rollback migration selesai.$(RESET)"
+db-up: ## Menjalankan seluruh migration database ke versi terbaru
+	@echo "$(YELLOW)Menjalankan migrasi database up ke $(DATABASE_URL)...$(RESET)"
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" up
+	@echo "$(GREEN)Migrasi database berhasil diselesaikan.$(RESET)"
+
+db-down: ## Melakukan rollback 1 versi migration terakhir
+	@echo "$(YELLOW)Melakukan rollback 1 versi migrasi database...$(RESET)"
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" down 1
+	@echo "$(YELLOW)Rollback selesai.$(RESET)"
+
+db-version: ## Menampilkan versi migrasi database saat ini
+	@$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" version
+
+db-force: ## Memperbaiki status dirty migration (make db-force VERSION=...)
+	@if [ -z "$(VERSION)" ]; then echo "$(RED)Error: Gunakan 'make db-force VERSION=nomor_versi'$(RESET)"; exit 1; fi
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" force $(VERSION)
+
+db-seed: ## Memasukkan data awal (seeds) ke database
+	@echo "$(YELLOW)Memasukkan data seed ke database...$(RESET)"
+	docker compose exec -T postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < database/seeds/001_roles.sql
+	docker compose exec -T postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < database/seeds/002_commodities.sql
+	@echo "$(GREEN)Seed data berhasil dimasukkan.$(RESET)"
+
+db-reset: ## Menghapus volume database dan mengulang dari fresh database
+	@echo "$(RED)PERINGATAN: Semua data database development akan dihapus.$(RESET)"
+	docker compose down -v
+	docker compose up -d postgres
+
+migrate-up: db-up ## Alias untuk db-up
+migrate-down: db-down ## Alias untuk db-down
 
 clean: ## Membersihkan cache, dist, dan artefak temporary yang aman dihapus
 	@echo "$(YELLOW)Membersihkan build cache dan temporary files...$(RESET)"

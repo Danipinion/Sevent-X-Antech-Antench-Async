@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS order_suborders CASCADE;
+DROP TABLE IF EXISTS buyer_order_items CASCADE;
+DROP TABLE IF EXISTS buyer_orders CASCADE;
+
