@@ -1,0 +1,36 @@
+Commodity:
+  type: object
+  required:
+    - id
+    - name
+    - category
+    - unit
+    - base_price
+    - current_market_price
+  properties:
+    id:
+      type: string
+      example: cabai-merah
+    name:
+      type: string
+      example: Cabai Merah Keriting
+    category:
+      type: string
+      example: Hortikultura
+    unit:
+      type: string
+      example: kg
+    base_price:
+      type: number
+      format: float
+      example: 40000
+    current_market_price:
+      type: number
+      format: float
+      example: 45000
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time

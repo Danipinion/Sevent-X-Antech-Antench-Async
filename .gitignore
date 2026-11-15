@@ -1,0 +1,32 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node.js
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Go
+vendor/
+*.exe
+*.test
+*.out
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & Temp
+*.log
+logs/
+tmp/
+temp/
+*.tsbuildinfo

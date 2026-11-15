@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: TANDUR API
+  version: 1.0.0
+  description: >
+    Spesifikasi REST API TANDUR sebagai kontrak komunikasi antara Frontend dan Backend.
+    Mendukung operasional rantai pasok komoditas pertanian, agregasi stok petani, 
+    dan mekanisme kontrol margin harga.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development Server Local
+  - url: /api/v1
+    description: Traefik Proxy Path
+paths:
+  /health:
+    get:
+      summary: Healthcheck Status Server
+      description: Memeriksa ketersediaan API backend dan koneksi database.
+      responses:
+        '200':
+          description: Server beroperasi normal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  app:
+                    type: string
+                    example: TANDUR Backend API
+                  version:
+                    type: string
+                    example: v1.0.0
+                  database:
+                    type: string
+                    example: connected
+                  timestamp:
+                    type: string
+                    example: "2026-11-15T15:30:00Z"
+  /commodities:
+    get:
+      summary: Daftar Seluruh Komoditas
+      description: Mengambil daftar komoditas pertanian beserta acuan harga dasar dan harga pasar.
+      responses:
+        '200':
+          description: Berhasil mengambil daftar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: './schemas/commodity.yaml#/Commodity'
+  /commodities/{id}:
+    get:
+      summary: Detail Komoditas
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detail komoditas ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './schemas/commodity.yaml#/Commodity'
+        '404':
+          description: Komoditas tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/error.yaml#/ErrorResponse'

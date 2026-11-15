@@ -1,0 +1,9 @@
+ErrorResponse:
+  type: object
+  required:
+    - error
+  properties:
+    error:
+      type: string
+      description: Pesan deskripsi kesalahan
+      example: Komoditas tidak ditemukan

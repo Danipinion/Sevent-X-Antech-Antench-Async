@@ -1,0 +1,136 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: tandur-traefik
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8081:8080" # Traefik Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - tandur-network
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/frontend/Dockerfile
+      target: dev
+    container_name: tandur-web
+    restart: unless-stopped
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=/api/v1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.web.entrypoints=web"
+      - "traefik.http.services.web.loadbalancer.server.port=5173"
+    depends_on:
+      - api
+    networks:
+      - tandur-network
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend/Dockerfile
+      target: dev
+    container_name: tandur-api
+    restart: unless-stopped
+    volumes:
+      - ./apps/api:/app
+    environment:
+      - APP_ENV=development
+      - APP_PORT=8080
+      - APP_URL=http://localhost
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=tandur
+      - DATABASE_USER=tandur
+      - DATABASE_PASSWORD=change_me
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - S3_ENDPOINT=http://garage:3900
+      - S3_BUCKET=tandur
+      - S3_ACCESS_KEY=change_me
+      - S3_SECRET_KEY=change_me
+      - S3_REGION=garage
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.services.api.loadbalancer.server.port=8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tandur-network
+
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: tandur-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tandur
+      POSTGRES_USER: tandur
+      POSTGRES_PASSWORD: change_me
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations/000001_init_schema.up.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/seeds/000001_seed_dev_data.sql:/docker-entrypoint-initdb.d/02_seeds.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tandur -d tandur"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tandur-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tandur-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tandur-network
+
+  garage:
+    image: dxflrs/garage:v1.0.1
+    container_name: tandur-garage
+    restart: unless-stopped
+    volumes:
+      - garage_data:/var/lib/garage/data
+    networks:
+      - tandur-network
+
+volumes:
+  postgres_data:
+    name: tandur_postgres_data
+  redis_data:
+    name: tandur_redis_data
+  garage_data:
+    name: tandur_garage_data
+
+networks:
+  tandur-network:
+    name: tandur-network
+    driver: bridge

@@ -1,0 +1,13 @@
+-- Migration Rollback: 000001_init_schema.down.sql
+
+DROP TABLE IF EXISTS market_prices CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS inventories CASCADE;
+DROP TABLE IF EXISTS commodities CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+DROP TYPE IF EXISTS order_status;
+DROP TYPE IF EXISTS quality_grade;
+DROP TYPE IF EXISTS user_role;
+
+DROP EXTENSION IF EXISTS postgis;

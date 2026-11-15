@@ -1,0 +1,49 @@
+Inventory:
+  type: object
+  required:
+    - id
+    - commodity_id
+    - owner_id
+    - quantity
+    - unit
+    - quality_grade
+    - location_name
+    - latitude
+    - longitude
+    - harvest_date
+  properties:
+    id:
+      type: string
+      example: inv-001
+    commodity_id:
+      type: string
+      example: cabai-merah
+    owner_id:
+      type: string
+      example: usr-petani-001
+    quantity:
+      type: number
+      format: float
+      example: 500
+    unit:
+      type: string
+      example: kg
+    quality_grade:
+      type: string
+      enum: [GRADE_A, GRADE_B, GRADE_C]
+      example: GRADE_A
+    location_name:
+      type: string
+      example: Cikajang, Garut
+    latitude:
+      type: number
+      format: float
+      example: -7.3486
+    longitude:
+      type: number
+      format: float
+      example: 107.8184
+    harvest_date:
+      type: string
+      format: date
+      example: "2026-11-14"
