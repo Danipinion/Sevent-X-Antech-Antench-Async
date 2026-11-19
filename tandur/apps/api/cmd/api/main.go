@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	adapterHttp "tandur/api/internal/adapter/http"
@@ -22,23 +24,39 @@ func main() {
 	logger.Init(cfg.AppEnv)
 	logger.Log.Info("Inisialisasi TANDUR Backend API", "env", cfg.AppEnv, "port", cfg.AppPort)
 
-	// 3. Initialize Repositories (Persistence)
+	// 3. Initialize Database Connection Pool (PostgreSQL + PostGIS)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dbPool, err := persistence.NewPostgresPool(ctx, cfg)
+	if err != nil {
+		logger.Log.Error("Gagal menghubungkan ke PostgreSQL", "error", err)
+	} else {
+		defer dbPool.Close()
+	}
+
+	// 4. Initialize Repositories (Persistence)
+	var userRepo *persistence.PostgresUserRepository
+	if dbPool != nil {
+		userRepo = persistence.NewPostgresUserRepository(dbPool)
+	}
 	commodityRepo := persistence.NewMemoryCommodityRepository()
 
-	// 4. Initialize Application Services (Use Cases)
+	// 5. Initialize Application Services (Use Cases)
+	authService := application.NewAuthService(userRepo)
 	commodityService := application.NewCommodityService(commodityRepo)
 
-	// 5. Initialize HTTP Handlers & Adapter
-	httpHandler := adapterHttp.NewHandler(cfg, commodityService)
+	// 6. Initialize HTTP Handlers & Adapter
+	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService)
 
-	// 6. Setup Fiber Web Application
+	// 7. Setup Fiber Web Application
 	app := fiber.New(fiber.Config{
 		AppName: "TANDUR API v1.0.0",
 	})
 
 	adapterHttp.SetupRoutes(app, httpHandler)
 
-	// 7. Graceful Shutdown Setup
+	// 8. Graceful Shutdown Setup
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.AppPort)
 		logger.Log.Info("Server API berjalan", "addr", addr)
@@ -55,4 +73,3 @@ func main() {
 	_ = app.Shutdown()
 	logger.Log.Info("Server API berhasil dihentikan.")
 }
-

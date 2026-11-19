@@ -180,8 +180,12 @@ make down
 ```
 
 ### Akses Layanan Lokal
-- **Aplikasi Web:** [http://localhost](http://localhost)
-- **API Endpoint:** [http://localhost/api/v1/health](http://localhost/api/v1/health) atau [http://localhost:8080/api/v1/health](http://localhost:8080/api/v1/health)
+- **Aplikasi Web (Frontend):** [http://localhost:5173](http://localhost:5173)
+- **API Endpoint:** [http://localhost:8080/api/v1/health](http://localhost:8080/api/v1/health)
+- **Dokumentasi API (Swagger UI):** [http://localhost:8080/swagger](http://localhost:8080/swagger) atau [http://localhost:8080/docs](http://localhost:8080/docs)
+- **Dokumentasi API (Scalar UI):** [http://localhost:8080/scalar](http://localhost:8080/scalar)
+- **Database Web Dashboard (pgAdmin):** [http://localhost:5050](http://localhost:5050)
+- **Storage Web Dashboard (Filestash):** [http://localhost:8334](http://localhost:8334)
 - **Traefik Dashboard:** [http://localhost:8081](http://localhost:8081)
 
 ---

@@ -80,3 +80,158 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
+  /auth/register:
+    post:
+      summary: Registrasi Akun Pengguna Baru
+      description: >
+        Mendaftarkan akun baru (farmer, middleman, atau buyer) beserta informasi lokasi opsional.
+        Anda dapat mengisi langsung melalui Form Input di bagian **Parameters** di bawah ini,
+        atau memilih contoh JSON melalui **Request body**.
+      parameters:
+        - name: name
+          in: query
+          description: Nama lengkap pengguna (Wajib)
+          required: false
+          schema:
+            type: string
+            example: "Pak Joko Tani"
+        - name: phone
+          in: query
+          description: Nomor Handphone 10-13 digit (Wajib)
+          required: false
+          schema:
+            type: string
+            example: "081234567890"
+        - name: password
+          in: query
+          description: Password minimal 6 karakter (Wajib)
+          required: false
+          schema:
+            type: string
+            format: password
+            example: "rahasia123"
+        - name: role
+          in: query
+          description: Peran akun dalam sistem (Wajib)
+          required: false
+          schema:
+            type: string
+            enum: [farmer, middleman, buyer]
+            example: "farmer"
+        - name: nik
+          in: query
+          description: NIK KTP 16 digit angka (Opsional)
+          required: false
+          schema:
+            type: string
+            example: "3201010101010077"
+        - name: is_bisnis
+          in: query
+          description: Apakah akun bisnis / perusahaan
+          required: false
+          schema:
+            type: boolean
+            default: false
+            example: false
+        - name: address
+          in: query
+          description: Alamat lokasi kebun / gudang / toko (Opsional)
+          required: false
+          schema:
+            type: string
+            example: "Jl. Pertanian Makmur No. 20"
+        - name: latitude
+          in: query
+          description: Titik koordinat Latitude (Opsional)
+          required: false
+          schema:
+            type: number
+            format: double
+            example: -6.7456
+        - name: longitude
+          in: query
+          description: Titik koordinat Longitude (Opsional)
+          required: false
+          schema:
+            type: number
+            format: double
+            example: 107.0872
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/RegisterRequest"
+            examples:
+              petani_lengkap:
+                summary: "🧑‍🌾 1. Petani (Lengkap dengan Koordinat Kebun)"
+                value:
+                  nik: "3201010101010099"
+                  name: "Pak Slamet Petani"
+                  phone: "081399998888"
+                  password: "secretPassword123"
+                  role: "farmer"
+                  is_bisnis: false
+                  location:
+                    label: "Kebun Cabai Utama"
+                    address: "Jl. Raya Pertanian No. 12"
+                    village: "Cikanyere"
+                    district: "Sukaresmi"
+                    city: "Kabupaten Cianjur"
+                    province: "Jawa Barat"
+                    latitude: -6.7456
+                    longitude: 107.0872
+              tengkulak_bisnis:
+                summary: "🏢 2. Tengkulak (Akun Bisnis + Gudang)"
+                value:
+                  nik: "3201010101010088"
+                  name: "CV Tani Berkah Bersama"
+                  phone: "081288887777"
+                  password: "secretPassword123"
+                  role: "middleman"
+                  is_bisnis: true
+                  location:
+                    label: "Gudang Konsolidasi"
+                    address: "Jl. Pergudangan Agrobisnis No. 8"
+                    village: "Sukamaju"
+                    district: "Cianjur"
+                    city: "Kabupaten Cianjur"
+                    province: "Jawa Barat"
+                    latitude: -6.8173
+                    longitude: 107.1394
+              pembeli_individu:
+                summary: "🛒 3. Pembeli (Simple tanpa Lokasi)"
+                value:
+                  name: "Resto Padang Sejahtera"
+                  phone: "081177776666"
+                  password: "secretPassword123"
+                  role: "buyer"
+                  is_bisnis: false
+      responses:
+        "201":
+          description: Berhasil mendaftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Registrasi akun berhasil
+                  data:
+                    $ref: "./schemas/user.yaml#/User"
+        "400":
+          description: Data masukan tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+        "409":
+          description: Nomor handphone atau NIK sudah terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"

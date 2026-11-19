@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"tandur/api/internal/domain"
-	"tandur/api/internal/infrastructure/config"
 )
 
 type MemoryCommodityRepository struct {
@@ -84,11 +84,15 @@ func (r *MemoryCommodityRepository) Update(ctx context.Context, commodity *domai
 }
 
 // Database Connection Helper
-func CheckDBConnection(cfg *config.Config) (string, error) {
-	// DSN format for reference
-	_ = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.DatabaseHost, cfg.DatabasePort, cfg.DatabaseUser, cfg.DatabasePass, cfg.DatabaseName, cfg.DatabaseSSL)
-
-	return "standby (ready for migrations)", nil
+func CheckDBConnection(pool *pgxpool.Pool) (string, error) {
+	if pool == nil {
+		return "disconnected", fmt.Errorf("database pool belum diinisialisasi")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		return "unreachable", err
+	}
+	return "connected", nil
 }
 

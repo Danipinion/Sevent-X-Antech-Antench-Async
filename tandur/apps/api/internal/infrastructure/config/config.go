@@ -34,12 +34,17 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load(".env", "../../.env")
 
+	defaultHost := "localhost"
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		defaultHost = "postgres"
+	}
+
 	cfg := &Config{
 		AppEnv:         getEnv("APP_ENV", "development"),
 		AppPort:        getEnv("APP_PORT", "8080"),
 		AppURL:         getEnv("APP_URL", "http://localhost:8080"),
 		DatabaseURL:    getEnv("DATABASE_URL", ""),
-		DatabaseHost:   getEnv("POSTGRES_HOST", getEnv("DATABASE_HOST", "postgres")),
+		DatabaseHost:   getEnv("POSTGRES_HOST", getEnv("DATABASE_HOST", defaultHost)),
 		DatabasePort:   getEnv("POSTGRES_PORT", getEnv("DATABASE_PORT", "5432")),
 		DatabaseName:   getEnv("POSTGRES_DB", getEnv("DATABASE_NAME", "tandur")),
 		DatabaseUser:   getEnv("POSTGRES_USER", getEnv("DATABASE_USER", "tandur")),
@@ -97,6 +102,13 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+func (c *Config) PostgresConnString() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
+	return "postgres://" + c.DatabaseUser + ":" + c.DatabasePass + "@" + c.DatabaseHost + ":" + c.DatabasePort + "/" + c.DatabaseName + "?sslmode=" + c.DatabaseSSL
 }
 
 func getEnv(key, defaultVal string) string {

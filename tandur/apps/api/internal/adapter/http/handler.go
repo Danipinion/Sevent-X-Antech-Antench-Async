@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"tandur/api/internal/application"
 	"tandur/api/internal/infrastructure/config"
 	"tandur/api/internal/infrastructure/persistence"
@@ -11,18 +12,22 @@ import (
 
 type Handler struct {
 	cfg              *config.Config
+	dbPool           *pgxpool.Pool
 	commodityService *application.CommodityService
+	authHandler      *AuthHandler
 }
 
-func NewHandler(cfg *config.Config, commodityService *application.CommodityService) *Handler {
+func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *application.CommodityService, authService *application.AuthService) *Handler {
 	return &Handler{
 		cfg:              cfg,
+		dbPool:           dbPool,
 		commodityService: commodityService,
+		authHandler:      NewAuthHandler(authService),
 	}
 }
 
 func (h *Handler) HealthCheck(c fiber.Ctx) error {
-	dbStatus, _ := persistence.CheckDBConnection(h.cfg)
+	dbStatus, _ := persistence.CheckDBConnection(h.dbPool)
 
 	return c.JSON(fiber.Map{
 		"status":    "ok",
@@ -31,6 +36,10 @@ func (h *Handler) HealthCheck(c fiber.Ctx) error {
 		"database":  dbStatus,
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
+}
+
+func (h *Handler) Register(c fiber.Ctx) error {
+	return h.authHandler.Register(c)
 }
 
 func (h *Handler) ListCommodities(c fiber.Ctx) error {

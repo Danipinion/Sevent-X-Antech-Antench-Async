@@ -1,0 +1,156 @@
+User:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    nik:
+      type: string
+      nullable: true
+      maxLength: 16
+      example: "3201010101010099"
+    name:
+      type: string
+      maxLength: 150
+      example: "Pak Slamet Petani"
+    phone:
+      type: string
+      maxLength: 13
+      example: "081399998888"
+    role:
+      type: string
+      enum: [farmer, middleman, buyer]
+      example: "farmer"
+    is_bisnis:
+      type: boolean
+      default: false
+      example: false
+    is_active:
+      type: boolean
+      default: true
+      example: true
+    created_at:
+      type: string
+      format: date-time
+      example: "2026-11-19T18:10:18Z"
+    updated_at:
+      type: string
+      format: date-time
+      example: "2026-11-19T18:10:18Z"
+    location:
+      $ref: "#/components/schemas/UserLocation"
+
+UserLocation:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      example: "562e7d5c-d1af-42d6-b64d-858c49e28b8d"
+    user_id:
+      type: string
+      format: uuid
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    label:
+      type: string
+      example: "Kebun Cabai Utama"
+    address:
+      type: string
+      example: "Jl. Raya Pertanian No. 12"
+    village:
+      type: string
+      example: "Cikanyere"
+    district:
+      type: string
+      example: "Sukaresmi"
+    city:
+      type: string
+      example: "Kabupaten Cianjur"
+    province:
+      type: string
+      example: "Jawa Barat"
+    latitude:
+      type: number
+      format: double
+      example: -6.7456
+    longitude:
+      type: number
+      format: double
+      example: 107.0872
+    is_primary:
+      type: boolean
+      example: true
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+RegisterRequest:
+  type: object
+  required:
+    - name
+    - phone
+    - password
+    - role
+  properties:
+    nik:
+      type: string
+      maxLength: 16
+      example: "3201010101010099"
+    name:
+      type: string
+      maxLength: 150
+      example: "Pak Slamet Petani"
+    phone:
+      type: string
+      maxLength: 13
+      example: "081399998888"
+    password:
+      type: string
+      minLength: 6
+      format: password
+      example: "secretPassword123"
+    role:
+      type: string
+      enum: [farmer, middleman, buyer]
+      example: "farmer"
+    is_bisnis:
+      type: boolean
+      default: false
+      example: false
+    location:
+      type: object
+      required:
+        - address
+        - latitude
+        - longitude
+      properties:
+        label:
+          type: string
+          example: "Kebun Cabai Utama"
+        address:
+          type: string
+          example: "Jl. Raya Pertanian No. 12"
+        village:
+          type: string
+          example: "Cikanyere"
+        district:
+          type: string
+          example: "Sukaresmi"
+        city:
+          type: string
+          example: "Kabupaten Cianjur"
+        province:
+          type: string
+          example: "Jawa Barat"
+        latitude:
+          type: number
+          format: double
+          example: -6.7456
+        longitude:
+          type: number
+          format: double
+          example: 107.0872

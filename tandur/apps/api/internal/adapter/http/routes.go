@@ -20,9 +20,25 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	// Root Healthcheck
 	app.Get("/health", handler.HealthCheck)
 
+	// Interactive API Documentation (Swagger UI & Scalar)
+	docsHandler := NewDocsHandler()
+	app.Get("/swagger", docsHandler.SwaggerUI)
+	app.Get("/docs", docsHandler.SwaggerUI)
+	app.Get("/scalar", docsHandler.ScalarUI)
+	app.Get("/docs/openapi.json", docsHandler.OpenAPISpecJSON)
+	app.Get("/docs/openapi.yaml", docsHandler.OpenAPISpecYAML)
+	app.Get("/openapi.json", docsHandler.OpenAPISpecJSON)
+	app.Get("/openapi.yaml", docsHandler.OpenAPISpecYAML)
+
 	// API v1 Routing
 	v1 := app.Group("/api/v1")
 	v1.Get("/health", handler.HealthCheck)
+	v1.Get("/swagger", docsHandler.SwaggerUI)
+	v1.Get("/docs", docsHandler.SwaggerUI)
 	v1.Get("/commodities", handler.ListCommodities)
 	v1.Get("/commodities/:id", handler.GetCommodity)
+
+	// Auth Routing
+	auth := v1.Group("/auth")
+	auth.Post("/register", handler.Register)
 }

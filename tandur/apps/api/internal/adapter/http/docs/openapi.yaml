@@ -1,0 +1,504 @@
+openapi: 3.0.3
+info:
+  title: TANDUR API
+  version: 1.0.0
+  description: 'Spesifikasi REST API TANDUR sebagai kontrak komunikasi antara Frontend
+    dan Backend. Mendukung operasional rantai pasok komoditas pertanian, agregasi
+    stok petani, dan mekanisme kontrol margin harga.
+
+    '
+servers:
+- url: http://localhost:8080/api/v1
+  description: Development Server Local
+- url: /api/v1
+  description: Traefik Proxy Path
+paths:
+  /health:
+    get:
+      summary: Healthcheck Status Server
+      description: Memeriksa ketersediaan API backend dan koneksi database.
+      responses:
+        '200':
+          description: Server beroperasi normal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  app:
+                    type: string
+                    example: TANDUR Backend API
+                  version:
+                    type: string
+                    example: v1.0.0
+                  database:
+                    type: string
+                    example: connected
+                  timestamp:
+                    type: string
+                    example: '2026-11-15T15:30:00Z'
+  /commodities:
+    get:
+      summary: Daftar Seluruh Komoditas
+      description: Mengambil daftar komoditas pertanian beserta acuan harga dasar
+        dan harga pasar.
+      responses:
+        '200':
+          description: Berhasil mengambil daftar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Commodity'
+  /commodities/{id}:
+    get:
+      summary: Detail Komoditas
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Detail komoditas ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Commodity'
+        '404':
+          description: Komoditas tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/register:
+    post:
+      summary: Registrasi Akun Pengguna Baru
+      description: 'Mendaftarkan akun baru (farmer, middleman, atau buyer) beserta
+        informasi lokasi opsional. Anda dapat mengisi langsung melalui Form Input
+        di bagian **Parameters** di bawah ini, atau memilih contoh JSON melalui **Request
+        body**.
+
+        '
+      parameters:
+      - name: name
+        in: query
+        description: Nama lengkap pengguna (Wajib)
+        required: false
+        schema:
+          type: string
+          example: Pak Joko Tani
+      - name: phone
+        in: query
+        description: Nomor Handphone 10-13 digit (Wajib)
+        required: false
+        schema:
+          type: string
+          example: 081234567890
+      - name: password
+        in: query
+        description: Password minimal 6 karakter (Wajib)
+        required: false
+        schema:
+          type: string
+          format: password
+          example: rahasia123
+      - name: role
+        in: query
+        description: Peran akun dalam sistem (Wajib)
+        required: false
+        schema:
+          type: string
+          enum:
+          - farmer
+          - middleman
+          - buyer
+          example: farmer
+      - name: nik
+        in: query
+        description: NIK KTP 16 digit angka (Opsional)
+        required: false
+        schema:
+          type: string
+          example: '3201010101010077'
+      - name: is_bisnis
+        in: query
+        description: Apakah akun bisnis / perusahaan
+        required: false
+        schema:
+          type: boolean
+          default: false
+          example: false
+      - name: address
+        in: query
+        description: Alamat lokasi kebun / gudang / toko (Opsional)
+        required: false
+        schema:
+          type: string
+          example: Jl. Pertanian Makmur No. 20
+      - name: latitude
+        in: query
+        description: Titik koordinat Latitude (Opsional)
+        required: false
+        schema:
+          type: number
+          format: double
+          example: -6.7456
+      - name: longitude
+        in: query
+        description: Titik koordinat Longitude (Opsional)
+        required: false
+        schema:
+          type: number
+          format: double
+          example: 107.0872
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              petani_lengkap:
+                summary: "\U0001F9D1\u200D\U0001F33E 1. Petani (Lengkap dengan Koordinat\
+                  \ Kebun)"
+                value:
+                  nik: '3201010101010099'
+                  name: Pak Slamet Petani
+                  phone: 081399998888
+                  password: secretPassword123
+                  role: farmer
+                  is_bisnis: false
+                  location:
+                    label: Kebun Cabai Utama
+                    address: Jl. Raya Pertanian No. 12
+                    village: Cikanyere
+                    district: Sukaresmi
+                    city: Kabupaten Cianjur
+                    province: Jawa Barat
+                    latitude: -6.7456
+                    longitude: 107.0872
+              tengkulak_bisnis:
+                summary: "\U0001F3E2 2. Tengkulak (Akun Bisnis + Gudang)"
+                value:
+                  nik: '3201010101010088'
+                  name: CV Tani Berkah Bersama
+                  phone: 081288887777
+                  password: secretPassword123
+                  role: middleman
+                  is_bisnis: true
+                  location:
+                    label: Gudang Konsolidasi
+                    address: Jl. Pergudangan Agrobisnis No. 8
+                    village: Sukamaju
+                    district: Cianjur
+                    city: Kabupaten Cianjur
+                    province: Jawa Barat
+                    latitude: -6.8173
+                    longitude: 107.1394
+              pembeli_individu:
+                summary: "\U0001F6D2 3. Pembeli (Simple tanpa Lokasi)"
+                value:
+                  name: Resto Padang Sejahtera
+                  phone: 081177776666
+                  password: secretPassword123
+                  role: buyer
+                  is_bisnis: false
+      responses:
+        '201':
+          description: Berhasil mendaftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Registrasi akun berhasil
+                  data:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Data masukan tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Nomor handphone atau NIK sudah terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    Commodity:
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - unit
+      - base_price
+      - current_market_price
+      properties:
+        id:
+          type: string
+          example: cabai-merah
+        name:
+          type: string
+          example: Cabai Merah Keriting
+        category:
+          type: string
+          example: Hortikultura
+        unit:
+          type: string
+          example: kg
+        base_price:
+          type: number
+          format: float
+          example: 40000
+        current_market_price:
+          type: number
+          format: float
+          example: 45000
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+          description: Pesan deskripsi kesalahan
+          example: Komoditas tidak ditemukan
+    Inventory:
+      type: object
+      required:
+      - id
+      - commodity_id
+      - owner_id
+      - quantity
+      - unit
+      - quality_grade
+      - location_name
+      - latitude
+      - longitude
+      - harvest_date
+      properties:
+        id:
+          type: string
+          example: inv-001
+        commodity_id:
+          type: string
+          example: cabai-merah
+        owner_id:
+          type: string
+          example: usr-petani-001
+        quantity:
+          type: number
+          format: float
+          example: 500
+        unit:
+          type: string
+          example: kg
+        quality_grade:
+          type: string
+          enum:
+          - GRADE_A
+          - GRADE_B
+          - GRADE_C
+          example: GRADE_A
+        location_name:
+          type: string
+          example: Cikajang, Garut
+        latitude:
+          type: number
+          format: float
+          example: -7.3486
+        longitude:
+          type: number
+          format: float
+          example: 107.8184
+        harvest_date:
+          type: string
+          format: date
+          example: '2026-11-14'
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        nik:
+          type: string
+          nullable: true
+          maxLength: 16
+          example: '3201010101010099'
+        name:
+          type: string
+          maxLength: 150
+          example: Pak Slamet Petani
+        phone:
+          type: string
+          maxLength: 13
+          example: 081399998888
+        role:
+          type: string
+          enum:
+          - farmer
+          - middleman
+          - buyer
+          example: farmer
+        is_bisnis:
+          type: boolean
+          default: false
+          example: false
+        is_active:
+          type: boolean
+          default: true
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-11-19T18:10:18Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2026-11-19T18:10:18Z'
+        location:
+          $ref: '#/components/schemas/UserLocation'
+    UserLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 562e7d5c-d1af-42d6-b64d-858c49e28b8d
+        user_id:
+          type: string
+          format: uuid
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        label:
+          type: string
+          example: Kebun Cabai Utama
+        address:
+          type: string
+          example: Jl. Raya Pertanian No. 12
+        village:
+          type: string
+          example: Cikanyere
+        district:
+          type: string
+          example: Sukaresmi
+        city:
+          type: string
+          example: Kabupaten Cianjur
+        province:
+          type: string
+          example: Jawa Barat
+        latitude:
+          type: number
+          format: double
+          example: -6.7456
+        longitude:
+          type: number
+          format: double
+          example: 107.0872
+        is_primary:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RegisterRequest:
+      type: object
+      required:
+      - name
+      - phone
+      - password
+      - role
+      properties:
+        nik:
+          type: string
+          maxLength: 16
+          example: '3201010101010099'
+        name:
+          type: string
+          maxLength: 150
+          example: Pak Slamet Petani
+        phone:
+          type: string
+          maxLength: 13
+          example: 081399998888
+        password:
+          type: string
+          minLength: 6
+          format: password
+          example: secretPassword123
+        role:
+          type: string
+          enum:
+          - farmer
+          - middleman
+          - buyer
+          example: farmer
+        is_bisnis:
+          type: boolean
+          default: false
+          example: false
+        location:
+          type: object
+          required:
+          - address
+          - latitude
+          - longitude
+          properties:
+            label:
+              type: string
+              example: Kebun Cabai Utama
+            address:
+              type: string
+              example: Jl. Raya Pertanian No. 12
+            village:
+              type: string
+              example: Cikanyere
+            district:
+              type: string
+              example: Sukaresmi
+            city:
+              type: string
+              example: Kabupaten Cianjur
+            province:
+              type: string
+              example: Jawa Barat
+            latitude:
+              type: number
+              format: double
+              example: -6.7456
+            longitude:
+              type: number
+              format: double
+              example: 107.0872
