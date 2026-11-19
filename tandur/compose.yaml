@@ -126,11 +126,25 @@ services:
     networks:
       - tandur-network
 
+  filestash:
+    image: machines/filestash:latest
+    container_name: tandur-filestash
+    restart: unless-stopped
+    ports:
+      - "${FILESTASH_PORT:-8334}:8334"
+    volumes:
+      - filestash_data:/app/data/state
+    depends_on:
+      - garage
+    networks:
+      - tandur-network
+
 volumes:
   postgres_data:
   redis_data:
   garage_data:
   garage_meta:
+  filestash_data:
   web_node_modules:
   go_modules:
 
