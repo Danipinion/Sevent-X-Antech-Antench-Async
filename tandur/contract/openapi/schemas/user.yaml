@@ -154,3 +154,36 @@ RegisterRequest:
           type: number
           format: double
           example: 107.0872
+
+LoginRequest:
+  type: object
+  required:
+    - username
+    - password
+  properties:
+    username:
+      type: string
+      description: Nomor Handphone (10-13 digit) atau NIK (16 digit angka)
+      example: "081399998888"
+    password:
+      type: string
+      format: password
+      description: Password akun pengguna
+      example: "secretPassword123"
+
+LoginResponseData:
+  type: object
+  properties:
+    token:
+      type: string
+      description: JSON Web Token (JWT) untuk autentikasi sesi
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    token_type:
+      type: string
+      example: "Bearer"
+    expires_at:
+      type: string
+      format: date-time
+      example: "2026-11-23T15:30:00Z"
+    user:
+      $ref: "#/User"

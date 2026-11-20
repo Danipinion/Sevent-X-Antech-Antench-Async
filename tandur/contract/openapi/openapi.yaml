@@ -235,3 +235,120 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
+  /auth/login:
+    post:
+      summary: Login Pengguna
+      description: >
+        Autentikasi pengguna menggunakan Nomor Handphone atau NIK sebagai username dan password.
+        Mengembalikan token sesi berbasis JWT (JSON Web Token) yang digunakan untuk otorisasi endpoint terlindungi.
+        Anda dapat mengisi langsung melalui Form Input di bagian **Parameters** di bawah ini,
+        atau mengirim JSON payload melalui **Request body**.
+      parameters:
+        - name: username
+          in: query
+          description: Nomor Handphone (10-13 digit) atau NIK (16 digit angka)
+          required: false
+          schema:
+            type: string
+            example: "081399998888"
+        - name: password
+          in: query
+          description: Password akun pengguna
+          required: false
+          schema:
+            type: string
+            format: password
+            example: "secretPassword123"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/LoginRequest"
+            examples:
+              login_phone:
+                summary: "📱 1. Login menggunakan Nomor Handphone"
+                value:
+                  username: "081399998888"
+                  password: "secretPassword123"
+              login_nik:
+                summary: "🪪 2. Login menggunakan NIK KTP"
+                value:
+                  username: "3201010101010099"
+                  password: "secretPassword123"
+      responses:
+        "200":
+          description: Login berhasil, token JWT diterbitkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Login berhasil
+                  data:
+                    $ref: "./schemas/user.yaml#/LoginResponseData"
+        "400":
+          description: Username atau password tidak diisi
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+        "401":
+          description: Kredensial tidak valid (Nomor HP/NIK atau password salah)
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+        "403":
+          description: Akun tidak aktif atau dinonaktifkan
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+  /auth/me:
+    get:
+      summary: Profil Pengguna Aktif (Sesi JWT)
+      description: Mengambil data profil pengguna yang saat ini sedang login berdasarkan token JWT di header Authorization.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Profil pengguna berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Profil pengguna berhasil diambil
+                  data:
+                    $ref: "./schemas/user.yaml#/User"
+        "401":
+          description: Token otorisasi tidak valid atau telah kedaluwarsa
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+        "404":
+          description: Pengguna tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Masukkan token JWT yang diperoleh dari endpoint /auth/login

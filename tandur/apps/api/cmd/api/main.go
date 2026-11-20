@@ -43,7 +43,8 @@ func main() {
 	commodityRepo := persistence.NewMemoryCommodityRepository()
 
 	// 5. Initialize Application Services (Use Cases)
-	authService := application.NewAuthService(userRepo)
+	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
+	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration)
 	commodityService := application.NewCommodityService(commodityRepo)
 
 	// 6. Initialize HTTP Handlers & Adapter

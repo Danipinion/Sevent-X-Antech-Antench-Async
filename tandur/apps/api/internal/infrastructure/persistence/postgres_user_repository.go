@@ -122,6 +122,7 @@ func (r *PostgresUserRepository) GetByPhone(ctx context.Context, phone string) (
 	}
 
 	user.Role = domain.UserRole(roleStr)
+	r.attachPrimaryLocation(ctx, &user)
 	return &user, nil
 }
 
@@ -155,6 +156,7 @@ func (r *PostgresUserRepository) GetByNIK(ctx context.Context, nik string) (*dom
 	}
 
 	user.Role = domain.UserRole(roleStr)
+	r.attachPrimaryLocation(ctx, &user)
 	return &user, nil
 }
 
@@ -188,8 +190,11 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 	}
 
 	user.Role = domain.UserRole(roleStr)
+	r.attachPrimaryLocation(ctx, &user)
+	return &user, nil
+}
 
-	// Fetch primary location if exists
+func (r *PostgresUserRepository) attachPrimaryLocation(ctx context.Context, user *domain.User) {
 	locQuery := `
 		SELECT id, user_id, label, address, village, district, city, province,
 		       ST_Y(location::geometry) AS latitude,
@@ -201,7 +206,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 	`
 
 	var loc domain.UserLocation
-	err = r.pool.QueryRow(ctx, locQuery, id).Scan(
+	err := r.pool.QueryRow(ctx, locQuery, user.ID).Scan(
 		&loc.ID,
 		&loc.UserID,
 		&loc.Label,
@@ -219,6 +224,4 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 	if err == nil {
 		user.Location = &loc
 	}
-
-	return &user, nil
 }

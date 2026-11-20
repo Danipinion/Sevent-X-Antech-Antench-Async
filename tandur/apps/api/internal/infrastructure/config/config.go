@@ -3,6 +3,7 @@ package config
 import (
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -29,6 +30,8 @@ type Config struct {
 	S3SecretKey    string
 	S3Region       string
 	MarketPriceURL string
+	JWTSecret      string
+	JWTExpirationHours int
 }
 
 func Load() *Config {
@@ -58,8 +61,10 @@ func Load() *Config {
 		S3Bucket:       getEnv("S3_BUCKET", "tandur"),
 		S3AccessKey:    getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:    getEnv("S3_SECRET_KEY", ""),
-		S3Region:       getEnv("S3_REGION", "garage"),
-		MarketPriceURL: getEnv("MARKET_PRICE_API_BASE_URL", ""),
+		S3Region:           getEnv("S3_REGION", "garage"),
+		MarketPriceURL:     getEnv("MARKET_PRICE_API_BASE_URL", ""),
+		JWTSecret:          getEnv("JWT_SECRET", "tandur-secret-key-development-32chars-min!"),
+		JWTExpirationHours: getEnvInt("JWT_EXPIRATION_HOURS", 72),
 	}
 
 	// Parse DATABASE_URL if present
@@ -114,6 +119,15 @@ func (c *Config) PostgresConnString() string {
 func getEnv(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
+	}
+	return defaultVal
+}
+
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if intVal, err := strconv.Atoi(val); err == nil {
+			return intVal
+		}
 	}
 	return defaultVal
 }

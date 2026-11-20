@@ -2,9 +2,12 @@ package application
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"time"
 	"unicode"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"tandur/api/internal/domain"
 )
@@ -40,13 +43,48 @@ type RegisterInput struct {
 	Longitude *float64 `json:"longitude,omitempty" form:"longitude"`
 }
 
-type AuthService struct {
-	userRepo domain.UserRepository
+type LoginInput struct {
+	Username string `json:"username" form:"username"`
+	Phone    string `json:"phone,omitempty" form:"phone"`
+	NIK      string `json:"nik,omitempty" form:"nik"`
+	Password string `json:"password" form:"password"`
 }
 
-func NewAuthService(userRepo domain.UserRepository) *AuthService {
+type LoginResult struct {
+	Token     string       `json:"token"`
+	TokenType string       `json:"token_type"`
+	ExpiresAt string       `json:"expires_at"`
+	User      *domain.User `json:"user"`
+}
+
+type JWTClaims struct {
+	UserID   string          `json:"user_id"`
+	Name     string          `json:"name"`
+	Phone    string          `json:"phone"`
+	NIK      *string         `json:"nik,omitempty"`
+	Role     domain.UserRole `json:"role"`
+	IsBisnis bool            `json:"is_bisnis"`
+	jwt.RegisteredClaims
+}
+
+type AuthService struct {
+	userRepo    domain.UserRepository
+	jwtSecret   string
+	jwtDuration time.Duration
+}
+
+func NewAuthService(userRepo domain.UserRepository, jwtSecret string, jwtDuration time.Duration) *AuthService {
+	if jwtSecret == "" {
+		jwtSecret = "tandur-secret-key-development-32chars-min!"
+	}
+	if jwtDuration <= 0 {
+		jwtDuration = 72 * time.Hour
+	}
+
 	return &AuthService{
-		userRepo: userRepo,
+		userRepo:    userRepo,
+		jwtSecret:   jwtSecret,
+		jwtDuration: jwtDuration,
 	}
 }
 
@@ -167,6 +205,121 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*domai
 	}
 
 	return user, nil
+}
+
+// Login memvalidasi kredensial pengguna (Nomor Handphone atau NIK + Password) dan menerbitkan token JWT
+func (s *AuthService) Login(ctx context.Context, input LoginInput) (*LoginResult, error) {
+	if s.userRepo == nil {
+		return nil, errors.New("user repository tidak tersedia")
+	}
+
+	// 1. Identifikasi Username (dapat berupa Nomor HP atau NIK)
+	identifier := strings.TrimSpace(input.Username)
+	if identifier == "" {
+		if strings.TrimSpace(input.Phone) != "" {
+			identifier = strings.TrimSpace(input.Phone)
+		} else if strings.TrimSpace(input.NIK) != "" {
+			identifier = strings.TrimSpace(input.NIK)
+		}
+	}
+	if identifier == "" {
+		return nil, domain.ErrUsernameRequired
+	}
+
+	// 2. Validasi Password
+	if strings.TrimSpace(input.Password) == "" {
+		return nil, domain.ErrPasswordRequired
+	}
+
+	cleanID := strings.ReplaceAll(identifier, " ", "")
+	cleanID = strings.ReplaceAll(cleanID, "-", "")
+
+	var user *domain.User
+	var err error
+
+	// 3. Jika identifier adalah 16 digit angka, coba cari berdasarkan NIK
+	if len(cleanID) == 16 && isDigitsOnly(cleanID) {
+		user, err = s.userRepo.GetByNIK(ctx, cleanID)
+	}
+
+	// 4. Jika belum ditemukan (atau bukan 16 digit), coba cari berdasarkan nomor Handphone (dinormalisasi)
+	if user == nil {
+		normalizedPhone := normalizePhone(identifier)
+		user, err = s.userRepo.GetByPhone(ctx, normalizedPhone)
+	}
+
+	// 5. Jika akun tidak ditemukan
+	if err != nil || user == nil {
+		return nil, domain.ErrInvalidCredentials
+	}
+
+	// 6. Validasi status aktif akun
+	if !user.IsActive {
+		return nil, domain.ErrAccountInactive
+	}
+
+	// 7. Verifikasi password dengan bcrypt
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
+		return nil, domain.ErrInvalidCredentials
+	}
+
+	// 8. Terbitkan JWT Token
+	now := time.Now()
+	expiresAt := now.Add(s.jwtDuration)
+	claims := JWTClaims{
+		UserID:   user.ID,
+		Name:     user.Name,
+		Phone:    user.Phone,
+		NIK:      user.NIK,
+		Role:     user.Role,
+		IsBisnis: user.IsBisnis,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   user.ID,
+			Issuer:    "tandur-api",
+			Audience:  jwt.ClaimStrings{"tandur"},
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
+	}
+
+	tokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenStr, err := tokenObj.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResult{
+		Token:     tokenStr,
+		TokenType: "Bearer",
+		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
+		User:      user,
+	}, nil
+}
+
+// ValidateToken memvalidasi keaslian token JWT dan mengembalikan claims
+func (s *AuthService) ValidateToken(tokenString string) (*JWTClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, domain.ErrUnauthorized
+		}
+		return []byte(s.jwtSecret), nil
+	})
+	if err != nil {
+		return nil, domain.ErrUnauthorized
+	}
+
+	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		return claims, nil
+	}
+	return nil, domain.ErrUnauthorized
+}
+
+// GetProfile mengambil profil pengguna berdasarkan User ID
+func (s *AuthService) GetProfile(ctx context.Context, userID string) (*domain.User, error) {
+	if s.userRepo == nil {
+		return nil, errors.New("user repository tidak tersedia")
+	}
+	return s.userRepo.GetByID(ctx, userID)
 }
 
 func normalizePhone(raw string) string {

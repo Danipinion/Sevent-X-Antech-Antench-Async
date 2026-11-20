@@ -110,3 +110,86 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		"data":    user,
 	})
 }
+
+// Login menangani autentikasi pengguna menggunakan Nomor HP atau NIK dan password
+func (h *AuthHandler) Login(c fiber.Ctx) error {
+	var input application.LoginInput
+	// 1. Coba bind dari request body (JSON atau Form-URL-Encoded)
+	_ = c.Bind().Body(&input)
+
+	// 2. Ambil dari Query Parameters jika diisi lewat form parameter Swagger UI
+	if input.Username == "" {
+		input.Username = c.Query("username")
+	}
+	if input.Username == "" && c.Query("phone") != "" {
+		input.Username = c.Query("phone")
+	}
+	if input.Username == "" && c.Query("nik") != "" {
+		input.Username = c.Query("nik")
+	}
+	if input.Password == "" {
+		input.Password = c.Query("password")
+	}
+
+	result, err := h.authService.Login(c.Context(), input)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrUsernameRequired),
+			errors.Is(err, domain.ErrPasswordRequired):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+
+		case errors.Is(err, domain.ErrInvalidCredentials):
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+
+		case errors.Is(err, domain.ErrAccountInactive):
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Terjadi kesalahan internal pada server",
+				"error":   err.Error(),
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Login berhasil",
+		"data":    result,
+	})
+}
+
+// Me mengembalikan profil pengguna yang sedang login berdasarkan token JWT
+func (h *AuthHandler) Me(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Pengguna tidak terautentikasi",
+		})
+	}
+
+	user, err := h.authService.GetProfile(c.Context(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Pengguna tidak ditemukan",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Profil pengguna berhasil diambil",
+		"data":    user,
+	})
+}

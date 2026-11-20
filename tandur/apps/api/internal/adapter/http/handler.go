@@ -14,6 +14,7 @@ type Handler struct {
 	cfg              *config.Config
 	dbPool           *pgxpool.Pool
 	commodityService *application.CommodityService
+	authService      *application.AuthService
 	authHandler      *AuthHandler
 }
 
@@ -22,6 +23,7 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		cfg:              cfg,
 		dbPool:           dbPool,
 		commodityService: commodityService,
+		authService:      authService,
 		authHandler:      NewAuthHandler(authService),
 	}
 }
@@ -40,6 +42,18 @@ func (h *Handler) HealthCheck(c fiber.Ctx) error {
 
 func (h *Handler) Register(c fiber.Ctx) error {
 	return h.authHandler.Register(c)
+}
+
+func (h *Handler) Login(c fiber.Ctx) error {
+	return h.authHandler.Login(c)
+}
+
+func (h *Handler) Me(c fiber.Ctx) error {
+	return h.authHandler.Me(c)
+}
+
+func (h *Handler) AuthMiddleware() fiber.Handler {
+	return AuthMiddleware(h.authService)
 }
 
 func (h *Handler) ListCommodities(c fiber.Ctx) error {

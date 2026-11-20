@@ -339,6 +339,172 @@
           }
         }
       }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login Pengguna",
+        "description": "Autentikasi pengguna menggunakan Nomor Handphone atau NIK sebagai username dan password. Mengembalikan token sesi berbasis JWT (JSON Web Token) yang digunakan untuk otorisasi endpoint terlindungi. Anda dapat mengisi langsung melalui Form Input di bagian **Parameters** di bawah ini, atau mengirim JSON payload melalui **Request body**.",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "description": "Nomor Handphone (10-13 digit) atau NIK (16 digit angka)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "081399998888"
+            }
+          },
+          {
+            "name": "password",
+            "in": "query",
+            "description": "Password akun pengguna",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "password",
+              "example": "secretPassword123"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              },
+              "examples": {
+                "login_phone": {
+                  "summary": "📱 1. Login menggunakan Nomor Handphone",
+                  "value": {
+                    "username": "081399998888",
+                    "password": "secretPassword123"
+                  }
+                },
+                "login_nik": {
+                  "summary": "🪪 2. Login menggunakan NIK KTP",
+                  "value": {
+                    "username": "3201010101010099",
+                    "password": "secretPassword123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login berhasil, token JWT diterbitkan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Login berhasil"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LoginResponseData"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Username atau password tidak diisi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Kredensial tidak valid (Nomor HP/NIK atau password salah)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Akun tidak aktif atau dinonaktifkan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Profil Pengguna Aktif (Sesi JWT)",
+        "description": "Mengambil data profil pengguna yang saat ini sedang login berdasarkan token JWT di header Authorization.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profil pengguna berhasil diambil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Profil pengguna berhasil diambil"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token otorisasi tidak valid atau telah kedaluwarsa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pengguna tidak ditemukan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -677,6 +843,56 @@
             }
           }
         }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Nomor Handphone (10-13 digit) atau NIK (16 digit angka)",
+            "example": "081399998888"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "Password akun pengguna",
+            "example": "secretPassword123"
+          }
+        }
+      },
+      "LoginResponseData": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "JSON Web Token (JWT) untuk autentikasi sesi",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "token_type": {
+            "type": "string",
+            "example": "Bearer"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-23T15:30:00Z"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Masukkan token JWT yang diperoleh dari endpoint /auth/login"
       }
     }
   }
