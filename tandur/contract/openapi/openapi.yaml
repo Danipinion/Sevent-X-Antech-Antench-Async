@@ -71,6 +71,93 @@ paths:
                       $ref: "./schemas/commodity.yaml#/Commodity"
                   meta:
                     $ref: "./schemas/error.yaml#/Meta"
+  /commodities/realtime-prices:
+    get:
+      summary: Pantauan Harga Pasar Riil Komoditas (Dashboard Petani)
+      description: >
+        Mengambil pantauan harga pasar riil komoditas pertanian (Gabah Kering Panen, GKG, Jagung Pipil, Kedelai Lokal)
+        yang diperbarui setiap 10 menit sekali dengan perhitungan selisih/delta harian (Hari ini vs Kemarin).
+      parameters:
+        - name: kode_provinsi
+          in: query
+          description: Kode BPS Provinsi (contoh 35 untuk Jawa Timur).
+          required: false
+          schema:
+            type: string
+            example: "35"
+        - name: kode_kab_kota
+          in: query
+          description: Kode BPS Kabupaten/Kota (contoh 3519 untuk Kabupaten Madiun).
+          required: false
+          schema:
+            type: string
+            example: "3519"
+      responses:
+        "200":
+          description: Berhasil mengambil pantauan harga pasar riil komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Pantauan harga pasar riil komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/commodity.yaml#/DashboardCommodityPrice"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+  /commodities/price-guide:
+    get:
+      summary: Panduan Batas Margin Harga Jual Panen
+      description: >
+        Mengambil rekomendasi batas harga jual terendah dan tertinggi (toleransi ±15%)
+        berdasarkan harga pasar riil untuk komoditas tertentu.
+      parameters:
+        - name: commodity_name
+          in: query
+          description: Nama komoditas (contoh "Cabai Merah Keriting", "Gabah Kering Panen")
+          required: true
+          schema:
+            type: string
+            example: "Gabah Kering Panen"
+        - name: kode_provinsi
+          in: query
+          description: Kode BPS Provinsi
+          required: false
+          schema:
+            type: string
+            example: "35"
+        - name: kode_kab_kota
+          in: query
+          description: Kode BPS Kabupaten/Kota
+          required: false
+          schema:
+            type: string
+            example: "3519"
+      responses:
+        "200":
+          description: Panduan batas rentang harga berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Panduan rentang harga komoditas berhasil diambil
+                  data:
+                    $ref: "./schemas/commodity.yaml#/PriceGuide"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
   /commodities/market-prices:
     get:
       summary: Harga Pasar Komoditas Terbaru (SP2KP Kemendag)

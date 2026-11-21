@@ -102,3 +102,39 @@ func (h *Handler) GetMarketPrices(c fiber.Ctx) error {
 
 	return RespondSuccess(c, fiber.StatusOK, "Harga pasar komoditas berhasil diambil", prices)
 }
+
+func (h *Handler) GetRealtimeDashboardPrices(c fiber.Ctx) error {
+	var query domain.MarketPriceQuery
+	_ = c.Bind().Query(&query)
+
+	if query.KodeProvinsi == "" && c.Query("kode_provinsi") != "" {
+		query.KodeProvinsi = c.Query("kode_provinsi")
+	}
+	if query.KodeKabKota == "" && c.Query("kode_kab_kota") != "" {
+		query.KodeKabKota = c.Query("kode_kab_kota")
+	}
+
+	prices, err := h.commodityService.GetRealtimeDashboardPrices(c.Context(), query)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "REALTIME_PRICE_FETCH_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Pantauan harga pasar riil komoditas berhasil diambil", prices)
+}
+
+func (h *Handler) GetPriceGuide(c fiber.Ctx) error {
+	commodityName := c.Query("commodity_name")
+	if commodityName == "" {
+		commodityName = c.Query("commodity")
+	}
+	if commodityName == "" {
+		return RespondError(c, fiber.StatusBadRequest, "COMMODITY_NAME_REQUIRED", "Nama komoditas wajib diisi")
+	}
+
+	guide, err := h.commodityService.GetPriceGuide(c.Context(), commodityName, c.Query("kode_provinsi"), c.Query("kode_kab_kota"))
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "PRICE_GUIDE_FETCH_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Panduan rentang harga komoditas berhasil diambil", guide)
+}

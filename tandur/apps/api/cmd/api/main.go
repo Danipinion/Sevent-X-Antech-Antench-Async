@@ -48,10 +48,12 @@ func main() {
 	redisClient := cache.NewRedisClient(cfg)
 	var tokenBlacklist domain.TokenBlacklist
 	var marketPriceCache domain.MarketPriceCache
+	var realtimeCache domain.RealtimeMarketPriceCache
 	if err := redisClient.Ping(ctx); err == nil {
-		logger.Log.Info("Terhubung ke Redis cache untuk token blacklist dan harga komoditas (TTL 6 jam)")
+		logger.Log.Info("Terhubung ke Redis cache untuk token blacklist, SP2KP (TTL 6 jam), dan harga realtime Tandur (TTL 10 menit)")
 		tokenBlacklist = redisClient
 		marketPriceCache = redisClient
+		realtimeCache = redisClient
 	} else {
 		logger.Log.Warn("Redis tidak terhubung, menggunakan in-memory cache fallback", "error", err)
 	}
@@ -62,7 +64,7 @@ func main() {
 	// 6. Initialize Application Services (Use Cases)
 	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
 	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
-	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient, marketPriceCache)
+	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient, marketPriceCache, realtimeCache)
 
 	// 6. Initialize HTTP Handlers & Adapter
 	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService)

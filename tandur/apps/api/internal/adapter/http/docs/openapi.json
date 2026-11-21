@@ -105,6 +105,131 @@
         }
       }
     },
+    "/commodities/realtime-prices": {
+      "get": {
+        "summary": "Pantauan Harga Pasar Riil Komoditas (Dashboard Petani)",
+        "description": "Mengambil pantauan harga pasar riil komoditas pertanian (Gabah Kering Panen, GKG, Jagung Pipil, Kedelai Lokal) yang diperbarui setiap 10 menit sekali dengan perhitungan selisih/delta harian (Hari ini vs Kemarin).\n",
+        "parameters": [
+          {
+            "name": "kode_provinsi",
+            "in": "query",
+            "description": "Kode BPS Provinsi (contoh 35 untuk Jawa Timur).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "35"
+            }
+          },
+          {
+            "name": "kode_kab_kota",
+            "in": "query",
+            "description": "Kode BPS Kabupaten/Kota (contoh 3519 untuk Kabupaten Madiun).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "3519"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil mengambil pantauan harga pasar riil komoditas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Pantauan harga pasar riil komoditas berhasil diambil"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DashboardCommodityPrice"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commodities/price-guide": {
+      "get": {
+        "summary": "Panduan Batas Margin Harga Jual Panen",
+        "description": "Mengambil rekomendasi batas harga jual terendah dan tertinggi (toleransi \u00b115%) berdasarkan harga pasar riil untuk komoditas tertentu.\n",
+        "parameters": [
+          {
+            "name": "commodity_name",
+            "in": "query",
+            "description": "Nama komoditas (contoh \"Cabai Merah Keriting\", \"Gabah Kering Panen\")",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "Gabah Kering Panen"
+            }
+          },
+          {
+            "name": "kode_provinsi",
+            "in": "query",
+            "description": "Kode BPS Provinsi",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "35"
+            }
+          },
+          {
+            "name": "kode_kab_kota",
+            "in": "query",
+            "description": "Kode BPS Kabupaten/Kota",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "3519"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Panduan batas rentang harga berhasil diambil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Panduan rentang harga komoditas berhasil diambil"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PriceGuide"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/commodities/market-prices": {
       "get": {
         "summary": "Harga Pasar Komoditas Terbaru (SP2KP Kemendag)",
@@ -949,6 +1074,125 @@
           "status_perubahan": {
             "type": "string",
             "example": "Turun"
+          }
+        }
+      },
+      "DashboardCommodityPrice": {
+        "type": "object",
+        "required": [
+          "commodity_id",
+          "commodity_name",
+          "category",
+          "unit",
+          "average_price",
+          "yesterday_price",
+          "delta_price",
+          "percentage_change",
+          "trend",
+          "trend_label",
+          "last_updated_at",
+          "source"
+        ],
+        "properties": {
+          "commodity_id": {
+            "type": "string",
+            "example": "gabah-kering-panen"
+          },
+          "commodity_name": {
+            "type": "string",
+            "example": "Gabah Kering Panen"
+          },
+          "category": {
+            "type": "string",
+            "example": "PADI / BERAS"
+          },
+          "unit": {
+            "type": "string",
+            "example": "kg"
+          },
+          "average_price": {
+            "type": "number",
+            "example": 7200
+          },
+          "yesterday_price": {
+            "type": "number",
+            "example": 7050
+          },
+          "delta_price": {
+            "type": "number",
+            "example": 150
+          },
+          "percentage_change": {
+            "type": "number",
+            "example": 2.13
+          },
+          "trend": {
+            "type": "string",
+            "enum": [
+              "UP",
+              "DOWN",
+              "STABLE"
+            ],
+            "example": "UP"
+          },
+          "trend_label": {
+            "type": "string",
+            "example": "+Rp 150"
+          },
+          "last_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-21T07:30:00Z"
+          },
+          "source": {
+            "type": "string",
+            "example": "tandur_real_market"
+          }
+        }
+      },
+      "PriceGuide": {
+        "type": "object",
+        "required": [
+          "commodity_name",
+          "benchmark_price",
+          "allowed_min_price",
+          "allowed_max_price",
+          "margin_percentage",
+          "unit",
+          "message"
+        ],
+        "properties": {
+          "commodity_name": {
+            "type": "string",
+            "example": "Gabah Kering Panen"
+          },
+          "benchmark_price": {
+            "type": "number",
+            "example": 7200
+          },
+          "allowed_min_price": {
+            "type": "number",
+            "example": 6120
+          },
+          "allowed_max_price": {
+            "type": "number",
+            "example": 8280
+          },
+          "margin_percentage": {
+            "type": "number",
+            "example": 15.0
+          },
+          "unit": {
+            "type": "string",
+            "example": "kg"
+          },
+          "source": {
+            "type": "string",
+            "example": "tandur_real_market"
+          },
+          "message": {
+            "type": "string",
+            "example": "Harga jual disarankan antara Rp 6.120 s/d Rp 8.280 per kg (toleransi \u00b115% dari harga pasar)"
           }
         }
       },

@@ -394,3 +394,161 @@ func TestCommodityService_GetMarketPrices_6HoursCache(t *testing.T) {
 		t.Errorf("Expected callCount to still be 1 (cache hit), but got %d", provider.callCount)
 	}
 }
+
+func TestCommodityService_GetRealtimeDashboardPrices(t *testing.T) {
+	repo := persistence.NewMemoryCommodityRepository()
+	service := application.NewCommodityService(repo)
+
+	// 1. Ambil harga dashboard realtime
+	prices, err := service.GetRealtimeDashboardPrices(context.Background(), domain.MarketPriceQuery{
+		KodeProvinsi: "35",
+		KodeKabKota:  "3519",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(prices) != 4 {
+		t.Fatalf("Expected 4 default dashboard commodities, got %d", len(prices))
+	}
+
+	// Cek komoditas Gabah Kering Panen
+	gkp := prices[0]
+	if gkp.CommodityName != "Gabah Kering Panen" {
+		t.Errorf("Expected Gabah Kering Panen, got %s", gkp.CommodityName)
+	}
+	if gkp.AveragePrice != 7200 || gkp.YesterdayPrice != 7050 {
+		t.Errorf("Expected 7200 and 7050, got %f and %f", gkp.AveragePrice, gkp.YesterdayPrice)
+	}
+	if gkp.Trend != domain.TrendUp || gkp.TrendLabel != "+Rp 150" {
+		t.Errorf("Expected TrendUp and '+Rp 150', got %s and %s", gkp.Trend, gkp.TrendLabel)
+	}
+
+	// Cek komoditas Gabah Kering Giling (Stabil)
+	gkg := prices[1]
+	if gkg.CommodityName != "Gabah Kering Giling" {
+		t.Errorf("Expected Gabah Kering Giling, got %s", gkg.CommodityName)
+	}
+	if gkg.Trend != domain.TrendStable || gkg.TrendLabel != "- Stabil" {
+		t.Errorf("Expected TrendStable and '- Stabil', got %s and %s", gkg.Trend, gkg.TrendLabel)
+	}
+
+	// 2. Simulasi pencatatan penjualan petani hari ini -> harga rata-rata riil Tandur terupdate
+	// Catat penjualan Gabah Kering Giling hari ini dengan harga 8.500 (naik dari 8.100)
+	service.RecordFarmerSale("Gabah Kering Giling", 8500, 1000)
+
+	// Pastikan cache 10 menit mengembalikan cached atau saat diquery ulang di siklus baru menghitung transaksi internal
+	// Clear cache untuk mensimulasikan siklus 10 menit berikutnya
+	serviceWithoutCache := application.NewCommodityService(repo)
+	serviceWithoutCache.RecordFarmerSale("Gabah Kering Giling", 8500, 1000)
+	now := time.Now()
+	yesterday := now.AddDate(0, 0, -1)
+	serviceWithoutCache.RecordFarmerSale("Gabah Kering Giling", 8100, 1000, yesterday)
+
+	newPrices, err := serviceWithoutCache.GetRealtimeDashboardPrices(context.Background(), domain.MarketPriceQuery{})
+	if err != nil {
+		t.Fatalf("Failed to get realtime prices after sale: %v", err)
+	}
+	newGKG := newPrices[1]
+	if newGKG.AveragePrice != 8500 {
+		t.Errorf("Expected updated average price 8500, got %f", newGKG.AveragePrice)
+	}
+	if newGKG.Trend != domain.TrendUp || newGKG.TrendLabel != "+Rp 400" {
+		t.Errorf("Expected TrendUp and '+Rp 400', got %s and %s", newGKG.Trend, newGKG.TrendLabel)
+	}
+}
+
+func TestCommodityService_ValidatePriceMargin(t *testing.T) {
+	service := application.NewCommodityService(nil)
+
+	benchmark := 7000.0 // toleransi ±15% -> 5.950 s/d 8.050
+
+	// Harga wajar
+	if err := service.ValidatePriceMargin(7000, benchmark); err != nil {
+		t.Errorf("Expected 7000 to be valid, got: %v", err)
+	}
+	if err := service.ValidatePriceMargin(7500, benchmark); err != nil {
+		t.Errorf("Expected 7500 to be valid, got: %v", err)
+	}
+	if err := service.ValidatePriceMargin(6500, benchmark); err != nil {
+		t.Errorf("Expected 6500 to be valid, got: %v", err)
+	}
+
+	// Terlalu murah (< 5.950)
+	if err := service.ValidatePriceMargin(5000, benchmark); err == nil {
+		t.Errorf("Expected error for 5000 (too low)")
+	}
+
+	// Terlalu mahal (> 8.050)
+	if err := service.ValidatePriceMargin(9000, benchmark); err == nil {
+		t.Errorf("Expected error for 9000 (too high)")
+	}
+}
+
+func TestHTTP_RealtimeDashboardAndPriceGuideEndpoints(t *testing.T) {
+	repo := persistence.NewMemoryCommodityRepository()
+	service := application.NewCommodityService(repo)
+
+	cfg := &config.Config{
+		AppEnv:    "test",
+		JWTSecret: "test-jwt-secret-very-long-string-32-chars",
+	}
+	authService := application.NewAuthService(nil, cfg.JWTSecret, 24*time.Hour)
+	handler := adapterHttp.NewHandler(cfg, nil, service, authService)
+
+	app := fiber.New()
+	adapterHttp.SetupRoutes(app, handler)
+
+	// 1. GET /api/v1/commodities/realtime-prices
+	reqRealtime := httptest.NewRequest(http.MethodGet, "/api/v1/commodities/realtime-prices?kode_provinsi=35&kode_kab_kota=3519", nil)
+	respRealtime, err := app.Test(reqRealtime)
+	if err != nil {
+		t.Fatalf("Realtime prices request failed: %v", err)
+	}
+	if respRealtime.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respRealtime.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", respRealtime.StatusCode, string(body))
+	}
+
+	var resRealtime struct {
+		Status  string                           `json:"status"`
+		Message string                           `json:"message"`
+		Data    []domain.DashboardCommodityPrice `json:"data"`
+		Meta    struct {
+			Trace struct {
+				RequestID string `json:"request_id"`
+			} `json:"trace"`
+		} `json:"meta"`
+	}
+	if err := json.NewDecoder(respRealtime.Body).Decode(&resRealtime); err != nil {
+		t.Fatalf("Failed to decode realtime response: %v", err)
+	}
+	if resRealtime.Status != "success" || len(resRealtime.Data) != 4 {
+		t.Errorf("Expected 4 commodities, got %d", len(resRealtime.Data))
+	}
+	if resRealtime.Meta.Trace.RequestID == "" {
+		t.Errorf("Expected non-empty trace request_id")
+	}
+
+	// 2. GET /api/v1/commodities/price-guide
+	reqGuide := httptest.NewRequest(http.MethodGet, "/api/v1/commodities/price-guide?commodity_name=Gabah%20Kering%20Panen", nil)
+	respGuide, err := app.Test(reqGuide)
+	if err != nil {
+		t.Fatalf("Price guide request failed: %v", err)
+	}
+	if respGuide.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGuide.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", respGuide.StatusCode, string(body))
+	}
+
+	var resGuide struct {
+		Status string            `json:"status"`
+		Data   domain.PriceGuide `json:"data"`
+	}
+	if err := json.NewDecoder(respGuide.Body).Decode(&resGuide); err != nil {
+		t.Fatalf("Failed to decode guide response: %v", err)
+	}
+	if resGuide.Status != "success" || resGuide.Data.AllowedMinPrice >= resGuide.Data.AllowedMaxPrice {
+		t.Errorf("Unexpected price guide response: %+v", resGuide)
+	}
+}

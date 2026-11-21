@@ -78,3 +78,26 @@ func (r *RedisClient) SetMarketPrices(ctx context.Context, key string, prices []
 	}
 	return r.client.Set(ctx, key, string(b), ttl).Err()
 }
+
+// GetRealtimePrices mengambil data pantauan harga pasar realtime (10 menit) dari cache Redis
+func (r *RedisClient) GetRealtimePrices(ctx context.Context, key string) ([]domain.DashboardCommodityPrice, bool) {
+	val, err := r.client.Get(ctx, key).Result()
+	if err != nil || val == "" {
+		return nil, false
+	}
+
+	var prices []domain.DashboardCommodityPrice
+	if err := json.Unmarshal([]byte(val), &prices); err != nil {
+		return nil, false
+	}
+	return prices, true
+}
+
+// SetRealtimePrices menyimpan data pantauan harga pasar realtime ke cache Redis dengan TTL 10 menit
+func (r *RedisClient) SetRealtimePrices(ctx context.Context, key string, prices []domain.DashboardCommodityPrice, ttl time.Duration) error {
+	b, err := json.Marshal(prices)
+	if err != nil {
+		return err
+	}
+	return r.client.Set(ctx, key, string(b), ttl).Err()
+}

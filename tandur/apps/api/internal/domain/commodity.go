@@ -75,3 +75,46 @@ type MarketPriceCache interface {
 	GetMarketPrices(ctx context.Context, key string) ([]SP2KPCommodityPrice, bool)
 	SetMarketPrices(ctx context.Context, key string, prices []SP2KPCommodityPrice, ttl time.Duration) error
 }
+
+// PriceTrend tren pergerakan harga komoditas (Naik, Turun, Stabil)
+type PriceTrend string
+
+const (
+	TrendUp     PriceTrend = "UP"
+	TrendDown   PriceTrend = "DOWN"
+	TrendStable PriceTrend = "STABLE"
+)
+
+// DashboardCommodityPrice mendefinisikan struktur kartu pantauan harga pasar riil di dashboard petani
+type DashboardCommodityPrice struct {
+	CommodityID      string     `json:"commodity_id"`
+	CommodityName    string     `json:"commodity_name"`
+	Category         string     `json:"category"`
+	Unit             string     `json:"unit"`
+	AveragePrice     float64    `json:"average_price"`
+	YesterdayPrice   float64    `json:"yesterday_price"`
+	DeltaPrice       float64    `json:"delta_price"`
+	PercentageChange float64    `json:"percentage_change"`
+	Trend            PriceTrend `json:"trend"`
+	TrendLabel       string     `json:"trend_label"`
+	LastUpdatedAt    string     `json:"last_updated_at"`
+	Source           string     `json:"source"`
+}
+
+// PriceGuide panduan kontrol batas margin harga saat petani menjual panen
+type PriceGuide struct {
+	CommodityName    string  `json:"commodity_name"`
+	BenchmarkPrice   float64 `json:"benchmark_price"`
+	AllowedMinPrice  float64 `json:"allowed_min_price"`
+	AllowedMaxPrice  float64 `json:"allowed_max_price"`
+	MarginPercentage float64 `json:"margin_percentage"`
+	Unit             string  `json:"unit"`
+	Source           string  `json:"source"`
+	Message          string  `json:"message"`
+}
+
+// RealtimeMarketPriceCache cache khusus pantauan harga realtime (10 menit)
+type RealtimeMarketPriceCache interface {
+	GetRealtimePrices(ctx context.Context, key string) ([]DashboardCommodityPrice, bool)
+	SetRealtimePrices(ctx context.Context, key string, prices []DashboardCommodityPrice, ttl time.Duration) error
+}

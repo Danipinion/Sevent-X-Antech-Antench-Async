@@ -103,3 +103,94 @@ SP2KPRegionPrice:
     status_perubahan:
       type: string
       example: "Turun"
+
+DashboardCommodityPrice:
+  type: object
+  required:
+    - commodity_id
+    - commodity_name
+    - category
+    - unit
+    - average_price
+    - yesterday_price
+    - delta_price
+    - percentage_change
+    - trend
+    - trend_label
+    - last_updated_at
+    - source
+  properties:
+    commodity_id:
+      type: string
+      example: "gabah-kering-panen"
+    commodity_name:
+      type: string
+      example: "Gabah Kering Panen"
+    category:
+      type: string
+      example: "PADI / BERAS"
+    unit:
+      type: string
+      example: "kg"
+    average_price:
+      type: number
+      example: 7200
+    yesterday_price:
+      type: number
+      example: 7050
+    delta_price:
+      type: number
+      example: 150
+    percentage_change:
+      type: number
+      example: 2.13
+    trend:
+      type: string
+      enum: [UP, DOWN, STABLE]
+      example: "UP"
+    trend_label:
+      type: string
+      example: "+Rp 150"
+    last_updated_at:
+      type: string
+      format: date-time
+      example: "2026-11-21T07:30:00Z"
+    source:
+      type: string
+      example: "tandur_real_market"
+
+PriceGuide:
+  type: object
+  required:
+    - commodity_name
+    - benchmark_price
+    - allowed_min_price
+    - allowed_max_price
+    - margin_percentage
+    - unit
+    - message
+  properties:
+    commodity_name:
+      type: string
+      example: "Gabah Kering Panen"
+    benchmark_price:
+      type: number
+      example: 7200
+    allowed_min_price:
+      type: number
+      example: 6120
+    allowed_max_price:
+      type: number
+      example: 8280
+    margin_percentage:
+      type: number
+      example: 15.0
+    unit:
+      type: string
+      example: "kg"
+    source:
+      type: string
+      example: "tandur_real_market"
+    message:
+      type: string
+      example: "Harga jual disarankan antara Rp 6.120 s/d Rp 8.280 per kg (toleransi ±15% dari harga pasar)"
