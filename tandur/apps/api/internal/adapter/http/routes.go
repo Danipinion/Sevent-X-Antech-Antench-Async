@@ -11,9 +11,10 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	// Middleware
 	app.Use(recover.New())
 	app.Use(logger.New())
+	app.Use(TraceMiddleware())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"http://localhost:5173", "http://localhost", "*"},
-		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization"},
+		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Correlation-ID, X-Trace-ID"},
 		AllowMethods: []string{"GET, POST, PUT, DELETE, OPTIONS"},
 	}))
 

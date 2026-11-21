@@ -3,8 +3,9 @@ package http
 import (
 	"strings"
 
-	"github.com/gofiber/fiber/v3"
 	"tandur/api/internal/application"
+
+	"github.com/gofiber/fiber/v3"
 )
 
 // AuthMiddleware memvalidasi Bearer JWT Token pada header Authorization
@@ -12,34 +13,22 @@ func AuthMiddleware(authService *application.AuthService) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Token otorisasi diperlukan (Bearer <token>)",
-			})
+			return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Token otorisasi diperlukan")
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Format token tidak valid. Gunakan format 'Bearer <token>'",
-			})
+			return RespondError(c, fiber.StatusUnauthorized, "INVALID_AUTH_HEADER", "Format token tidak valid. Gunakan format 'Bearer <token>'")
 		}
 
 		tokenString := strings.TrimSpace(parts[1])
 		if tokenString == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Token otorisasi tidak boleh kosong",
-			})
+			return RespondError(c, fiber.StatusUnauthorized, "TOKEN_REQUIRED", "Token otorisasi tidak boleh kosong")
 		}
 
 		claims, err := authService.ValidateToken(tokenString)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Token tidak valid atau telah kedaluwarsa",
-			})
+			return RespondError(c, fiber.StatusUnauthorized, "TOKEN_INVALID", "Token tidak valid atau telah kedaluwarsa")
 		}
 
 		c.Locals("user_id", claims.UserID)

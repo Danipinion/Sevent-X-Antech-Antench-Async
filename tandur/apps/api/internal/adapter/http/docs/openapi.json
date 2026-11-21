@@ -30,23 +30,35 @@
                   "properties": {
                     "status": {
                       "type": "string",
-                      "example": "ok"
+                      "example": "success"
                     },
-                    "app": {
+                    "message": {
                       "type": "string",
-                      "example": "TANDUR Backend API"
+                      "example": "Server beroperasi normal"
                     },
-                    "version": {
-                      "type": "string",
-                      "example": "v1.0.0"
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "service": {
+                          "type": "string",
+                          "example": "tandur-api"
+                        },
+                        "version": {
+                          "type": "string",
+                          "example": "v1.0.0"
+                        },
+                        "database": {
+                          "type": "string",
+                          "example": "connected"
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "example": "2026-11-21T09:30:00Z"
+                        }
+                      }
                     },
-                    "database": {
-                      "type": "string",
-                      "example": "connected"
-                    },
-                    "timestamp": {
-                      "type": "string",
-                      "example": "2026-11-15T15:30:00Z"
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
                     }
                   }
                 }
@@ -68,11 +80,22 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Daftar komoditas berhasil diambil"
+                    },
                     "data": {
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Commodity"
                       }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
                     }
                   }
                 }
@@ -103,8 +126,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Detail komoditas berhasil diambil"
+                    },
                     "data": {
                       "$ref": "#/components/schemas/Commodity"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
                     }
                   }
                 }
@@ -311,6 +345,9 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/User"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
                     }
                   }
                 }
@@ -343,7 +380,7 @@
     "/auth/login": {
       "post": {
         "summary": "Login Pengguna",
-        "description": "Autentikasi pengguna menggunakan Nomor Handphone atau NIK sebagai username dan password. Mengembalikan token sesi berbasis JWT (JSON Web Token) yang digunakan untuk otorisasi endpoint terlindungi. Anda dapat mengisi langsung melalui Form Input di bagian **Parameters** di bawah ini, atau mengirim JSON payload melalui **Request body**.",
+        "description": "Autentikasi pengguna menggunakan Nomor Handphone atau NIK sebagai username dan password. Mengembalikan token sesi berbasis JWT (JSON Web Token) yang digunakan untuk otorisasi endpoint terlindungi. Anda dapat mengisi langsung melalui Form Input di bagian **Parameters** di bawah ini, atau mengirim JSON payload melalui **Request body**.\n",
         "parameters": [
           {
             "name": "username",
@@ -376,14 +413,14 @@
               },
               "examples": {
                 "login_phone": {
-                  "summary": "📱 1. Login menggunakan Nomor Handphone",
+                  "summary": "\ud83d\udcf1 1. Login menggunakan Nomor Handphone",
                   "value": {
                     "username": "081399998888",
                     "password": "secretPassword123"
                   }
                 },
                 "login_nik": {
-                  "summary": "🪪 2. Login menggunakan NIK KTP",
+                  "summary": "\ud83e\udeaa 2. Login menggunakan NIK KTP",
                   "value": {
                     "username": "3201010101010099",
                     "password": "secretPassword123"
@@ -411,6 +448,9 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/LoginResponseData"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
                     }
                   }
                 }
@@ -477,6 +517,9 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/User"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
                     }
                   }
                 }
@@ -508,6 +551,14 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Masukkan token JWT yang diperoleh dari endpoint /auth/login"
+      }
+    },
     "schemas": {
       "Commodity": {
         "type": "object",
@@ -559,13 +610,144 @@
       "ErrorResponse": {
         "type": "object",
         "required": [
-          "error"
+          "status",
+          "error",
+          "meta"
         ],
         "properties": {
-          "error": {
+          "status": {
             "type": "string",
-            "description": "Pesan deskripsi kesalahan",
-            "example": "Komoditas tidak ditemukan"
+            "example": "error"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ErrorMeta"
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "INVALID_CREDENTIALS",
+            "description": "Kode error unik huruf kapital standar"
+          },
+          "message": {
+            "type": "string",
+            "example": "Nomor HP/NIK atau password salah",
+            "description": "Deskripsi pesan error"
+          }
+        }
+      },
+      "ErrorMeta": {
+        "type": "object",
+        "required": [
+          "trace"
+        ],
+        "properties": {
+          "trace": {
+            "$ref": "#/components/schemas/TraceMeta"
+          }
+        }
+      },
+      "Meta": {
+        "type": "object",
+        "required": [
+          "trace"
+        ],
+        "properties": {
+          "trace": {
+            "$ref": "#/components/schemas/TraceMeta"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          }
+        }
+      },
+      "TraceMeta": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "trace_id",
+          "timestamp"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "example": "req_8f92a3b4-1c2d-4e5f-9a8b-7c6d5e4f3a2b"
+          },
+          "correlation_id": {
+            "type": "string",
+            "example": "corr_11223344-5566-7788-99aa-bbccddeeff00"
+          },
+          "trace_id": {
+            "type": "string",
+            "example": "4bf92f3577b34da6a3ce929d0e0e4736"
+          },
+          "span_id": {
+            "type": "string",
+            "example": "00f067aa0ba902b7"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-21T02:31:00.123Z"
+          },
+          "api_version": {
+            "type": "string",
+            "example": "v1.0.0"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "example": 42
+          },
+          "service_node": {
+            "type": "string",
+            "example": "tandur-api-dev"
+          }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "required": [
+          "page",
+          "per_page",
+          "total_items",
+          "total_pages",
+          "has_next",
+          "has_prev"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "example": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "example": 20
+          },
+          "total_items": {
+            "type": "integer",
+            "example": 478
+          },
+          "total_pages": {
+            "type": "integer",
+            "example": 24
+          },
+          "has_next": {
+            "type": "boolean",
+            "example": true
+          },
+          "has_prev": {
+            "type": "boolean",
+            "example": false
           }
         }
       },
@@ -885,14 +1067,6 @@
             "$ref": "#/components/schemas/User"
           }
         }
-      }
-    },
-    "securitySchemes": {
-      "BearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "Masukkan token JWT yang diperoleh dari endpoint /auth/login"
       }
     }
   }

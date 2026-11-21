@@ -585,6 +585,34 @@ func TestHTTP_AuthEndpoints(t *testing.T) {
 		t.Fatalf("Expected status 201 Created, got %d. Body: %s", respReg.StatusCode, string(body))
 	}
 
+	var regRespBody struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Meta    struct {
+			Trace struct {
+				RequestID     string `json:"request_id"`
+				CorrelationID string `json:"correlation_id"`
+				TraceID       string `json:"trace_id"`
+				SpanID        string `json:"span_id"`
+				Timestamp     string `json:"timestamp"`
+				APIVersion    string `json:"api_version"`
+			} `json:"trace"`
+		} `json:"meta"`
+	}
+	_ = json.NewDecoder(respReg.Body).Decode(&regRespBody)
+	if regRespBody.Status != "success" {
+		t.Errorf("Expected status 'success', got %s", regRespBody.Status)
+	}
+	if len(regRespBody.Meta.Trace.RequestID) < 5 || regRespBody.Meta.Trace.RequestID[:4] != "req_" {
+		t.Errorf("Expected request_id prefix 'req_', got %s", regRespBody.Meta.Trace.RequestID)
+	}
+	if len(regRespBody.Meta.Trace.CorrelationID) < 6 || regRespBody.Meta.Trace.CorrelationID[:5] != "corr_" {
+		t.Errorf("Expected correlation_id prefix 'corr_', got %s", regRespBody.Meta.Trace.CorrelationID)
+	}
+	if regRespBody.Meta.Trace.TraceID == "" {
+		t.Errorf("Expected non-empty trace_id")
+	}
+
 	// 2. Test POST /api/v1/auth/login with Phone
 	loginPayload := map[string]string{
 		"username": "081277778888",
@@ -610,12 +638,20 @@ func TestHTTP_AuthEndpoints(t *testing.T) {
 			Token     string `json:"token"`
 			TokenType string `json:"token_type"`
 		} `json:"data"`
+		Meta struct {
+			Trace struct {
+				RequestID string `json:"request_id"`
+			} `json:"trace"`
+		} `json:"meta"`
 	}
 	_ = json.NewDecoder(respLogin.Body).Decode(&loginRespBody)
 
 	token := loginRespBody.Data.Token
 	if token == "" {
 		t.Fatalf("Expected token to be returned from login")
+	}
+	if len(loginRespBody.Meta.Trace.RequestID) < 5 || loginRespBody.Meta.Trace.RequestID[:4] != "req_" {
+		t.Errorf("Expected login meta trace request_id prefix 'req_', got %s", loginRespBody.Meta.Trace.RequestID)
 	}
 
 	// 3. Test POST /api/v1/auth/login with NIK
@@ -648,7 +684,7 @@ func TestHTTP_AuthEndpoints(t *testing.T) {
 		t.Fatalf("Expected status 200 OK, got %d. Body: %s", respMe.StatusCode, string(body))
 	}
 
-	// 5. Test GET /api/v1/auth/me without token -> Unauthorized 401
+	// 5. Test GET /api/v1/auth/me without token -> Unauthorized 401 with standard error format
 	reqMeNoAuth := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	respMeNoAuth, err := app.Test(reqMeNoAuth)
 	if err != nil {
@@ -656,5 +692,54 @@ func TestHTTP_AuthEndpoints(t *testing.T) {
 	}
 	if respMeNoAuth.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("Expected status 401 Unauthorized, got %d", respMeNoAuth.StatusCode)
+	}
+
+	var errRespBody struct {
+		Status string `json:"status"`
+		Error  struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Meta struct {
+			Trace struct {
+				RequestID string `json:"request_id"`
+				TraceID   string `json:"trace_id"`
+				Timestamp string `json:"timestamp"`
+			} `json:"trace"`
+		} `json:"meta"`
+	}
+	_ = json.NewDecoder(respMeNoAuth.Body).Decode(&errRespBody)
+
+	if errRespBody.Status != "error" {
+		t.Errorf("Expected error status 'error', got %s", errRespBody.Status)
+	}
+	if errRespBody.Error.Code != "UNAUTHORIZED" {
+		t.Errorf("Expected error code 'UNAUTHORIZED', got %s", errRespBody.Error.Code)
+	}
+	if errRespBody.Meta.Trace.RequestID == "" {
+		t.Errorf("Expected non-empty error meta trace request_id")
+	}
+
+	// 6. Test duplicate registration error (409 Conflict)
+	reqDup := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(regBody))
+	reqDup.Header.Set("Content-Type", "application/json")
+	respDup, err := app.Test(reqDup)
+	if err != nil {
+		t.Fatalf("Duplicate register request failed: %v", err)
+	}
+	if respDup.StatusCode != http.StatusConflict {
+		t.Fatalf("Expected status 409 Conflict for duplicate phone, got %d", respDup.StatusCode)
+	}
+
+	var dupErrBody struct {
+		Status string `json:"status"`
+		Error  struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(respDup.Body).Decode(&dupErrBody)
+	if dupErrBody.Error.Code != "PHONE_ALREADY_EXISTS" {
+		t.Errorf("Expected error code 'PHONE_ALREADY_EXISTS', got %s", dupErrBody.Error.Code)
 	}
 }

@@ -26,19 +26,27 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: ok
-                  app:
+                    example: success
+                  message:
                     type: string
-                    example: TANDUR Backend API
-                  version:
-                    type: string
-                    example: v1.0.0
-                  database:
-                    type: string
-                    example: connected
-                  timestamp:
-                    type: string
-                    example: "2026-11-15T15:30:00Z"
+                    example: Server beroperasi normal
+                  data:
+                    type: object
+                    properties:
+                      service:
+                        type: string
+                        example: tandur-api
+                      version:
+                        type: string
+                        example: v1.0.0
+                      database:
+                        type: string
+                        example: connected
+                      timestamp:
+                        type: string
+                        example: "2026-11-21T09:30:00Z"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
   /commodities:
     get:
       summary: Daftar Seluruh Komoditas
@@ -51,10 +59,18 @@ paths:
               schema:
                 type: object
                 properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Daftar komoditas berhasil diambil
                   data:
                     type: array
                     items:
                       $ref: "./schemas/commodity.yaml#/Commodity"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
   /commodities/{id}:
     get:
       summary: Detail Komoditas
@@ -72,8 +88,16 @@ paths:
               schema:
                 type: object
                 properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Detail komoditas berhasil diambil
                   data:
                     $ref: "./schemas/commodity.yaml#/Commodity"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
         "404":
           description: Komoditas tidak ditemukan
           content:
@@ -223,6 +247,8 @@ paths:
                     example: Registrasi akun berhasil
                   data:
                     $ref: "./schemas/user.yaml#/User"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
         "400":
           description: Data masukan tidak valid
           content:
@@ -292,6 +318,8 @@ paths:
                     example: Login berhasil
                   data:
                     $ref: "./schemas/user.yaml#/LoginResponseData"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
         "400":
           description: Username atau password tidak diisi
           content:
@@ -332,6 +360,8 @@ paths:
                     example: Profil pengguna berhasil diambil
                   data:
                     $ref: "./schemas/user.yaml#/User"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
         "401":
           description: Token otorisasi tidak valid atau telah kedaluwarsa
           content:

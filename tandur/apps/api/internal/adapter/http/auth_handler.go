@@ -4,9 +4,10 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/gofiber/fiber/v3"
 	"tandur/api/internal/application"
 	"tandur/api/internal/domain"
+
+	"github.com/gofiber/fiber/v3"
 )
 
 type AuthHandler struct {
@@ -77,38 +78,36 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 	user, err := h.authService.Register(c.Context(), input)
 	if err != nil {
 		switch {
-		case errors.Is(err, domain.ErrNameRequired),
-			errors.Is(err, domain.ErrInvalidPhone),
-			errors.Is(err, domain.ErrInvalidNIK),
-			errors.Is(err, domain.ErrInvalidRole),
-			errors.Is(err, domain.ErrPasswordTooShort),
-			errors.Is(err, domain.ErrInvalidCoordinate):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
+		case errors.Is(err, domain.ErrNameRequired):
+			return RespondError(c, fiber.StatusBadRequest, "NAME_REQUIRED", err.Error())
 
-		case errors.Is(err, domain.ErrPhoneAlreadyExists),
-			errors.Is(err, domain.ErrNIKAlreadyExists):
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
+		case errors.Is(err, domain.ErrInvalidPhone):
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_PHONE_NUMBER", err.Error())
+
+		case errors.Is(err, domain.ErrInvalidNIK):
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_NIK", err.Error())
+
+		case errors.Is(err, domain.ErrInvalidRole):
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_ROLE", err.Error())
+
+		case errors.Is(err, domain.ErrPasswordTooShort):
+			return RespondError(c, fiber.StatusBadRequest, "PASSWORD_TOO_SHORT", err.Error())
+
+		case errors.Is(err, domain.ErrInvalidCoordinate):
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_COORDINATE", err.Error())
+
+		case errors.Is(err, domain.ErrPhoneAlreadyExists):
+			return RespondError(c, fiber.StatusConflict, "PHONE_ALREADY_EXISTS", err.Error())
+
+		case errors.Is(err, domain.ErrNIKAlreadyExists):
+			return RespondError(c, fiber.StatusConflict, "NIK_ALREADY_EXISTS", err.Error())
 
 		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Terjadi kesalahan internal pada server",
-				"error":   err.Error(),
-			})
+			return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Terjadi kesalahan internal pada server")
 		}
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Registrasi akun berhasil",
-		"data":    user,
-	})
+	return RespondSuccess(c, fiber.StatusCreated, "Registrasi akun berhasil", user)
 }
 
 // Login menangani autentikasi pengguna menggunakan Nomor HP atau NIK dan password
@@ -118,14 +117,14 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	_ = c.Bind().Body(&input)
 
 	// 2. Ambil dari Query Parameters jika diisi lewat form parameter Swagger UI
-	if input.Username == "" {
-		input.Username = c.Query("username")
-	}
 	if input.Username == "" && c.Query("phone") != "" {
 		input.Username = c.Query("phone")
 	}
 	if input.Username == "" && c.Query("nik") != "" {
 		input.Username = c.Query("nik")
+	}
+	if input.Username == "" && c.Query("username") != "" {
+		input.Username = c.Query("username")
 	}
 	if input.Password == "" {
 		input.Password = c.Query("password")
@@ -134,62 +133,37 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	result, err := h.authService.Login(c.Context(), input)
 	if err != nil {
 		switch {
-		case errors.Is(err, domain.ErrUsernameRequired),
-			errors.Is(err, domain.ErrPasswordRequired):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
+		case errors.Is(err, domain.ErrUsernameRequired):
+			return RespondError(c, fiber.StatusBadRequest, "USERNAME_REQUIRED", err.Error())
+
+		case errors.Is(err, domain.ErrPasswordRequired):
+			return RespondError(c, fiber.StatusBadRequest, "PASSWORD_REQUIRED", err.Error())
 
 		case errors.Is(err, domain.ErrInvalidCredentials):
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
+			return RespondError(c, fiber.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error())
 
 		case errors.Is(err, domain.ErrAccountInactive):
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
+			return RespondError(c, fiber.StatusForbidden, "ACCOUNT_INACTIVE", err.Error())
 
 		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Terjadi kesalahan internal pada server",
-				"error":   err.Error(),
-			})
+			return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Terjadi kesalahan internal pada server")
 		}
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Login berhasil",
-		"data":    result,
-	})
+	return RespondSuccess(c, fiber.StatusOK, "Login berhasil", result)
 }
 
 // Me mengembalikan profil pengguna yang sedang login berdasarkan token JWT
 func (h *AuthHandler) Me(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Pengguna tidak terautentikasi",
-		})
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Pengguna tidak terautentikasi")
 	}
 
 	user, err := h.authService.GetProfile(c.Context(), userID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Pengguna tidak ditemukan",
-		})
+		return RespondError(c, fiber.StatusNotFound, "USER_NOT_FOUND", "Pengguna tidak ditemukan")
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Profil pengguna berhasil diambil",
-		"data":    user,
-	})
+	return RespondSuccess(c, fiber.StatusOK, "Profil pengguna berhasil diambil", user)
 }
