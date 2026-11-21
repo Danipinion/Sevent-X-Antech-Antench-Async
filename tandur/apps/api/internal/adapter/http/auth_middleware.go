@@ -32,6 +32,7 @@ func AuthMiddleware(authService *application.AuthService) fiber.Handler {
 		}
 
 		c.Locals("user_id", claims.UserID)
+		c.Locals("token", tokenString)
 		c.Locals("claims", claims)
 		return c.Next()
 	}

@@ -51,6 +51,10 @@ func (h *Handler) Me(c fiber.Ctx) error {
 	return h.authHandler.Me(c)
 }
 
+func (h *Handler) Logout(c fiber.Ctx) error {
+	return h.authHandler.Logout(c)
+}
+
 func (h *Handler) AuthMiddleware() fiber.Handler {
 	return AuthMiddleware(h.authService)
 }

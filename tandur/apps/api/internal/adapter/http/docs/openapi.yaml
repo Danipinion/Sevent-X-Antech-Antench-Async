@@ -385,6 +385,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /auth/logout:
+    post:
+      summary: Logout Pengguna
+      description: 'Mengakhiri sesi pengguna aktif dan memasukkan token JWT ke dalam
+        daftar hitam (blacklist) sehingga token tersebut tidak dapat digunakan lagi
+        untuk otorisasi.
+
+        '
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Logout berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Logout berhasil
+                  data:
+                    nullable: true
+                    example: null
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Token otorisasi tidak valid, telah kedaluwarsa, atau sudah
+            dibatalkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     BearerAuth:

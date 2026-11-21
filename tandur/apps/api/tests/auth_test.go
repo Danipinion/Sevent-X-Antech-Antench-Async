@@ -742,4 +742,105 @@ func TestHTTP_AuthEndpoints(t *testing.T) {
 	if dupErrBody.Error.Code != "PHONE_ALREADY_EXISTS" {
 		t.Errorf("Expected error code 'PHONE_ALREADY_EXISTS', got %s", dupErrBody.Error.Code)
 	}
+
+	// 7. Test POST /api/v1/auth/logout with valid token
+	reqLogout := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	reqLogout.Header.Set("Authorization", "Bearer "+token)
+
+	respLogout, err := app.Test(reqLogout)
+	if err != nil {
+		t.Fatalf("Logout request failed: %v", err)
+	}
+	if respLogout.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respLogout.Body)
+		t.Fatalf("Expected status 200 OK for logout, got %d. Body: %s", respLogout.StatusCode, string(body))
+	}
+
+	var logoutRespBody struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Meta    struct {
+			Trace struct {
+				RequestID string `json:"request_id"`
+			} `json:"trace"`
+		} `json:"meta"`
+	}
+	_ = json.NewDecoder(respLogout.Body).Decode(&logoutRespBody)
+	if logoutRespBody.Status != "success" {
+		t.Errorf("Expected status 'success' for logout, got %s", logoutRespBody.Status)
+	}
+	if logoutRespBody.Meta.Trace.RequestID == "" {
+		t.Errorf("Expected non-empty trace request_id in logout response")
+	}
+
+	// 8. Test GET /api/v1/auth/me after logout -> Must be 401 Unauthorized
+	reqMeAfterLogout := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	reqMeAfterLogout.Header.Set("Authorization", "Bearer "+token)
+
+	respMeAfterLogout, err := app.Test(reqMeAfterLogout)
+	if err != nil {
+		t.Fatalf("Me after logout request failed: %v", err)
+	}
+	if respMeAfterLogout.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected status 401 Unauthorized after logout, got %d", respMeAfterLogout.StatusCode)
+	}
+
+	// 9. Test POST /api/v1/auth/logout without token -> 401 Unauthorized
+	reqLogoutNoAuth := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	respLogoutNoAuth, err := app.Test(reqLogoutNoAuth)
+	if err != nil {
+		t.Fatalf("Logout no auth request failed: %v", err)
+	}
+	if respLogoutNoAuth.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected status 401 Unauthorized for logout without token, got %d", respLogoutNoAuth.StatusCode)
+	}
+}
+
+func TestAuthService_Logout_Lifecycle(t *testing.T) {
+	repo := NewMockUserRepository()
+	service := application.NewAuthService(repo, "secret-jwt-key-for-logout-test", 1*time.Hour)
+
+	user, err := service.Register(context.Background(), application.RegisterInput{
+		Name:     "Budi Logout",
+		Phone:    "081999888777",
+		Password: "password123",
+		Role:     "farmer",
+	})
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if user == nil {
+		t.Fatalf("User should not be nil")
+	}
+
+	loginRes, err := service.Login(context.Background(), application.LoginInput{
+		Username: "081999888777",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+
+	claims, err := service.ValidateToken(loginRes.Token)
+	if err != nil || claims == nil {
+		t.Fatalf("Expected token to be valid initially: %v", err)
+	}
+
+	// Logout
+	err = service.Logout(context.Background(), loginRes.Token)
+	if err != nil {
+		t.Fatalf("Logout failed: %v", err)
+	}
+
+	// Validate after logout -> should fail with ErrUnauthorized
+	_, err = service.ValidateToken(loginRes.Token)
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Errorf("Expected ErrUnauthorized after logout, got: %v", err)
+	}
+
+	// Calling Logout again with same token -> should fail with ErrUnauthorized
+	err = service.Logout(context.Background(), loginRes.Token)
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Errorf("Expected ErrUnauthorized on subsequent logout, got: %v", err)
+	}
 }

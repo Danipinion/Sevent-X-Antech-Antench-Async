@@ -43,5 +43,6 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	auth := v1.Group("/auth")
 	auth.Post("/register", handler.Register)
 	auth.Post("/login", handler.Login)
+	auth.Post("/logout", handler.Logout, handler.AuthMiddleware())
 	auth.Get("/me", handler.Me, handler.AuthMiddleware())
 }

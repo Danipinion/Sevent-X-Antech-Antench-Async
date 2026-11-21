@@ -9,8 +9,40 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"sync"
 	"tandur/api/internal/domain"
 )
+
+type memoryTokenBlacklist struct {
+	mu      sync.RWMutex
+	revoked map[string]time.Time
+}
+
+func newMemoryTokenBlacklist() *memoryTokenBlacklist {
+	return &memoryTokenBlacklist{
+		revoked: make(map[string]time.Time),
+	}
+}
+
+func (m *memoryTokenBlacklist) Blacklist(ctx context.Context, token string, expiresAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.revoked[token] = expiresAt
+	return nil
+}
+
+func (m *memoryTokenBlacklist) IsBlacklisted(ctx context.Context, token string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	exp, exists := m.revoked[token]
+	if !exists {
+		return false, nil
+	}
+	if time.Now().After(exp) {
+		return false, nil
+	}
+	return true, nil
+}
 
 type RegisterLocationInput struct {
 	Label     string  `json:"label"`
@@ -69,11 +101,12 @@ type JWTClaims struct {
 
 type AuthService struct {
 	userRepo    domain.UserRepository
+	blacklist   domain.TokenBlacklist
 	jwtSecret   string
 	jwtDuration time.Duration
 }
 
-func NewAuthService(userRepo domain.UserRepository, jwtSecret string, jwtDuration time.Duration) *AuthService {
+func NewAuthService(userRepo domain.UserRepository, jwtSecret string, jwtDuration time.Duration, blacklist ...domain.TokenBlacklist) *AuthService {
 	if jwtSecret == "" {
 		jwtSecret = "tandur-secret-key-development-32chars-min!"
 	}
@@ -81,8 +114,16 @@ func NewAuthService(userRepo domain.UserRepository, jwtSecret string, jwtDuratio
 		jwtDuration = 72 * time.Hour
 	}
 
+	var bl domain.TokenBlacklist
+	if len(blacklist) > 0 && blacklist[0] != nil {
+		bl = blacklist[0]
+	} else {
+		bl = newMemoryTokenBlacklist()
+	}
+
 	return &AuthService{
 		userRepo:    userRepo,
+		blacklist:   bl,
 		jwtSecret:   jwtSecret,
 		jwtDuration: jwtDuration,
 	}
@@ -308,10 +349,40 @@ func (s *AuthService) ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, domain.ErrUnauthorized
 	}
 
-	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
-		return claims, nil
+	claims, ok := token.Claims.(*JWTClaims)
+	if !ok || !token.Valid {
+		return nil, domain.ErrUnauthorized
 	}
-	return nil, domain.ErrUnauthorized
+
+	if s.blacklist != nil {
+		blacklisted, err := s.blacklist.IsBlacklisted(context.Background(), tokenString)
+		if err == nil && blacklisted {
+			return nil, domain.ErrUnauthorized
+		}
+	}
+
+	return claims, nil
+}
+
+// Logout membatalkan sesi aktif dan memasukkan token JWT ke dalam daftar blacklist
+func (s *AuthService) Logout(ctx context.Context, tokenString string) error {
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil {
+		return domain.ErrUnauthorized
+	}
+
+	var expiresAt time.Time
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	} else {
+		expiresAt = time.Now().Add(s.jwtDuration)
+	}
+
+	if s.blacklist != nil {
+		return s.blacklist.Blacklist(ctx, tokenString, expiresAt)
+	}
+
+	return nil
 }
 
 // GetProfile mengambil profil pengguna berdasarkan User ID

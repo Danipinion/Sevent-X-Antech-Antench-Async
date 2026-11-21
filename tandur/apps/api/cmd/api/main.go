@@ -11,6 +11,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	adapterHttp "tandur/api/internal/adapter/http"
 	"tandur/api/internal/application"
+	"tandur/api/internal/domain"
+	"tandur/api/internal/infrastructure/cache"
 	"tandur/api/internal/infrastructure/config"
 	"tandur/api/internal/infrastructure/logger"
 	"tandur/api/internal/infrastructure/persistence"
@@ -35,16 +37,25 @@ func main() {
 		defer dbPool.Close()
 	}
 
-	// 4. Initialize Repositories (Persistence)
+	// 4. Initialize Repositories (Persistence) & Cache
 	var userRepo *persistence.PostgresUserRepository
 	if dbPool != nil {
 		userRepo = persistence.NewPostgresUserRepository(dbPool)
 	}
 	commodityRepo := persistence.NewMemoryCommodityRepository()
 
+	redisClient := cache.NewRedisClient(cfg)
+	var tokenBlacklist domain.TokenBlacklist
+	if err := redisClient.Ping(ctx); err == nil {
+		logger.Log.Info("Terhubung ke Redis cache untuk token blacklist")
+		tokenBlacklist = redisClient
+	} else {
+		logger.Log.Warn("Redis tidak terhubung, menggunakan in-memory token blacklist fallback", "error", err)
+	}
+
 	// 5. Initialize Application Services (Use Cases)
 	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
-	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration)
+	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
 	commodityService := application.NewCommodityService(commodityRepo)
 
 	// 6. Initialize HTTP Handlers & Adapter

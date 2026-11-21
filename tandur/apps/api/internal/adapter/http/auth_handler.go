@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"tandur/api/internal/application"
 	"tandur/api/internal/domain"
@@ -166,4 +167,30 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 	}
 
 	return RespondSuccess(c, fiber.StatusOK, "Profil pengguna berhasil diambil", user)
+}
+
+// Logout membatalkan sesi token JWT pengguna yang sedang aktif
+func (h *AuthHandler) Logout(c fiber.Ctx) error {
+	tokenString, ok := c.Locals("token").(string)
+	if !ok || tokenString == "" {
+		authHeader := c.Get("Authorization")
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			tokenString = strings.TrimSpace(parts[1])
+		}
+	}
+
+	if tokenString == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Token otorisasi diperlukan")
+	}
+
+	err := h.authService.Logout(c.Context(), tokenString)
+	if err != nil {
+		if errors.Is(err, domain.ErrUnauthorized) {
+			return RespondError(c, fiber.StatusUnauthorized, "TOKEN_INVALID", "Token tidak valid atau sudah dibatalkan")
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "LOGOUT_FAILED", "Gagal memproses logout")
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Logout berhasil", nil)
 }
