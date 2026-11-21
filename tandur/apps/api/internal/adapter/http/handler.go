@@ -1,12 +1,16 @@
 package http
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"tandur/api/internal/application"
 	"tandur/api/internal/domain"
@@ -279,8 +283,10 @@ func (h *Handler) CreateFarmerListing(c fiber.Ctx) error {
 		if errors.Is(err, domain.ErrFarmerNotVerified) {
 			return RespondError(c, fiber.StatusForbidden, "FARMER_NOT_VERIFIED", err.Error())
 		}
-		if errors.Is(err, domain.ErrInvalidInput) {
-			return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", "Semua data panen wajib diisi dengan benar")
+		if errors.Is(err, domain.ErrMinPhotoRequired) || errors.Is(err, domain.ErrMaxMediaExceeded) ||
+			errors.Is(err, domain.ErrMaxVideoExceeded) || errors.Is(err, domain.ErrMinOrderQuantity) ||
+			errors.Is(err, domain.ErrInvalidInput) {
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", err.Error())
 		}
 		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
 	}
@@ -298,10 +304,182 @@ func (h *Handler) ListFarmerListings(c fiber.Ctx) error {
 		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Farmer service tidak tersedia")
 	}
 
-	listings, err := h.farmerService.ListFarmerListings(c.Context(), userID)
+	page := 1
+	if p := c.Query("page"); p != "" {
+		if val, err := strconv.Atoi(p); err == nil && val > 0 {
+			page = val
+		}
+	}
+
+	limit := 10
+	if l := c.Query("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			limit = val
+		}
+	}
+
+	status := c.Query("status", "all")
+	commodityID := c.Query("commodity_id")
+
+	filter := domain.ListingFilter{
+		FarmerID:    userID,
+		Status:      status,
+		CommodityID: commodityID,
+		Page:        page,
+		Limit:       limit,
+	}
+
+	paginated, err := h.farmerService.ListFarmerListings(c.Context(), filter)
 	if err != nil {
 		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
 	}
 
-	return RespondSuccess(c, fiber.StatusOK, "Daftar hasil panen petani", listings)
+	paginationMeta := &PaginationMeta{
+		Page:       paginated.Page,
+		PerPage:    paginated.Limit,
+		TotalItems: paginated.TotalItems,
+		TotalPages: paginated.TotalPages,
+		HasNext:    paginated.Page < paginated.TotalPages,
+		HasPrev:    paginated.Page > 1,
+	}
+
+	return RespondSuccessWithPagination(c, fiber.StatusOK, "Daftar hasil panen petani", paginated.Items, paginationMeta)
+}
+
+func (h *Handler) GetFarmerListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Token autentikasi tidak valid atau sesi telah berakhir")
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_ID", "ID panen tidak boleh kosong")
+	}
+
+	listing, err := h.farmerService.GetFarmerListingByID(c.Context(), id, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrListingNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Data penjualan panen tidak ditemukan")
+		}
+		if errors.Is(err, domain.ErrUnauthorizedListingAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Detail hasil panen berhasil diambil", listing)
+}
+
+func (h *Handler) UpdateFarmerListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Token autentikasi tidak valid atau sesi telah berakhir")
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_ID", "ID panen tidak boleh kosong")
+	}
+
+	var input domain.UpdateListingInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", "Format payload tidak valid")
+	}
+
+	listing, err := h.farmerService.UpdateHarvestListing(c.Context(), userID, id, input)
+	if err != nil {
+		if errors.Is(err, domain.ErrListingNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Data penjualan panen tidak ditemukan")
+		}
+		if errors.Is(err, domain.ErrListingNotEditable) {
+			return RespondError(c, fiber.StatusConflict, "LISTING_LOCKED", err.Error())
+		}
+		if errors.Is(err, domain.ErrMinPhotoRequired) || errors.Is(err, domain.ErrMaxMediaExceeded) ||
+			errors.Is(err, domain.ErrMaxVideoExceeded) || errors.Is(err, domain.ErrMinOrderQuantity) {
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Data penjualan panen berhasil diperbarui", listing)
+}
+
+func (h *Handler) CancelFarmerListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Token autentikasi tidak valid atau sesi telah berakhir")
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_ID", "ID panen tidak boleh kosong")
+	}
+
+	err := h.farmerService.CancelHarvestListing(c.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, domain.ErrListingNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Data penjualan panen tidak ditemukan")
+		}
+		if errors.Is(err, domain.ErrListingNotEditable) {
+			return RespondError(c, fiber.StatusConflict, "LISTING_LOCKED", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Penjualan panen berhasil dibatalkan", nil)
+}
+
+func (h *Handler) UploadFarmerListingMedia(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Token autentikasi tidak valid atau sesi telah berakhir")
+	}
+
+	file, err := c.FormFile("media")
+	if err != nil {
+		file, err = c.FormFile("file")
+	}
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_FILE", "Berkas foto atau video wajib disertakan dalam form-data (field 'media' atau 'file')")
+	}
+
+	f, err := file.Open()
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_FILE", "Gagal membuka berkas yang diunggah")
+	}
+	defer f.Close()
+
+	buf, err := io.ReadAll(f)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Gagal membaca isi berkas")
+	}
+
+	// Validasi berkas secara mendalam & ketat
+	validated, err := storage.ValidateStrictMedia(file.Filename, buf)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_MEDIA", err.Error())
+	}
+
+	// Buat nama objek acak yang aman di S3 Garage
+	key := fmt.Sprintf("listings/%s/%s%s", userID, uuid.New().String(), validated.Extension)
+
+	var publicURL string
+	if h.storage != nil {
+		url, err := h.storage.Upload(c.Context(), key, bytes.NewReader(buf), validated.MimeType)
+		if err != nil {
+			return RespondError(c, fiber.StatusInternalServerError, "STORAGE_ERROR", "Gagal mengunggah berkas ke Garage S3: "+err.Error())
+		}
+		publicURL = url
+	} else {
+		publicURL = fmt.Sprintf("http://localhost:3900/tandur/%s", key)
+	}
+
+	return RespondSuccess(c, fiber.StatusCreated, "Berkas media panen berhasil diunggah dan diverifikasi", fiber.Map{
+		"url":        publicURL,
+		"key":        key,
+		"media_type": validated.MediaType,
+		"mime_type":  validated.MimeType,
+		"size_bytes": validated.SizeBytes,
+	})
 }

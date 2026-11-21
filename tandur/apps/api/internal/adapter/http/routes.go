@@ -56,4 +56,8 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	farmer.Post("/verification", handler.SubmitFarmerVerification)
 	farmer.Post("/listings", handler.CreateFarmerListing)
 	farmer.Get("/listings", handler.ListFarmerListings)
+	farmer.Get("/listings/:id", handler.GetFarmerListing)
+	farmer.Put("/listings/:id", handler.UpdateFarmerListing)
+	farmer.Delete("/listings/:id", handler.CancelFarmerListing)
+	farmer.Post("/listings/upload-media", handler.UploadFarmerListingMedia)
 }

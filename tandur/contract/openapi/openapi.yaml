@@ -753,10 +753,40 @@ paths:
     get:
       tags:
         - "Penjualan Panen Petani"
-      summary: Daftar Hasil Panen Petani
-      description: Mengambil seluruh daftar hasil panen yang didaftarkan oleh petani yang sedang login.
+      summary: Daftar Hasil Panen Petani (Berpaginasi)
+      description: Mengambil seluruh riwayat dan daftar hasil panen yang didaftarkan oleh petani dengan dukungan pagination dan filter status.
       security:
         - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Nomor halaman (default 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            example: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman (default 10, maksimal 100)
+          required: false
+          schema:
+            type: integer
+            default: 10
+            example: 10
+        - name: status
+          in: query
+          description: Filter status listing (all, draft, published, reserved, completed, cancelled)
+          required: false
+          schema:
+            type: string
+            example: "published"
+        - name: commodity_id
+          in: query
+          description: Filter berdasarkan UUID komoditas
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Daftar panen berhasil diambil
@@ -778,7 +808,10 @@ paths:
       tags:
         - "Penjualan Panen Petani"
       summary: Jual Hasil Panen (Daftarkan Listing Panen)
-      description: Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus terverifikasi (e-KTP diverifikasi) untuk dapat menggunakan fitur ini.
+      description: >
+        Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus terverifikasi (e-KTP diverifikasi).
+        Wajib menyertakan minimal 1 foto sampel panen, maksimal 1 video opsional (total maksimal 5 berkas media),
+        dan bobot panen minimal 500 kg.
       security:
         - BearerAuth: []
       requestBody:
@@ -802,8 +835,171 @@ paths:
                     $ref: "./schemas/user.yaml#/FarmerListing"
                   meta:
                     $ref: "./schemas/error.yaml#/Meta"
+        "400":
+          description: Validasi gagal (bobot kurang dari 500 kg atau aturan komposisi media tidak dipenuhi)
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
         "403":
           description: Petani belum terverifikasi (FARMER_NOT_VERIFIED)
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+
+  /farmer/listings/{id}:
+    get:
+      tags:
+        - "Penjualan Panen Petani"
+      summary: Detail Listing Panen
+      description: Mengambil data rinci satu listing penjualan panen milik petani.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID unik listing panen
+          required: true
+          schema:
+            type: string
+            example: "9e81b672-0e24-419b-a320-b6f790c68123"
+      responses:
+        "200":
+          description: Detail listing panen ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "404":
+          description: Listing panen tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+    put:
+      tags:
+        - "Penjualan Panen Petani"
+      summary: Update Data Jual Panen
+      description: Memperbarui informasi listing panen (harga, bobot, tanggal siap muat, foto sampel). Hanya dapat dilakukan saat status masih draft atau published.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID unik listing panen
+          required: true
+          schema:
+            type: string
+            example: "9e81b672-0e24-419b-a320-b6f790c68123"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/UpdateListingInput"
+      responses:
+        "200":
+          description: Data panen berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "409":
+          description: Listing sudah terkunci / disepakati dengan tengkulak
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+    delete:
+      tags:
+        - "Penjualan Panen Petani"
+      summary: Batalkan / Hapus Listing Panen (Soft Delete)
+      description: Membatalkan listing panen yang belum bertransaksi. Status listing diubah menjadi 'cancelled' dan dicatat waktu penghapusannya.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID unik listing panen
+          required: true
+          schema:
+            type: string
+            example: "9e81b672-0e24-419b-a320-b6f790c68123"
+      responses:
+        "200":
+          description: Listing panen berhasil dibatalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    nullable: true
+                    example: null
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /farmer/listings/upload-media:
+    post:
+      tags:
+        - "Penjualan Panen Petani"
+      summary: Upload Berkas Media Sampel Panen (Foto / Video)
+      description: >
+        Mengunggah berkas media sampel panen ke Garage Object Storage (S3 publik).
+        Divalidasi ketat dengan inspeksi magic bytes biner, anti-polyglot, dan pencegahan double extension.
+        Foto maksimal 5 MB (JPG, PNG, WebP), Video maksimal 25 MB (MP4, MOV, WebM).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - media
+              properties:
+                media:
+                  type: string
+                  format: binary
+                  description: Berkas foto (JPG/PNG/WebP maks 5MB) atau video (MP4/MOV/WebM maks 25MB)
+      responses:
+        "201":
+          description: Berkas media berhasil diunggah dan diverifikasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/UploadMediaResponse"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "400":
+          description: Berkas tidak valid (magic bytes mismatch, melebihi batas ukuran, atau terdeteksi skrip)
           content:
             application/json:
               schema:

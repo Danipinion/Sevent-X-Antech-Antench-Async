@@ -46,6 +46,7 @@ func TestFarmerService_VerificationLifecycle(t *testing.T) {
 		EstimatedQuantity: 12000,
 		Unit:              "kg",
 		PricePerUnit:      7200,
+		MediaURLs:         []string{"https://s3.tandur.com/sample.jpg"},
 	})
 	if err == nil || err != domain.ErrFarmerNotVerified {
 		t.Fatalf("Expected ErrFarmerNotVerified, got: %v", err)
@@ -122,6 +123,7 @@ func TestFarmerService_VerificationLifecycle(t *testing.T) {
 		EstimatedQuantity: 12000,
 		Unit:              "kg",
 		PricePerUnit:      7200,
+		MediaURLs:         []string{"https://s3.tandur.com/media/sample_gkp.jpg"},
 	})
 	if err != nil {
 		t.Fatalf("Expected successful listing creation, got: %v", err)
@@ -194,7 +196,7 @@ func TestHTTP_FarmerVerificationAndListingEndpoints(t *testing.T) {
 	}
 
 	// 4. Petani mencoba Jual Panen sebelum verifikasi -> WAJIB GAGAL (403 Forbidden)
-	listingPayload := `{"commodity_id":"gabah-kering-panen","title":"Gabah Kering Panen","estimated_quantity":12000,"unit":"kg","price_per_unit":7200}`
+	listingPayload := `{"commodity_id":"gabah-kering-panen","title":"Gabah Kering Panen","estimated_quantity":12000,"unit":"kg","price_per_unit":7200,"media_urls":["https://storage.tandur.com/sample.jpg"]}`
 	reqListFail := httptest.NewRequest(http.MethodPost, "/api/v1/farmer/listings", bytes.NewBufferString(listingPayload))
 	reqListFail.Header.Set("Content-Type", "application/json")
 	reqListFail.Header.Set("Authorization", "Bearer "+token)

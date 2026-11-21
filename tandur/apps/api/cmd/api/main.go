@@ -45,8 +45,10 @@ func main() {
 
 	// 4. Initialize Repositories (Persistence) & Cache
 	var userRepo *persistence.PostgresUserRepository
+	var listingRepo domain.ListingRepository
 	if dbPool != nil {
 		userRepo = persistence.NewPostgresUserRepository(dbPool)
+		listingRepo = persistence.NewPostgresListingRepository(dbPool)
 	}
 	commodityRepo := persistence.NewMemoryCommodityRepository()
 
@@ -70,7 +72,7 @@ func main() {
 	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
 	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
 	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient, marketPriceCache, realtimeCache)
-	farmerService := application.NewFarmerService(userRepo)
+	farmerService := application.NewFarmerService(userRepo, listingRepo)
 
 	// 6. Initialize HTTP Handlers & Adapter
 	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService, farmerService)

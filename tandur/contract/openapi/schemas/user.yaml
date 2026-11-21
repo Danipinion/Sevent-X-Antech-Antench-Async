@@ -304,44 +304,69 @@ FarmerListing:
   properties:
     id:
       type: string
-      example: "list-20261121123000"
+      example: "9e81b672-0e24-419b-a320-b6f790c68123"
     farmer_id:
       type: string
       format: uuid
       example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
     commodity_id:
       type: string
-      example: "gabah-kering-panen"
+      example: "1810b74b-a268-436a-b3dc-c2f7a08ff9fe"
     commodity_name:
       type: string
-      example: "Gabah Kering Panen"
+      example: "Gabah GKP"
     title:
       type: string
-      example: "Gabah Kering Panen Super Varietas Ciherang Siap Jual"
+      example: "Gabah GKP Super Siap Panen Kualitas Prima"
     description:
       type: string
-      example: "Panen musim pertama, kadar air 14%, kualitas prima"
+      example: "Varietas Inpari 32 (Standar Bulir Sedang). Dipanen memakai mesin Combine Harvester, bersih tanpa jerami dan batu."
     estimated_quantity:
       type: number
-      example: 12000
+      example: 8500
     available_quantity:
       type: number
-      example: 12000
+      example: 8500
+    min_order_quantity:
+      type: number
+      example: 500
     unit:
       type: string
       example: "kg"
     price_per_unit:
       type: number
-      example: 7200
+      example: 7300
+    estimated_gross_revenue:
+      type: number
+      example: 62050000
+    ready_date:
+      type: string
+      example: "2025-02-07"
+    estimated_harvest_date:
+      type: string
+      example: "2025-02-07"
+    pickup_address:
+      type: string
+      example: "Sukamaju, Ngawi"
+    media_urls:
+      type: array
+      items:
+        type: string
+      example:
+        - "http://localhost:3900/tandur/listings/user1/sample1.jpg"
+        - "http://localhost:3900/tandur/listings/user1/video1.mp4"
     status:
       type: string
       example: "published"
     latitude:
       type: number
-      example: -6.8945
+      example: -7.4045
     longitude:
       type: number
-      example: 110.6382
+      example: 111.4452
+    created_at:
+      type: string
+      example: "2026-11-21T07:30:00Z"
 
 CreateListingInput:
   type: object
@@ -349,32 +374,110 @@ CreateListingInput:
     - commodity_id
     - title
     - estimated_quantity
-    - unit
+    - price_per_unit
+    - media_urls
   properties:
     commodity_id:
       type: string
-      example: "gabah-kering-panen"
+      example: "1810b74b-a268-436a-b3dc-c2f7a08ff9fe"
     title:
       type: string
-      example: "Gabah Kering Panen Super Varietas Ciherang Siap Jual"
+      example: "Gabah GKP Super Siap Panen Kualitas Prima"
     description:
       type: string
-      example: "Panen musim pertama, kadar air 14%, kualitas prima"
+      example: "Varietas Inpari 32. Dipanen memakai mesin Combine Harvester, bersih tanpa jerami dan batu."
     estimated_quantity:
       type: number
-      example: 12000
+      description: Estimasi bobot (minimal 500 kg)
+      example: 8500
+    min_order_quantity:
+      type: number
+      default: 500
+      example: 500
     unit:
       type: string
+      default: "kg"
       example: "kg"
     price_per_unit:
       type: number
-      example: 7200
+      description: Harga harapan petani per kilogram
+      example: 7300
+    ready_date:
+      type: string
+      description: Tanggal siap timbang dan muat (YYYY-MM-DD)
+      example: "2025-02-07"
     estimated_harvest_date:
       type: string
-      example: "2026-11-25"
+      example: "2025-02-07"
+    pickup_address:
+      type: string
+      description: Titik muat atau lokasi gudang tani
+      example: "Sukamaju, Ngawi"
+    media_urls:
+      type: array
+      description: Berkas media (minimal 1 foto, maksimal 1 video, total maksimal 5 berkas)
+      items:
+        type: string
+      example:
+        - "http://localhost:3900/tandur/listings/user1/sampel_gabah_bkkk.jpg"
     latitude:
       type: number
-      example: -6.8945
+      example: -7.4045
     longitude:
       type: number
-      example: 110.6382
+      example: 111.4452
+
+UpdateListingInput:
+  type: object
+  properties:
+    title:
+      type: string
+      example: "Gabah GKP Super Siap Panen Update"
+    description:
+      type: string
+      example: "Varietas Inpari 32 kadar air 21% bersih"
+    estimated_quantity:
+      type: number
+      example: 9000
+    min_order_quantity:
+      type: number
+      example: 500
+    price_per_unit:
+      type: number
+      example: 7350
+    ready_date:
+      type: string
+      example: "2025-02-08"
+    pickup_address:
+      type: string
+      example: "Sukamaju, Ngawi"
+    media_urls:
+      type: array
+      items:
+        type: string
+    latitude:
+      type: number
+      example: -7.4045
+    longitude:
+      type: number
+      example: 111.4452
+
+UploadMediaResponse:
+  type: object
+  properties:
+    url:
+      type: string
+      example: "http://localhost:3900/tandur/listings/user1/uuid.jpg"
+    key:
+      type: string
+      example: "listings/user1/uuid.jpg"
+    media_type:
+      type: string
+      enum: [photo, video]
+      example: "photo"
+    mime_type:
+      type: string
+      example: "image/jpeg"
+    size_bytes:
+      type: integer
+      example: 1450000

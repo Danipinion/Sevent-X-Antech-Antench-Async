@@ -785,11 +785,42 @@ paths:
     get:
       tags:
       - Penjualan Panen Petani
-      summary: Daftar Hasil Panen Petani
-      description: Mengambil seluruh daftar hasil panen yang didaftarkan oleh petani
-        yang sedang login.
+      summary: Daftar Hasil Panen Petani (Berpaginasi)
+      description: Mengambil seluruh riwayat dan daftar hasil panen yang didaftarkan
+        oleh petani dengan dukungan pagination dan filter status.
       security:
       - BearerAuth: []
+      parameters:
+      - name: page
+        in: query
+        description: Nomor halaman (default 1)
+        required: false
+        schema:
+          type: integer
+          default: 1
+          example: 1
+      - name: limit
+        in: query
+        description: Jumlah data per halaman (default 10, maksimal 100)
+        required: false
+        schema:
+          type: integer
+          default: 10
+          example: 10
+      - name: status
+        in: query
+        description: Filter status listing (all, draft, published, reserved, completed,
+          cancelled)
+        required: false
+        schema:
+          type: string
+          example: published
+      - name: commodity_id
+        in: query
+        description: Filter berdasarkan UUID komoditas
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: Daftar panen berhasil diambil
@@ -811,8 +842,12 @@ paths:
       tags:
       - Penjualan Panen Petani
       summary: Jual Hasil Panen (Daftarkan Listing Panen)
-      description: Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus
-        terverifikasi (e-KTP diverifikasi) untuk dapat menggunakan fitur ini.
+      description: 'Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus
+        terverifikasi (e-KTP diverifikasi). Wajib menyertakan minimal 1 foto sampel
+        panen, maksimal 1 video opsional (total maksimal 5 berkas media), dan bobot
+        panen minimal 500 kg.
+
+        '
       security:
       - BearerAuth: []
       requestBody:
@@ -836,8 +871,176 @@ paths:
                     $ref: '#/components/schemas/FarmerListing'
                   meta:
                     $ref: '#/components/schemas/Meta'
+        '400':
+          description: Validasi gagal (bobot kurang dari 500 kg atau aturan komposisi
+            media tidak dipenuhi)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Petani belum terverifikasi (FARMER_NOT_VERIFIED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /farmer/listings/{id}:
+    get:
+      tags:
+      - Penjualan Panen Petani
+      summary: Detail Listing Panen
+      description: Mengambil data rinci satu listing penjualan panen milik petani.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        description: ID unik listing panen
+        required: true
+        schema:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+      responses:
+        '200':
+          description: Detail listing panen ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '404':
+          description: Listing panen tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+      - Penjualan Panen Petani
+      summary: Update Data Jual Panen
+      description: Memperbarui informasi listing panen (harga, bobot, tanggal siap
+        muat, foto sampel). Hanya dapat dilakukan saat status masih draft atau published.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        description: ID unik listing panen
+        required: true
+        schema:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateListingInput'
+      responses:
+        '200':
+          description: Data panen berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '409':
+          description: Listing sudah terkunci / disepakati dengan tengkulak
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+      - Penjualan Panen Petani
+      summary: Batalkan / Hapus Listing Panen (Soft Delete)
+      description: Membatalkan listing panen yang belum bertransaksi. Status listing
+        diubah menjadi 'cancelled' dan dicatat waktu penghapusannya.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        description: ID unik listing panen
+        required: true
+        schema:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+      responses:
+        '200':
+          description: Listing panen berhasil dibatalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    nullable: true
+                    example: null
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /farmer/listings/upload-media:
+    post:
+      tags:
+      - Penjualan Panen Petani
+      summary: Upload Berkas Media Sampel Panen (Foto / Video)
+      description: 'Mengunggah berkas media sampel panen ke Garage Object Storage
+        (S3 publik). Divalidasi ketat dengan inspeksi magic bytes biner, anti-polyglot,
+        dan pencegahan double extension. Foto maksimal 5 MB (JPG, PNG, WebP), Video
+        maksimal 25 MB (MP4, MOV, WebM).
+
+        '
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - media
+              properties:
+                media:
+                  type: string
+                  format: binary
+                  description: Berkas foto (JPG/PNG/WebP maks 5MB) atau video (MP4/MOV/WebM
+                    maks 25MB)
+      responses:
+        '201':
+          description: Berkas media berhasil diunggah dan diverifikasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/UploadMediaResponse'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Berkas tidak valid (magic bytes mismatch, melebihi batas ukuran,
+            atau terdeteksi skrip)
           content:
             application/json:
               schema:
@@ -1515,76 +1718,182 @@ components:
       properties:
         id:
           type: string
-          example: list-20261121123000
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
         farmer_id:
           type: string
           format: uuid
           example: e445499d-4f26-424c-9e70-10ffcc8b2a35
         commodity_id:
           type: string
-          example: gabah-kering-panen
+          example: 1810b74b-a268-436a-b3dc-c2f7a08ff9fe
         commodity_name:
           type: string
-          example: Gabah Kering Panen
+          example: Gabah GKP
         title:
           type: string
-          example: Gabah Kering Panen Super Varietas Ciherang Siap Jual
+          example: Gabah GKP Super Siap Panen Kualitas Prima
         description:
           type: string
-          example: Panen musim pertama, kadar air 14%, kualitas prima
+          example: Varietas Inpari 32 (Standar Bulir Sedang). Dipanen memakai mesin
+            Combine Harvester, bersih tanpa jerami dan batu.
         estimated_quantity:
           type: number
-          example: 12000
+          example: 8500
         available_quantity:
           type: number
-          example: 12000
+          example: 8500
+        min_order_quantity:
+          type: number
+          example: 500
         unit:
           type: string
           example: kg
         price_per_unit:
           type: number
-          example: 7200
+          example: 7300
+        estimated_gross_revenue:
+          type: number
+          example: 62050000
+        ready_date:
+          type: string
+          example: '2025-02-07'
+        estimated_harvest_date:
+          type: string
+          example: '2025-02-07'
+        pickup_address:
+          type: string
+          example: Sukamaju, Ngawi
+        media_urls:
+          type: array
+          items:
+            type: string
+          example:
+          - http://localhost:3900/tandur/listings/user1/sample1.jpg
+          - http://localhost:3900/tandur/listings/user1/video1.mp4
         status:
           type: string
           example: published
         latitude:
           type: number
-          example: -6.8945
+          example: -7.4045
         longitude:
           type: number
-          example: 110.6382
+          example: 111.4452
+        created_at:
+          type: string
+          example: '2026-11-21T07:30:00Z'
     CreateListingInput:
       type: object
       required:
       - commodity_id
       - title
       - estimated_quantity
-      - unit
+      - price_per_unit
+      - media_urls
       properties:
         commodity_id:
           type: string
-          example: gabah-kering-panen
+          example: 1810b74b-a268-436a-b3dc-c2f7a08ff9fe
         title:
           type: string
-          example: Gabah Kering Panen Super Varietas Ciherang Siap Jual
+          example: Gabah GKP Super Siap Panen Kualitas Prima
         description:
           type: string
-          example: Panen musim pertama, kadar air 14%, kualitas prima
+          example: Varietas Inpari 32. Dipanen memakai mesin Combine Harvester, bersih
+            tanpa jerami dan batu.
         estimated_quantity:
           type: number
-          example: 12000
+          description: Estimasi bobot (minimal 500 kg)
+          example: 8500
+        min_order_quantity:
+          type: number
+          default: 500
+          example: 500
         unit:
           type: string
+          default: kg
           example: kg
         price_per_unit:
           type: number
-          example: 7200
+          description: Harga harapan petani per kilogram
+          example: 7300
+        ready_date:
+          type: string
+          description: Tanggal siap timbang dan muat (YYYY-MM-DD)
+          example: '2025-02-07'
         estimated_harvest_date:
           type: string
-          example: '2026-11-25'
+          example: '2025-02-07'
+        pickup_address:
+          type: string
+          description: Titik muat atau lokasi gudang tani
+          example: Sukamaju, Ngawi
+        media_urls:
+          type: array
+          description: Berkas media (minimal 1 foto, maksimal 1 video, total maksimal
+            5 berkas)
+          items:
+            type: string
+          example:
+          - http://localhost:3900/tandur/listings/user1/sampel_gabah_bkkk.jpg
         latitude:
           type: number
-          example: -6.8945
+          example: -7.4045
         longitude:
           type: number
-          example: 110.6382
+          example: 111.4452
+    UpdateListingInput:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Gabah GKP Super Siap Panen Update
+        description:
+          type: string
+          example: Varietas Inpari 32 kadar air 21% bersih
+        estimated_quantity:
+          type: number
+          example: 9000
+        min_order_quantity:
+          type: number
+          example: 500
+        price_per_unit:
+          type: number
+          example: 7350
+        ready_date:
+          type: string
+          example: '2025-02-08'
+        pickup_address:
+          type: string
+          example: Sukamaju, Ngawi
+        media_urls:
+          type: array
+          items:
+            type: string
+        latitude:
+          type: number
+          example: -7.4045
+        longitude:
+          type: number
+          example: 111.4452
+    UploadMediaResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          example: http://localhost:3900/tandur/listings/user1/uuid.jpg
+        key:
+          type: string
+          example: listings/user1/uuid.jpg
+        media_type:
+          type: string
+          enum:
+          - photo
+          - video
+          example: photo
+        mime_type:
+          type: string
+          example: image/jpeg
+        size_bytes:
+          type: integer
+          example: 1450000
