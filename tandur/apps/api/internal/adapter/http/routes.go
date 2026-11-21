@@ -49,4 +49,11 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	auth.Post("/login", handler.Login)
 	auth.Post("/logout", handler.Logout, handler.AuthMiddleware())
 	auth.Get("/me", handler.Me, handler.AuthMiddleware())
+
+	// Farmer Routing
+	farmer := v1.Group("/farmer", handler.AuthMiddleware())
+	farmer.Get("/verification", handler.GetFarmerVerification)
+	farmer.Post("/verification", handler.SubmitFarmerVerification)
+	farmer.Post("/listings", handler.CreateFarmerListing)
+	farmer.Get("/listings", handler.ListFarmerListings)
 }

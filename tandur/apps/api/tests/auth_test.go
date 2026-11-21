@@ -91,6 +91,17 @@ func (m *MockUserRepository) GetByID(ctx context.Context, id string) (*domain.Us
 	return u, nil
 }
 
+func (m *MockUserRepository) UpdateVerification(ctx context.Context, user *domain.User) error {
+	m.users[user.ID] = user
+	if user.Phone != "" {
+		m.byPhone[user.Phone] = user
+	}
+	if user.NIK != nil {
+		m.byNIK[*user.NIK] = user
+	}
+	return nil
+}
+
 func TestAuthService_Register_Success(t *testing.T) {
 	repo := NewMockUserRepository()
 	service := application.NewAuthService(repo, "test-secret-key-1234567890123456", 24*time.Hour)

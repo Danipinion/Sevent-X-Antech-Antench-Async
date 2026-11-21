@@ -65,9 +65,10 @@ func main() {
 	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
 	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
 	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient, marketPriceCache, realtimeCache)
+	farmerService := application.NewFarmerService(userRepo)
 
 	// 6. Initialize HTTP Handlers & Adapter
-	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService)
+	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService, farmerService)
 
 	// 7. Setup Fiber Web Application
 	app := fiber.New(fiber.Config{

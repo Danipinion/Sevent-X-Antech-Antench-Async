@@ -176,13 +176,16 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*domai
 
 	// 7. Siapkan Entity User
 	user := &domain.User{
-		NIK:          nik,
-		Name:         name,
-		Phone:        phone,
-		PasswordHash: string(passwordHash),
-		Role:         role,
-		IsBisnis:     input.IsBisnis,
-		IsActive:     true,
+		NIK:                nik,
+		Name:               name,
+		Phone:              phone,
+		PasswordHash:       string(passwordHash),
+		Role:               role,
+		IsBisnis:           input.IsBisnis,
+		IsActive:           true,
+		IsVerified:         false,
+		VerificationStatus: domain.VerificationStatusUnverified,
+		CanSellHarvest:     false,
 	}
 
 	// 8. Validasi & Siapkan Lokasi jika disertakan
@@ -385,12 +388,21 @@ func (s *AuthService) Logout(ctx context.Context, tokenString string) error {
 	return nil
 }
 
+func (s *AuthService) UserRepo() domain.UserRepository {
+	return s.userRepo
+}
+
 // GetProfile mengambil profil pengguna berdasarkan User ID
 func (s *AuthService) GetProfile(ctx context.Context, userID string) (*domain.User, error) {
 	if s.userRepo == nil {
 		return nil, errors.New("user repository tidak tersedia")
 	}
-	return s.userRepo.GetByID(ctx, userID)
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	user.CanSellHarvest = user.CheckCanSellHarvest()
+	return user, nil
 }
 
 func normalizePhone(raw string) string {

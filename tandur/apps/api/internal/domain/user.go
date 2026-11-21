@@ -13,6 +13,15 @@ const (
 	RoleBuyer     UserRole = "buyer"
 )
 
+type VerificationStatus string
+
+const (
+	VerificationStatusUnverified VerificationStatus = "unverified"
+	VerificationStatusPending    VerificationStatus = "pending"
+	VerificationStatusVerified   VerificationStatus = "verified"
+	VerificationStatusRejected   VerificationStatus = "rejected"
+)
+
 func (r UserRole) IsValid() bool {
 	switch r {
 	case RoleFarmer, RoleMiddleman, RoleBuyer:
@@ -23,17 +32,59 @@ func (r UserRole) IsValid() bool {
 }
 
 type User struct {
-	ID           string        `json:"id"`
-	NIK          *string       `json:"nik,omitempty"`
-	Name         string        `json:"name"`
-	Phone        string        `json:"phone"`
-	PasswordHash string        `json:"-"`
-	Role         UserRole      `json:"role"`
-	IsBisnis     bool          `json:"is_bisnis"`
-	IsActive     bool          `json:"is_active"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
-	Location     *UserLocation `json:"location,omitempty"`
+	ID                 string             `json:"id"`
+	NIK                *string            `json:"nik,omitempty"`
+	Name               string             `json:"name"`
+	Phone              string             `json:"phone"`
+	PasswordHash       string             `json:"-"`
+	Role               UserRole           `json:"role"`
+	IsBisnis           bool               `json:"is_bisnis"`
+	IsActive           bool               `json:"is_active"`
+	IsVerified         bool               `json:"is_verified"`
+	VerificationStatus VerificationStatus `json:"verification_status"`
+	KTPPhotoURL        *string            `json:"ktp_photo_url,omitempty"`
+	BirthPlace         *string            `json:"birth_place,omitempty"`
+	BirthDate          *string            `json:"birth_date,omitempty"`
+	KTPAddress         *string            `json:"ktp_address,omitempty"`
+	VerifiedAt         *time.Time         `json:"verified_at,omitempty"`
+	RejectionReason    *string            `json:"rejection_reason,omitempty"`
+	CanSellHarvest     bool               `json:"can_sell_harvest"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	Location           *UserLocation      `json:"location,omitempty"`
+}
+
+func (u *User) CheckCanSellHarvest() bool {
+	if u.Role != RoleFarmer {
+		return false
+	}
+	return u.IsVerified && u.VerificationStatus == VerificationStatusVerified
+}
+
+type FarmerVerificationInput struct {
+	NIK                 string `json:"nik" form:"nik"`
+	Name                string `json:"name" form:"name"`
+	BirthPlace          string `json:"birth_place" form:"birth_place"`
+	BirthDate           string `json:"birth_date" form:"birth_date"`
+	KTPAddress          string `json:"ktp_address" form:"ktp_address"`
+	KTPPhotoURL         string `json:"ktp_photo_url" form:"ktp_photo_url"`
+	DeclarationAccepted bool   `json:"declaration_accepted" form:"declaration_accepted"`
+}
+
+type FarmerVerificationResponse struct {
+	UserID             string             `json:"user_id"`
+	NIK                string             `json:"nik"`
+	Name               string             `json:"name"`
+	VerificationStatus VerificationStatus `json:"verification_status"`
+	IsVerified         bool               `json:"is_verified"`
+	CanSellHarvest     bool               `json:"can_sell_harvest"`
+	KTPPhotoURL        string             `json:"ktp_photo_url,omitempty"`
+	BirthPlace         string             `json:"birth_place,omitempty"`
+	BirthDate          string             `json:"birth_date,omitempty"`
+	KTPAddress         string             `json:"ktp_address,omitempty"`
+	VerifiedAt         *time.Time         `json:"verified_at,omitempty"`
+	RejectionReason    string             `json:"rejection_reason,omitempty"`
+	Message            string             `json:"message"`
 }
 
 type UserLocation struct {
@@ -57,4 +108,5 @@ type UserRepository interface {
 	GetByPhone(ctx context.Context, phone string) (*User, error)
 	GetByNIK(ctx context.Context, nik string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	UpdateVerification(ctx context.Context, user *User) error
 }

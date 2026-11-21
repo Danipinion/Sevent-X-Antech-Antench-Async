@@ -927,6 +927,228 @@
           }
         }
       }
+    },
+    "/farmer/verification": {
+      "get": {
+        "summary": "Status Verifikasi Kemitraan Petani",
+        "description": "Memeriksa status verifikasi identitas e-KTP petani, hasil pembacaan OCR, dan hak jual panen.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status verifikasi petani berhasil diambil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Status verifikasi kemitraan petani"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FarmerVerificationResponse"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Belum terautentikasi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Kirim Dokumen Verifikasi e-KTP Petani",
+        "description": "Mengunggah berkas foto e-KTP asli dan data kependudukan hasil pembacaan OCR untuk mengaktifkan status kemitraan resmi dan membuka kuota jual panen.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FarmerVerificationInput"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/FarmerVerificationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dokumen e-KTP berhasil diverifikasi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Dokumen e-KTP berhasil diverifikasi. Kemitraan resmi aktif dan Anda dapat mulai menjual hasil panen."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FarmerVerificationResponse"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validasi gagal (NIK tidak valid, foto KTP kosong, atau pernyataan belum disetujui)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Hanya akun dengan role petani yang dapat melakukan verifikasi kemitraan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "NIK sudah digunakan oleh akun lain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/farmer/listings": {
+      "get": {
+        "summary": "Daftar Hasil Panen Petani",
+        "description": "Mengambil seluruh daftar hasil panen yang didaftarkan oleh petani yang sedang login.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar panen berhasil diambil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FarmerListing"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Jual Hasil Panen (Daftarkan Listing Panen)",
+        "description": "Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus terverifikasi (e-KTP diverifikasi) untuk dapat menggunakan fitur ini.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateListingInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Hasil panen berhasil didaftarkan untuk dijual",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FarmerListing"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Petani belum terverifikasi (FARMER_NOT_VERIFIED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1444,6 +1666,56 @@
             "default": true,
             "example": true
           },
+          "is_verified": {
+            "type": "boolean",
+            "default": false,
+            "example": true
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "unverified",
+              "pending",
+              "verified",
+              "rejected"
+            ],
+            "example": "verified"
+          },
+          "can_sell_harvest": {
+            "type": "boolean",
+            "example": true
+          },
+          "ktp_photo_url": {
+            "type": "string",
+            "nullable": true,
+            "example": "https://storage.tandur.com/ktp/3321041405760002.jpg"
+          },
+          "birth_place": {
+            "type": "string",
+            "nullable": true,
+            "example": "Demak"
+          },
+          "birth_date": {
+            "type": "string",
+            "nullable": true,
+            "example": "1978-05-14"
+          },
+          "ktp_address": {
+            "type": "string",
+            "nullable": true,
+            "example": "RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-21T07:30:00Z"
+          },
+          "rejection_reason": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -1649,6 +1921,213 @@
           },
           "user": {
             "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "FarmerVerificationInput": {
+        "type": "object",
+        "required": [
+          "nik",
+          "name",
+          "ktp_address",
+          "ktp_photo_url",
+          "declaration_accepted"
+        ],
+        "properties": {
+          "nik": {
+            "type": "string",
+            "pattern": "^[0-9]{16}$",
+            "example": "3321041405760002"
+          },
+          "name": {
+            "type": "string",
+            "example": "SUGENG RIYADI"
+          },
+          "birth_place": {
+            "type": "string",
+            "example": "Demak"
+          },
+          "birth_date": {
+            "type": "string",
+            "example": "1978-05-14"
+          },
+          "ktp_address": {
+            "type": "string",
+            "example": "RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566"
+          },
+          "ktp_photo_url": {
+            "type": "string",
+            "example": "https://storage.tandur.com/ktp/3321041405760002.jpg"
+          },
+          "declaration_accepted": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "FarmerVerificationResponse": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+          },
+          "nik": {
+            "type": "string",
+            "example": "3321041405760002"
+          },
+          "name": {
+            "type": "string",
+            "example": "SUGENG RIYADI"
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "unverified",
+              "pending",
+              "verified",
+              "rejected"
+            ],
+            "example": "verified"
+          },
+          "is_verified": {
+            "type": "boolean",
+            "example": true
+          },
+          "can_sell_harvest": {
+            "type": "boolean",
+            "example": true
+          },
+          "ktp_photo_url": {
+            "type": "string",
+            "example": "https://storage.tandur.com/ktp/3321041405760002.jpg"
+          },
+          "birth_place": {
+            "type": "string",
+            "example": "Demak"
+          },
+          "birth_date": {
+            "type": "string",
+            "example": "1978-05-14"
+          },
+          "ktp_address": {
+            "type": "string",
+            "example": "RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-21T07:30:00Z"
+          },
+          "message": {
+            "type": "string",
+            "example": "Dokumen e-KTP berhasil diverifikasi. Kemitraan resmi aktif dan Anda dapat mulai menjual hasil panen."
+          }
+        }
+      },
+      "FarmerListing": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "list-20261121123000"
+          },
+          "farmer_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+          },
+          "commodity_id": {
+            "type": "string",
+            "example": "gabah-kering-panen"
+          },
+          "commodity_name": {
+            "type": "string",
+            "example": "Gabah Kering Panen"
+          },
+          "title": {
+            "type": "string",
+            "example": "Gabah Kering Panen Super Varietas Ciherang Siap Jual"
+          },
+          "description": {
+            "type": "string",
+            "example": "Panen musim pertama, kadar air 14%, kualitas prima"
+          },
+          "estimated_quantity": {
+            "type": "number",
+            "example": 12000
+          },
+          "available_quantity": {
+            "type": "number",
+            "example": 12000
+          },
+          "unit": {
+            "type": "string",
+            "example": "kg"
+          },
+          "price_per_unit": {
+            "type": "number",
+            "example": 7200
+          },
+          "status": {
+            "type": "string",
+            "example": "published"
+          },
+          "latitude": {
+            "type": "number",
+            "example": -6.8945
+          },
+          "longitude": {
+            "type": "number",
+            "example": 110.6382
+          }
+        }
+      },
+      "CreateListingInput": {
+        "type": "object",
+        "required": [
+          "commodity_id",
+          "title",
+          "estimated_quantity",
+          "unit"
+        ],
+        "properties": {
+          "commodity_id": {
+            "type": "string",
+            "example": "gabah-kering-panen"
+          },
+          "title": {
+            "type": "string",
+            "example": "Gabah Kering Panen Super Varietas Ciherang Siap Jual"
+          },
+          "description": {
+            "type": "string",
+            "example": "Panen musim pertama, kadar air 14%, kualitas prima"
+          },
+          "estimated_quantity": {
+            "type": "number",
+            "example": 12000
+          },
+          "unit": {
+            "type": "string",
+            "example": "kg"
+          },
+          "price_per_unit": {
+            "type": "number",
+            "example": 7200
+          },
+          "estimated_harvest_date": {
+            "type": "string",
+            "example": "2026-11-25"
+          },
+          "latitude": {
+            "type": "number",
+            "example": -6.8945
+          },
+          "longitude": {
+            "type": "number",
+            "example": 110.6382
           }
         }
       }

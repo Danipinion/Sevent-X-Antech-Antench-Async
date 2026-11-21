@@ -632,6 +632,141 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
+  /farmer/verification:
+    get:
+      summary: Status Verifikasi Kemitraan Petani
+      description: Memeriksa status verifikasi identitas e-KTP petani, hasil pembacaan OCR, dan hak jual panen.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Status verifikasi petani berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Status verifikasi kemitraan petani
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerVerificationResponse"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "401":
+          description: Belum terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+    post:
+      summary: Kirim Dokumen Verifikasi e-KTP Petani
+      description: Mengunggah berkas foto e-KTP asli dan data kependudukan hasil pembacaan OCR untuk mengaktifkan status kemitraan resmi dan membuka kuota jual panen.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/FarmerVerificationInput"
+          multipart/form-data:
+            schema:
+              $ref: "./schemas/user.yaml#/FarmerVerificationInput"
+      responses:
+        "200":
+          description: Dokumen e-KTP berhasil diverifikasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Dokumen e-KTP berhasil diverifikasi. Kemitraan resmi aktif dan Anda dapat mulai menjual hasil panen.
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerVerificationResponse"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "400":
+          description: Validasi gagal (NIK tidak valid, foto KTP kosong, atau pernyataan belum disetujui)
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+        "403":
+          description: Hanya akun dengan role petani yang dapat melakukan verifikasi kemitraan
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+        "409":
+          description: NIK sudah digunakan oleh akun lain
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+  /farmer/listings:
+    get:
+      summary: Daftar Hasil Panen Petani
+      description: Mengambil seluruh daftar hasil panen yang didaftarkan oleh petani yang sedang login.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar panen berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+    post:
+      summary: Jual Hasil Panen (Daftarkan Listing Panen)
+      description: Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus terverifikasi (e-KTP diverifikasi) untuk dapat menggunakan fitur ini.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/CreateListingInput"
+      responses:
+        "201":
+          description: Hasil panen berhasil didaftarkan untuk dijual
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "403":
+          description: Petani belum terverifikasi (FARMER_NOT_VERIFIED)
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
 
 components:
   securitySchemes:
