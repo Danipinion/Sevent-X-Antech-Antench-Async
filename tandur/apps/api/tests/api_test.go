@@ -397,19 +397,47 @@ func TestCommodityService_GetMarketPrices_6HoursCache(t *testing.T) {
 
 func TestCommodityService_GetRealtimeDashboardPrices(t *testing.T) {
 	repo := persistence.NewMemoryCommodityRepository()
-	service := application.NewCommodityService(repo)
 
-	// 1. Ambil harga dashboard realtime
-	prices, err := service.GetRealtimeDashboardPrices(context.Background(), domain.MarketPriceQuery{
+	// 1. Uji dengan Provider SP2KP Kemendag (seluruh komoditas SP2KP ditampilkan)
+	mockProvider := &mockMarketPriceProvider{
+		results: map[string][]domain.SP2KPCommodityPrice{
+			time.Now().Format("2006-01-02"): {
+				{VariantID: 52, VariantNama: "Beras Medium", SatuanDisplay: "kg", Harga: 13167, HargaPembanding: 13167, PersenPerubahan: 0},
+				{VariantID: 51, VariantNama: "Beras Premium", SatuanDisplay: "kg", Harga: 14900, HargaPembanding: 14900, PersenPerubahan: 0},
+				{VariantID: 2, VariantNama: "Cabai Merah Keriting", SatuanDisplay: "kg", Harga: 48667, HargaPembanding: 48000, PersenPerubahan: 1.39},
+				{VariantID: 3, VariantNama: "Bawang Merah", SatuanDisplay: "kg", Harga: 26333, HargaPembanding: 26500, PersenPerubahan: -0.63},
+			},
+		},
+	}
+	serviceWithSP2KP := application.NewCommodityService(repo, mockProvider)
+	sp2kpPrices, err := serviceWithSP2KP.GetRealtimeDashboardPrices(context.Background(), domain.MarketPriceQuery{
 		KodeProvinsi: "35",
 		KodeKabKota:  "3519",
 	})
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
+	if len(sp2kpPrices) != 4 {
+		t.Fatalf("Expected all 4 commodities from SP2KP, got %d", len(sp2kpPrices))
+	}
+	if sp2kpPrices[0].CommodityName != "Beras Medium" || sp2kpPrices[0].Trend != domain.TrendStable {
+		t.Errorf("Unexpected first commodity: %+v", sp2kpPrices[0])
+	}
+	if sp2kpPrices[2].CommodityName != "Cabai Merah Keriting" || sp2kpPrices[2].Trend != domain.TrendUp || sp2kpPrices[2].TrendLabel != "+Rp 667" {
+		t.Errorf("Unexpected third commodity: %+v", sp2kpPrices[2])
+	}
 
+	// 2. Fallback mode (tanpa provider SP2KP eksternal)
+	serviceFallback := application.NewCommodityService(repo)
+	prices, err := serviceFallback.GetRealtimeDashboardPrices(context.Background(), domain.MarketPriceQuery{
+		KodeProvinsi: "35",
+		KodeKabKota:  "3519",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
 	if len(prices) != 4 {
-		t.Fatalf("Expected 4 default dashboard commodities, got %d", len(prices))
+		t.Fatalf("Expected 4 fallback dashboard commodities, got %d", len(prices))
 	}
 
 	// Cek komoditas Gabah Kering Panen
@@ -433,9 +461,9 @@ func TestCommodityService_GetRealtimeDashboardPrices(t *testing.T) {
 		t.Errorf("Expected TrendStable and '- Stabil', got %s and %s", gkg.Trend, gkg.TrendLabel)
 	}
 
-	// 2. Simulasi pencatatan penjualan petani hari ini -> harga rata-rata riil Tandur terupdate
+	// 3. Simulasi pencatatan penjualan petani hari ini -> harga rata-rata riil Tandur terupdate
 	// Catat penjualan Gabah Kering Giling hari ini dengan harga 8.500 (naik dari 8.100)
-	service.RecordFarmerSale("Gabah Kering Giling", 8500, 1000)
+	serviceFallback.RecordFarmerSale("Gabah Kering Giling", 8500, 1000)
 
 	// Pastikan cache 10 menit mengembalikan cached atau saat diquery ulang di siklus baru menghitung transaksi internal
 	// Clear cache untuk mensimulasikan siklus 10 menit berikutnya

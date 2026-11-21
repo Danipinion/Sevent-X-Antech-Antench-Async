@@ -214,6 +214,7 @@ func (s *CommodityService) calculateInternalAverage(commodityName string, from, 
 
 // GetRealtimeDashboardPrices menghasilkan data pantauan harga pasar komoditas untuk widget dashboard petani
 // - Diupdate setiap 10 menit sekali (Cache TTL 10 Menit)
+// - Menampilkan seluruh komoditas yang ada di SP2KP secara langsung tanpa batasan dan tanpa pengelompokan kategori
 // - Delta dan tren dihitung berdasarkan selisih harga hari ini vs penutupan hari kemarin
 func (s *CommodityService) GetRealtimeDashboardPrices(ctx context.Context, query domain.MarketPriceQuery) ([]domain.DashboardCommodityPrice, error) {
 	cacheKey := fmt.Sprintf("tandur:realtime_dashboard:%s:%s", query.KodeProvinsi, query.KodeKabKota)
@@ -223,31 +224,10 @@ func (s *CommodityService) GetRealtimeDashboardPrices(ctx context.Context, query
 		}
 	}
 
-	type defaultCommodityMeta struct {
-		id       string
-		name     string
-		category string
-		unit     string
-		baseAvg  float64
-		baseYest float64
-	}
-
-	defaults := []defaultCommodityMeta{
-		{id: "gabah-kering-panen", name: "Gabah Kering Panen", category: "PADI / BERAS", unit: "kg", baseAvg: 7200, baseYest: 7050},
-		{id: "gabah-kering-giling", name: "Gabah Kering Giling", category: "PADI / BERAS", unit: "kg", baseAvg: 8100, baseYest: 8100},
-		{id: "jagung-pipil-kering", name: "Jagung Pipil Kering", category: "PALAWIJA", unit: "kg", baseAvg: 5600, baseYest: 5400},
-		{id: "kedelai-lokal-bersih", name: "Kedelai Lokal Bersih", category: "PALAWIJA", unit: "kg", baseAvg: 11200, baseYest: 11200},
-	}
-
-	// 1. Ambil data harga acuan SP2KP Kemendag (jika tersedia)
+	// 1. Ambil seluruh data harga komoditas dari SP2KP Kemendag
 	var sp2kpPrices []domain.SP2KPCommodityPrice
 	if s.marketPriceProvider != nil {
 		sp2kpPrices, _ = s.GetMarketPrices(ctx, query)
-	}
-
-	sp2kpMap := make(map[string]domain.SP2KPCommodityPrice)
-	for _, p := range sp2kpPrices {
-		sp2kpMap[strings.ToLower(strings.TrimSpace(p.VariantNama))] = p
 	}
 
 	now := time.Now()
@@ -256,71 +236,119 @@ func (s *CommodityService) GetRealtimeDashboardPrices(ctx context.Context, query
 
 	var results []domain.DashboardCommodityPrice
 
-	for _, item := range defaults {
-		// Cek apakah ada transaksi penjualan riil di platform Tandur
-		todayAvg, todayCount := s.calculateInternalAverage(item.name, todayStart, now)
-		yestAvg, yestCount := s.calculateInternalAverage(item.name, yesterdayStart, todayStart)
+	if len(sp2kpPrices) > 0 {
+		// Tampilkan SEMUA komoditas sesuai yang ada di SP2KP Kemendag (tanpa kategori)
+		for _, sp := range sp2kpPrices {
+			todayAvg, todayCount := s.calculateInternalAverage(sp.VariantNama, todayStart, now)
+			yestAvg, yestCount := s.calculateInternalAverage(sp.VariantNama, yesterdayStart, todayStart)
 
-		var avgPrice float64
-		var yestPrice float64
-		source := "tandur_real_market"
+			avgPrice := sp.Harga
+			yestPrice := sp.HargaPembanding
+			source := "sp2kp_kemendag"
 
-		if todayCount > 0 {
-			avgPrice = todayAvg
-		}
-		if yestCount > 0 {
-			yestPrice = yestAvg
-		}
-
-		// Fallback ke data SP2KP jika belum ada transaksi internal Tandur hari ini
-		if avgPrice == 0 {
-			matched := false
-			for name, sp := range sp2kpMap {
-				if strings.Contains(name, strings.ToLower(item.name)) || strings.Contains(strings.ToLower(item.name), name) {
-					if sp.Harga > 0 {
-						avgPrice = sp.Harga
-						yestPrice = sp.HargaPembanding
-						source = "sp2kp_kemendag"
-						matched = true
-						break
-					}
-				}
-			}
-			if !matched {
-				avgPrice = item.baseAvg
-				if yestPrice == 0 {
-					yestPrice = item.baseYest
-				}
+			if todayCount > 0 {
+				avgPrice = todayAvg
 				source = "tandur_real_market"
 			}
+			if yestCount > 0 {
+				yestPrice = yestAvg
+			}
+			if yestPrice == 0 {
+				yestPrice = avgPrice
+			}
+
+			delta := avgPrice - yestPrice
+			var pct float64
+			if yestPrice > 0 {
+				pct = math.Round(((avgPrice-yestPrice)/yestPrice)*10000) / 100
+			} else {
+				pct = sp.PersenPerubahan
+			}
+
+			trend, trendLabel := formatTrendLabel(delta)
+
+			unit := sp.SatuanDisplay
+			if unit == "" {
+				unit = "kg"
+			}
+
+			commodityID := fmt.Sprintf("%d", sp.VariantID)
+			if sp.VariantID <= 0 {
+				commodityID = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(sp.VariantNama), " ", "-"))
+			}
+
+			results = append(results, domain.DashboardCommodityPrice{
+				CommodityID:      commodityID,
+				CommodityName:    sp.VariantNama,
+				Unit:             unit,
+				AveragePrice:     math.Round(avgPrice),
+				YesterdayPrice:   math.Round(yestPrice),
+				DeltaPrice:       math.Round(delta),
+				PercentageChange: pct,
+				Trend:            trend,
+				TrendLabel:       trendLabel,
+				LastUpdatedAt:    now.Format(time.RFC3339),
+				Source:           source,
+			})
+		}
+	} else {
+		// Fallback cadangan komoditas jika data SP2KP kosong / offline
+		type defaultCommodityMeta struct {
+			id       string
+			name     string
+			unit     string
+			baseAvg  float64
+			baseYest float64
 		}
 
-		if yestPrice == 0 {
-			yestPrice = avgPrice
+		defaults := []defaultCommodityMeta{
+			{id: "gabah-kering-panen", name: "Gabah Kering Panen", unit: "kg", baseAvg: 7200, baseYest: 7050},
+			{id: "gabah-kering-giling", name: "Gabah Kering Giling", unit: "kg", baseAvg: 8100, baseYest: 8100},
+			{id: "jagung-pipil-kering", name: "Jagung Pipil Kering", unit: "kg", baseAvg: 5600, baseYest: 5400},
+			{id: "kedelai-lokal-bersih", name: "Kedelai Lokal Bersih", unit: "kg", baseAvg: 11200, baseYest: 11200},
 		}
 
-		delta := avgPrice - yestPrice
-		var pct float64
-		if yestPrice > 0 {
-			pct = math.Round(((avgPrice-yestPrice)/yestPrice)*10000) / 100
+		for _, item := range defaults {
+			todayAvg, todayCount := s.calculateInternalAverage(item.name, todayStart, now)
+			yestAvg, yestCount := s.calculateInternalAverage(item.name, yesterdayStart, todayStart)
+
+			avgPrice := item.baseAvg
+			yestPrice := item.baseYest
+			source := "sp2kp_kemendag"
+
+			if todayCount > 0 {
+				avgPrice = todayAvg
+				source = "tandur_real_market"
+			}
+			if yestCount > 0 {
+				yestPrice = yestAvg
+			}
+			if yestPrice == 0 {
+				yestPrice = avgPrice
+			}
+
+			delta := avgPrice - yestPrice
+			var pct float64
+			if yestPrice > 0 {
+				pct = math.Round(((avgPrice-yestPrice)/yestPrice)*10000) / 100
+			}
+
+			trend, trendLabel := formatTrendLabel(delta)
+
+			results = append(results, domain.DashboardCommodityPrice{
+				CommodityID:      item.id,
+				CommodityName:    item.name,
+				Unit:             item.unit,
+				AveragePrice:     math.Round(avgPrice),
+				YesterdayPrice:   math.Round(yestPrice),
+				DeltaPrice:       math.Round(delta),
+				PercentageChange: pct,
+				Trend:            trend,
+				TrendLabel:       trendLabel,
+				LastUpdatedAt:    now.Format(time.RFC3339),
+				Source:           source,
+			})
 		}
-
-		trend, trendLabel := formatTrendLabel(delta)
-
-		results = append(results, domain.DashboardCommodityPrice{
-			CommodityID:      item.id,
-			CommodityName:    item.name,
-			Category:         item.category,
-			Unit:             item.unit,
-			AveragePrice:     math.Round(avgPrice),
-			YesterdayPrice:   math.Round(yestPrice),
-			DeltaPrice:       math.Round(delta),
-			PercentageChange: pct,
-			Trend:            trend,
-			TrendLabel:       trendLabel,
-			LastUpdatedAt:    now.Format(time.RFC3339),
-			Source:           source,
-		})
 	}
 
 	// Simpan ke cache 10 menit

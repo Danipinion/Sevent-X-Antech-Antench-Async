@@ -1082,7 +1082,6 @@
         "required": [
           "commodity_id",
           "commodity_name",
-          "category",
           "unit",
           "average_price",
           "yesterday_price",
@@ -1096,15 +1095,11 @@
         "properties": {
           "commodity_id": {
             "type": "string",
-            "example": "gabah-kering-panen"
+            "example": "52"
           },
           "commodity_name": {
             "type": "string",
-            "example": "Gabah Kering Panen"
-          },
-          "category": {
-            "type": "string",
-            "example": "PADI / BERAS"
+            "example": "Beras Medium"
           },
           "unit": {
             "type": "string",

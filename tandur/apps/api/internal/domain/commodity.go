@@ -89,7 +89,6 @@ const (
 type DashboardCommodityPrice struct {
 	CommodityID      string     `json:"commodity_id"`
 	CommodityName    string     `json:"commodity_name"`
-	Category         string     `json:"category"`
 	Unit             string     `json:"unit"`
 	AveragePrice     float64    `json:"average_price"`
 	YesterdayPrice   float64    `json:"yesterday_price"`
