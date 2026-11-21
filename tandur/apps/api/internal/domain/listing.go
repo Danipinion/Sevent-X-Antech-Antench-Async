@@ -32,6 +32,7 @@ type FarmerListing struct {
 	FarmerID               string        `json:"farmer_id"`
 	CommodityID            string        `json:"commodity_id"`
 	CommodityName          string        `json:"commodity_name,omitempty"`
+	Category               string        `json:"category,omitempty"`
 	Title                  string        `json:"title"`
 	Description            string        `json:"description,omitempty"`
 	EstimatedQuantity      float64       `json:"estimated_quantity"`
@@ -54,6 +55,8 @@ type FarmerListing struct {
 
 type CreateListingInput struct {
 	CommodityID          string   `json:"commodity_id" form:"commodity_id"`
+	CommodityName        string   `json:"commodity_name,omitempty" form:"commodity_name"`
+	Category             string   `json:"category,omitempty" form:"category"`
 	Title                string   `json:"title" form:"title"`
 	Description          string   `json:"description" form:"description"`
 	EstimatedQuantity    float64  `json:"estimated_quantity" form:"estimated_quantity"`
@@ -69,6 +72,9 @@ type CreateListingInput struct {
 }
 
 type UpdateListingInput struct {
+	CommodityID          *string   `json:"commodity_id,omitempty" form:"commodity_id"`
+	CommodityName        *string   `json:"commodity_name,omitempty" form:"commodity_name"`
+	Category             *string   `json:"category,omitempty" form:"category"`
 	Title                *string   `json:"title,omitempty" form:"title"`
 	Description          *string   `json:"description,omitempty" form:"description"`
 	EstimatedQuantity    *float64  `json:"estimated_quantity,omitempty" form:"estimated_quantity"`

@@ -1725,8 +1725,11 @@ components:
           example: e445499d-4f26-424c-9e70-10ffcc8b2a35
         commodity_id:
           type: string
-          example: 1810b74b-a268-436a-b3dc-c2f7a08ff9fe
+          example: gabah-kering-panen
         commodity_name:
+          type: string
+          example: Gabah GKP
+        category:
           type: string
           example: Gabah GKP
         title:
@@ -1793,7 +1796,13 @@ components:
       properties:
         commodity_id:
           type: string
-          example: 1810b74b-a268-436a-b3dc-c2f7a08ff9fe
+          example: gabah-kering-panen
+        commodity_name:
+          type: string
+          example: Gabah GKP
+        category:
+          type: string
+          example: Gabah GKP
         title:
           type: string
           example: Gabah GKP Super Siap Panen Kualitas Prima
@@ -1845,6 +1854,15 @@ components:
     UpdateListingInput:
       type: object
       properties:
+        commodity_id:
+          type: string
+          example: gabah-kering-panen
+        commodity_name:
+          type: string
+          example: Gabah GKP
+        category:
+          type: string
+          example: Gabah GKP
         title:
           type: string
           example: Gabah GKP Super Siap Panen Update

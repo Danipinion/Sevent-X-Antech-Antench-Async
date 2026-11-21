@@ -140,10 +140,48 @@ func NewCommodityService(repo domain.CommodityRepository, optional ...interface{
 }
 
 func (s *CommodityService) ListCommodities(ctx context.Context) ([]domain.Commodity, error) {
+	// Mengacu langsung pada data harga pasar (market-prices / SP2KP)
+	marketPrices, err := s.GetRealtimeDashboardPrices(ctx, domain.MarketPriceQuery{})
+	if err == nil && len(marketPrices) > 0 {
+		commodities := make([]domain.Commodity, 0, len(marketPrices))
+		for _, mp := range marketPrices {
+			commodities = append(commodities, domain.Commodity{
+				ID:                 mp.CommodityID,
+				Name:               mp.CommodityName,
+				Category:           mp.CommodityName, // Kategori langsung sama dengan nama komoditas sesuai acuan market price
+				Unit:               mp.Unit,
+				BasePrice:          mp.YesterdayPrice,
+				CurrentMarketPrice: mp.AveragePrice,
+				CreatedAt:          time.Now(),
+				UpdatedAt:          time.Now(),
+			})
+		}
+		return commodities, nil
+	}
+
 	return s.repo.GetAll(ctx)
 }
 
 func (s *CommodityService) GetCommodity(ctx context.Context, id string) (*domain.Commodity, error) {
+	cleanID := strings.TrimSpace(id)
+	marketPrices, err := s.GetRealtimeDashboardPrices(ctx, domain.MarketPriceQuery{})
+	if err == nil && len(marketPrices) > 0 {
+		for _, mp := range marketPrices {
+			if strings.EqualFold(mp.CommodityID, cleanID) || strings.EqualFold(mp.CommodityName, cleanID) {
+				return &domain.Commodity{
+					ID:                 mp.CommodityID,
+					Name:               mp.CommodityName,
+					Category:           mp.CommodityName,
+					Unit:               mp.Unit,
+					BasePrice:          mp.YesterdayPrice,
+					CurrentMarketPrice: mp.AveragePrice,
+					CreatedAt:          time.Now(),
+					UpdatedAt:          time.Now(),
+				}, nil
+			}
+		}
+	}
+
 	return s.repo.GetByID(ctx, id)
 }
 

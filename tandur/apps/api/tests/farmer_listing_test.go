@@ -433,8 +433,9 @@ func TestHTTP_FarmerListing_Endpoints(t *testing.T) {
 
 	// 2. Publikasi Penjualan Panen (POST /farmer/listings)
 	createPayload := fmt.Sprintf(`{
-		"commodity_id": "gabah-gkp",
-		"title": "Gabah GKP Super Siap Panen",
+		"commodity_id": "gabah-kering-panen",
+		"commodity_name": "Gabah GKP",
+		"title": "Gabah GKP Super Siap Panen Kualitas Prima",
 		"description": "Varietas Inpari 32",
 		"estimated_quantity": 8500,
 		"price_per_unit": 7300,
@@ -454,6 +455,10 @@ func TestHTTP_FarmerListing_Endpoints(t *testing.T) {
 	var createResp struct {
 		Data struct {
 			ID                    string  `json:"id"`
+			CommodityID           string  `json:"commodity_id"`
+			CommodityName         string  `json:"commodity_name"`
+			Category              string  `json:"category"`
+			Title                 string  `json:"title"`
 			EstimatedGrossRevenue float64 `json:"estimated_gross_revenue"`
 		} `json:"data"`
 	}
@@ -461,6 +466,15 @@ func TestHTTP_FarmerListing_Endpoints(t *testing.T) {
 	listingID := createResp.Data.ID
 	if createResp.Data.EstimatedGrossRevenue != 62050000 {
 		t.Errorf("Expected gross revenue 62.050.000, got %f", createResp.Data.EstimatedGrossRevenue)
+	}
+	if createResp.Data.CommodityName != "Gabah GKP" {
+		t.Errorf("Expected CommodityName Gabah GKP, got %s", createResp.Data.CommodityName)
+	}
+	if createResp.Data.Category != "Gabah GKP" {
+		t.Errorf("Expected Category Gabah GKP, got %s", createResp.Data.Category)
+	}
+	if createResp.Data.Title != "Gabah GKP Super Siap Panen Kualitas Prima" {
+		t.Errorf("Expected Title to be custom farmer title, got %s", createResp.Data.Title)
 	}
 
 	// 3. GET /farmer/listings dengan Pagination

@@ -229,7 +229,17 @@ func (s *FarmerService) CreateHarvestListing(ctx context.Context, userID string,
 		return nil, err
 	}
 
-	// 5. Hitung estimasi pendapatan kotor (Bobot * Harga/kg)
+	// 5. Tentukan nama komoditas dan kategori (kategori sama dengan nama komoditas sesuai acuan market price)
+	commodityName := strings.TrimSpace(input.CommodityName)
+	if commodityName == "" {
+		commodityName = cleanCommodityID
+	}
+	category := strings.TrimSpace(input.Category)
+	if category == "" {
+		category = commodityName
+	}
+
+	// 6. Hitung estimasi pendapatan kotor (Bobot * Harga/kg)
 	grossRevenue := input.EstimatedQuantity * input.PricePerUnit
 
 	readyDate := strings.TrimSpace(input.ReadyDate)
@@ -241,6 +251,8 @@ func (s *FarmerService) CreateHarvestListing(ctx context.Context, userID string,
 		ID:                    uuid.New().String(),
 		FarmerID:              user.ID,
 		CommodityID:           cleanCommodityID,
+		CommodityName:         commodityName,
+		Category:              category,
 		Title:                 cleanTitle,
 		Description:           strings.TrimSpace(input.Description),
 		EstimatedQuantity:     input.EstimatedQuantity,
@@ -370,6 +382,18 @@ func (s *FarmerService) UpdateHarvestListing(ctx context.Context, userID string,
 	// Guard: Hanya boleh diupdate jika status masih draft atau published
 	if listing.Status != domain.ListingStatusDraft && listing.Status != domain.ListingStatusPublished {
 		return nil, domain.ErrListingNotEditable
+	}
+
+	if input.CommodityID != nil && strings.TrimSpace(*input.CommodityID) != "" {
+		listing.CommodityID = strings.TrimSpace(*input.CommodityID)
+	}
+	if input.CommodityName != nil && strings.TrimSpace(*input.CommodityName) != "" {
+		listing.CommodityName = strings.TrimSpace(*input.CommodityName)
+	}
+	if input.Category != nil && strings.TrimSpace(*input.Category) != "" {
+		listing.Category = strings.TrimSpace(*input.Category)
+	} else if input.CommodityName != nil && strings.TrimSpace(*input.CommodityName) != "" {
+		listing.Category = strings.TrimSpace(*input.CommodityName)
 	}
 
 	if input.Title != nil && strings.TrimSpace(*input.Title) != "" {

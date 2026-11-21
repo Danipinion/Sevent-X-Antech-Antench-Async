@@ -23,17 +23,19 @@ func NewPostgresListingRepository(pool *pgxpool.Pool) *PostgresListingRepository
 func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.FarmerListing) error {
 	query := `
 		INSERT INTO farmer_listings (
-			id, farmer_id, commodity_id, title, description,
+			id, farmer_id, commodity_id, commodity_name, category,
+			title, description,
 			estimated_quantity, available_quantity, min_order_quantity, unit,
 			price_per_unit, estimated_gross_revenue, estimated_harvest_date,
 			pickup_address, media_urls, status, location, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9,
-			$10, $11, NULLIF($12, '')::DATE,
-			$13, $14, $15,
-			ST_SetSRID(ST_MakePoint($16, $17), 4326)::geography,
-			$18, $19
+			$6, $7,
+			$8, $9, $10, $11,
+			$12, $13, NULLIF($14, '')::DATE,
+			$15, $16, $17,
+			ST_SetSRID(ST_MakePoint($18, $19), 4326)::geography,
+			$20, $21
 		)
 		RETURNING id, created_at, updated_at;
 	`
@@ -49,6 +51,8 @@ func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.
 		listing.ID,
 		listing.FarmerID,
 		listing.CommodityID,
+		listing.CommodityName,
+		listing.Category,
 		listing.Title,
 		listing.Description,
 		listing.EstimatedQuantity,
@@ -78,7 +82,9 @@ func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.
 func (r *PostgresListingRepository) GetByID(ctx context.Context, id string) (*domain.FarmerListing, error) {
 	query := `
 		SELECT 
-			fl.id, fl.farmer_id, fl.commodity_id, COALESCE(c.name, '') AS commodity_name,
+			fl.id, fl.farmer_id, fl.commodity_id, 
+			COALESCE(fl.commodity_name, c.name, '') AS commodity_name,
+			COALESCE(fl.category, fl.commodity_name, c.name, '') AS category,
 			fl.title, COALESCE(fl.description, '') AS description,
 			fl.estimated_quantity, fl.available_quantity, fl.min_order_quantity, fl.unit,
 			fl.price_per_unit, fl.estimated_gross_revenue,
@@ -90,14 +96,14 @@ func (r *PostgresListingRepository) GetByID(ctx context.Context, id string) (*do
 			ST_X(fl.location::geometry) AS longitude,
 			fl.created_at, fl.updated_at, fl.deleted_at
 		FROM farmer_listings fl
-		LEFT JOIN commodities c ON c.id = fl.commodity_id
+		LEFT JOIN commodities c ON c.id::text = fl.commodity_id
 		WHERE fl.id = $1 AND fl.deleted_at IS NULL;
 	`
 
 	var l domain.FarmerListing
 	var statusStr string
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&l.ID, &l.FarmerID, &l.CommodityID, &l.CommodityName,
+		&l.ID, &l.FarmerID, &l.CommodityID, &l.CommodityName, &l.Category,
 		&l.Title, &l.Description,
 		&l.EstimatedQuantity, &l.AvailableQuantity, &l.MinOrderQuantity, &l.Unit,
 		&l.PricePerUnit, &l.EstimatedGrossRevenue,
@@ -136,7 +142,9 @@ func (r *PostgresListingRepository) List(ctx context.Context, filter domain.List
 
 	query := `
 		SELECT 
-			fl.id, fl.farmer_id, fl.commodity_id, COALESCE(c.name, '') AS commodity_name,
+			fl.id, fl.farmer_id, fl.commodity_id, 
+			COALESCE(fl.commodity_name, c.name, '') AS commodity_name,
+			COALESCE(fl.category, fl.commodity_name, c.name, '') AS category,
 			fl.title, COALESCE(fl.description, '') AS description,
 			fl.estimated_quantity, fl.available_quantity, fl.min_order_quantity, fl.unit,
 			fl.price_per_unit, fl.estimated_gross_revenue,
@@ -149,11 +157,11 @@ func (r *PostgresListingRepository) List(ctx context.Context, filter domain.List
 			fl.created_at, fl.updated_at, fl.deleted_at,
 			COUNT(*) OVER() AS total_count
 		FROM farmer_listings fl
-		LEFT JOIN commodities c ON c.id = fl.commodity_id
+		LEFT JOIN commodities c ON c.id::text = fl.commodity_id
 		WHERE fl.deleted_at IS NULL
 		  AND ($1 = '' OR fl.farmer_id = $1::UUID)
 		  AND ($2 = '' OR $2 = 'all' OR fl.status = $2)
-		  AND ($3 = '' OR fl.commodity_id = $3::UUID)
+		  AND ($3 = '' OR fl.commodity_id = $3)
 		ORDER BY fl.created_at DESC
 		LIMIT $4 OFFSET $5;
 	`
@@ -171,7 +179,7 @@ func (r *PostgresListingRepository) List(ctx context.Context, filter domain.List
 		var l domain.FarmerListing
 		var statusStr string
 		err := rows.Scan(
-			&l.ID, &l.FarmerID, &l.CommodityID, &l.CommodityName,
+			&l.ID, &l.FarmerID, &l.CommodityID, &l.CommodityName, &l.Category,
 			&l.Title, &l.Description,
 			&l.EstimatedQuantity, &l.AvailableQuantity, &l.MinOrderQuantity, &l.Unit,
 			&l.PricePerUnit, &l.EstimatedGrossRevenue,
@@ -216,24 +224,30 @@ func (r *PostgresListingRepository) Update(ctx context.Context, listing *domain.
 	query := `
 		UPDATE farmer_listings
 		SET 
-			title = $1,
-			description = $2,
-			estimated_quantity = $3,
-			available_quantity = $4,
-			min_order_quantity = $5,
-			price_per_unit = $6,
-			estimated_gross_revenue = $7,
-			estimated_harvest_date = NULLIF($8, '')::DATE,
-			pickup_address = $9,
-			media_urls = $10,
-			location = ST_SetSRID(ST_MakePoint($11, $12), 4326)::geography,
+			commodity_id = $1,
+			commodity_name = $2,
+			category = $3,
+			title = $4,
+			description = $5,
+			estimated_quantity = $6,
+			available_quantity = $7,
+			min_order_quantity = $8,
+			price_per_unit = $9,
+			estimated_gross_revenue = $10,
+			estimated_harvest_date = NULLIF($11, '')::DATE,
+			pickup_address = $12,
+			media_urls = $13,
+			location = ST_SetSRID(ST_MakePoint($14, $15), 4326)::geography,
 			updated_at = NOW()
-		WHERE id = $13 AND farmer_id = $14 AND deleted_at IS NULL;
+		WHERE id = $16 AND farmer_id = $17 AND deleted_at IS NULL;
 	`
 
 	cmd, err := r.pool.Exec(
 		ctx,
 		query,
+		listing.CommodityID,
+		listing.CommodityName,
+		listing.Category,
 		listing.Title,
 		listing.Description,
 		listing.EstimatedQuantity,
