@@ -49,7 +49,7 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		authService:      authService,
 		farmerService:    fs,
 		storage:          objStorage,
-		authHandler:      NewAuthHandler(authService),
+		authHandler:      NewAuthHandler(authService, objStorage),
 	}
 }
 
@@ -74,6 +74,14 @@ func (h *Handler) Login(c fiber.Ctx) error {
 
 func (h *Handler) Me(c fiber.Ctx) error {
 	return h.authHandler.Me(c)
+}
+
+func (h *Handler) UpdateProfile(c fiber.Ctx) error {
+	return h.authHandler.UpdateProfile(c)
+}
+
+func (h *Handler) UploadProfilePhoto(c fiber.Ctx) error {
+	return h.authHandler.UploadProfilePhoto(c)
 }
 
 func (h *Handler) Logout(c fiber.Ctx) error {

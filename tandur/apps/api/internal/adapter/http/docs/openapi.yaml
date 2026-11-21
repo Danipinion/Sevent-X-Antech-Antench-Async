@@ -692,6 +692,161 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /auth/profile:
+    put:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Update Profil Pengguna
+      description: 'Memperbarui data diri pengguna seperti nama lengkap, nomor handphone, foto profil (avatar_url atau upload file), status bisnis, serta informasi alamat lokasi. Data sensitif seperti NIK, role, dan password dilindungi dan tidak dapat diubah melalui endpoint ini.'
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            example:
+              name: Pak Slamet Petani Makmur
+              phone: 081399998888
+              avatar_url: https://storage.tandur.com/avatars/new-profile.jpg
+              is_bisnis: false
+              address: Jl. Pertanian Modern No. 5
+              latitude: -6.7456
+              longitude: 107.0872
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                is_bisnis:
+                  type: boolean
+                avatar:
+                  type: string
+                  format: binary
+                  description: Berkas gambar foto profil baru (JPG, PNG, atau WEBP, maks 5 MB)
+                address:
+                  type: string
+                latitude:
+                  type: number
+                  format: double
+                longitude:
+                  type: number
+                  format: double
+      responses:
+        '200':
+          description: Profil pengguna berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Profil pengguna berhasil diperbarui
+                  data:
+                    $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Data masukan tidak valid atau mencoba mengubah data sensitif (NIK, role, password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Pengguna tidak terautentikasi atau token tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Nomor handphone baru sudah digunakan oleh pengguna lain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Update Sebagian Profil Pengguna
+      description: Memperbarui sebagian field profil pengguna (identik dengan PUT /auth/profile).
+      security:
+      - BearerAuth: []
+      requestBody:
+        $ref: '#/paths/~1auth~1profile/put/requestBody'
+      responses:
+        '200':
+          $ref: '#/paths/~1auth~1profile/put/responses/200'
+        '400':
+          $ref: '#/paths/~1auth~1profile/put/responses/400'
+        '401':
+          $ref: '#/paths/~1auth~1profile/put/responses/401'
+        '409':
+          $ref: '#/paths/~1auth~1profile/put/responses/409'
+  /auth/profile/photo:
+    post:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Upload dan Ganti Foto Profil Pengguna
+      description: Mengunggah berkas foto profil baru (JPG, PNG, WEBP, maks 5 MB) dan langsung memperbarui foto profil pengguna aktif.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - avatar
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: Berkas gambar foto profil baru (JPG, PNG, WEBP maks 5 MB)
+      responses:
+        '200':
+          description: Foto profil berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Foto profil berhasil diperbarui
+                  data:
+                    type: object
+                    properties:
+                      avatar_url:
+                        type: string
+                        example: http://localhost:3900/tandur/avatars/user-id/random.jpg
+                      user:
+                        $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Berkas foto tidak valid atau bukan gambar yang diizinkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Pengguna tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /farmer/verification:
     get:
       tags:
@@ -1451,6 +1606,10 @@ components:
         can_sell_harvest:
           type: boolean
           example: true
+        avatar_url:
+          type: string
+          nullable: true
+          example: https://storage.tandur.com/avatars/user-avatar.jpg
         ktp_photo_url:
           type: string
           nullable: true
@@ -1633,6 +1792,55 @@ components:
           example: '2026-11-23T15:30:00Z'
         user:
           $ref: '#/components/schemas/User'
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+          description: Nama lengkap pengguna
+          example: Pak Slamet Petani Makmur
+        phone:
+          type: string
+          maxLength: 13
+          description: Nomor Handphone 10-13 digit
+          example: '081399998888'
+        avatar_url:
+          type: string
+          description: URL tautan foto profil baru
+          example: https://storage.tandur.com/avatars/new-profile.jpg
+        is_bisnis:
+          type: boolean
+          description: Status akun bisnis/perorangan
+          example: false
+        label:
+          type: string
+          description: Label penamaan lokasi (cth. Kebun Utama, Rumah, Gudang)
+          example: Rumah Utama
+        address:
+          type: string
+          description: Alamat lengkap lokasi pengguna
+          example: Jl. Pertanian Modern No. 5
+        village:
+          type: string
+          example: Cikanyere
+        district:
+          type: string
+          example: Sukaresmi
+        city:
+          type: string
+          example: Kabupaten Cianjur
+        province:
+          type: string
+          example: Jawa Barat
+        latitude:
+          type: number
+          format: double
+          example: -6.7456
+        longitude:
+          type: number
+          format: double
+          example: 107.0872
     FarmerVerificationInput:
       type: object
       required:
@@ -1692,6 +1900,10 @@ components:
         can_sell_harvest:
           type: boolean
           example: true
+        avatar_url:
+          type: string
+          nullable: true
+          example: https://storage.tandur.com/avatars/user-avatar.jpg
         ktp_photo_url:
           type: string
           example: https://storage.tandur.com/ktp/3321041405760002.jpg

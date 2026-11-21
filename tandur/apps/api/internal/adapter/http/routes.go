@@ -49,6 +49,9 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	auth.Post("/login", handler.Login)
 	auth.Post("/logout", handler.Logout, handler.AuthMiddleware())
 	auth.Get("/me", handler.Me, handler.AuthMiddleware())
+	auth.Put("/profile", handler.UpdateProfile, handler.AuthMiddleware())
+	auth.Patch("/profile", handler.UpdateProfile, handler.AuthMiddleware())
+	auth.Post("/profile/photo", handler.UploadProfilePhoto, handler.AuthMiddleware())
 
 	// Farmer Routing
 	farmer := v1.Group("/farmer", handler.AuthMiddleware())

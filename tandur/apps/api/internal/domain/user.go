@@ -39,6 +39,7 @@ type User struct {
 	PasswordHash       string             `json:"-"`
 	Role               UserRole           `json:"role"`
 	IsBisnis           bool               `json:"is_bisnis"`
+	AvatarURL          *string            `json:"avatar_url,omitempty"`
 	IsActive           bool               `json:"is_active"`
 	IsVerified         bool               `json:"is_verified"`
 	VerificationStatus VerificationStatus `json:"verification_status"`
@@ -109,4 +110,5 @@ type UserRepository interface {
 	GetByNIK(ctx context.Context, nik string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 	UpdateVerification(ctx context.Context, user *User) error
+	UpdateProfile(ctx context.Context, user *User, location *UserLocation) error
 }
