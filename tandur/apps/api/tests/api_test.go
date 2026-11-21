@@ -338,3 +338,59 @@ func TestHTTP_MarketPricesEndpoints(t *testing.T) {
 		t.Errorf("Unexpected POST response: %+v", resPOST)
 	}
 }
+
+type countingMarketPriceProvider struct {
+	callCount int
+	data      []domain.SP2KPCommodityPrice
+}
+
+func (c *countingMarketPriceProvider) GetCommodityPrices(ctx context.Context, query domain.MarketPriceQuery) ([]domain.SP2KPCommodityPrice, error) {
+	c.callCount++
+	return c.data, nil
+}
+
+func TestCommodityService_GetMarketPrices_6HoursCache(t *testing.T) {
+	provider := &countingMarketPriceProvider{
+		data: []domain.SP2KPCommodityPrice{
+			{
+				VariantID:   2,
+				VariantNama: "Cabai Merah Keriting",
+				Harga:       48667,
+			},
+		},
+	}
+
+	repo := persistence.NewMemoryCommodityRepository()
+	service := application.NewCommodityService(repo, provider)
+
+	query := domain.MarketPriceQuery{
+		Tanggal:           "2026-11-20",
+		TanggalPembanding: "2026-11-19",
+		KodeProvinsi:      "35",
+		KodeKabKota:       "3519",
+	}
+
+	// 1. Panggilan pertama: Cache Miss -> Harus memanggil provider (callCount = 1)
+	prices1, err := service.GetMarketPrices(context.Background(), query)
+	if err != nil {
+		t.Fatalf("First call failed: %v", err)
+	}
+	if len(prices1) != 1 || prices1[0].Harga != 48667 {
+		t.Errorf("Unexpected first call prices: %+v", prices1)
+	}
+	if provider.callCount != 1 {
+		t.Errorf("Expected callCount to be 1 after first call, got %d", provider.callCount)
+	}
+
+	// 2. Panggilan kedua dengan query yang sama: Cache Hit -> Mengambil dari cache, provider TIDAK boleh dipanggil lagi (callCount tetap 1)
+	prices2, err := service.GetMarketPrices(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Second call failed: %v", err)
+	}
+	if len(prices2) != 1 || prices2[0].Harga != 48667 {
+		t.Errorf("Unexpected second call prices: %+v", prices2)
+	}
+	if provider.callCount != 1 {
+		t.Errorf("Expected callCount to still be 1 (cache hit), but got %d", provider.callCount)
+	}
+}

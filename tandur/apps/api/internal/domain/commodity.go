@@ -69,3 +69,9 @@ type MarketPriceQuery struct {
 type MarketPriceProvider interface {
 	GetCommodityPrices(ctx context.Context, query MarketPriceQuery) ([]SP2KPCommodityPrice, error)
 }
+
+// MarketPriceCache mendefinisikan kontrak penyimpanan cache harga pasar komoditas
+type MarketPriceCache interface {
+	GetMarketPrices(ctx context.Context, key string) ([]SP2KPCommodityPrice, bool)
+	SetMarketPrices(ctx context.Context, key string, prices []SP2KPCommodityPrice, ttl time.Duration) error
+}

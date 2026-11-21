@@ -38,8 +38,10 @@ func Load() *Config {
 	_ = godotenv.Load(".env", "../../.env")
 
 	defaultHost := "localhost"
+	defaultRedisHost := "localhost"
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		defaultHost = "postgres"
+		defaultRedisHost = "redis"
 	}
 
 	cfg := &Config{
@@ -54,7 +56,7 @@ func Load() *Config {
 		DatabasePass:   getEnv("POSTGRES_PASSWORD", getEnv("DATABASE_PASSWORD", "change_me")),
 		DatabaseSSL:    getEnv("DATABASE_SSLMODE", "disable"),
 		RedisURL:       getEnv("REDIS_URL", ""),
-		RedisHost:      getEnv("REDIS_HOST", "redis"),
+		RedisHost:      getEnv("REDIS_HOST", defaultRedisHost),
 		RedisPort:      getEnv("REDIS_PORT", "6379"),
 		RedisPass:      getEnv("REDIS_PASSWORD", ""),
 		S3Endpoint:     getEnv("S3_ENDPOINT", "http://garage:3900"),

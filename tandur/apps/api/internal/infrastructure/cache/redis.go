@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"tandur/api/internal/domain"
 	"tandur/api/internal/infrastructure/config"
 )
 
@@ -52,4 +54,27 @@ func (r *RedisClient) IsBlacklisted(ctx context.Context, token string) (bool, er
 		return false, err
 	}
 	return n > 0, nil
+}
+
+// GetMarketPrices mengambil data harga pasar komoditas dari cache Redis
+func (r *RedisClient) GetMarketPrices(ctx context.Context, key string) ([]domain.SP2KPCommodityPrice, bool) {
+	val, err := r.client.Get(ctx, key).Result()
+	if err != nil || val == "" {
+		return nil, false
+	}
+
+	var prices []domain.SP2KPCommodityPrice
+	if err := json.Unmarshal([]byte(val), &prices); err != nil {
+		return nil, false
+	}
+	return prices, true
+}
+
+// SetMarketPrices menyimpan data harga pasar komoditas ke cache Redis dengan durasi TTL tertentu
+func (r *RedisClient) SetMarketPrices(ctx context.Context, key string, prices []domain.SP2KPCommodityPrice, ttl time.Duration) error {
+	b, err := json.Marshal(prices)
+	if err != nil {
+		return err
+	}
+	return r.client.Set(ctx, key, string(b), ttl).Err()
 }
