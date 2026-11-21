@@ -11,9 +11,22 @@ servers:
     description: Development Server Local
   - url: /api/v1
     description: Traefik Proxy Path
+tags:
+  - name: "Autentikasi & Pengguna"
+    description: "Endpoint registrasi akun, autentikasi login (No HP / NIK), informasi sesi pengguna (/auth/me), dan pencabutan sesi (logout)."
+  - name: "Pantauan Harga & Komoditas"
+    description: "Katalog komoditas pangan, pantauan harga pasar riil (dashboard realtime update 10 menit), panduan batas margin harga jual, dan acuan harga SP2KP Kemendag."
+  - name: "Verifikasi Kemitraan Petani"
+    description: "Pemeriksaan status verifikasi identitas petani dan pengajuan dokumen e-KTP terenkripsi AES-256-GCM ke Garage S3 untuk membuka kuota jual panen."
+  - name: "Penjualan Panen Petani"
+    description: "Manajemen listing hasil panen milik petani yang siap ditransaksikan ke pembeli/tengkulak, diproteksi guard verifikasi kemitraan."
+  - name: "Sistem & Pemantauan"
+    description: "Pemeriksaan kesehatan sistem (healthcheck), konektivitas database PostgreSQL + PostGIS, dan cache Redis."
 paths:
   /health:
     get:
+      tags:
+        - "Sistem & Pemantauan"
       summary: Healthcheck Status Server
       description: Memeriksa ketersediaan API backend dan koneksi database.
       responses:
@@ -49,6 +62,8 @@ paths:
                     $ref: "./schemas/error.yaml#/Meta"
   /commodities:
     get:
+      tags:
+        - "Pantauan Harga & Komoditas"
       summary: Daftar Seluruh Komoditas
       description: Mengambil daftar komoditas pertanian beserta acuan harga dasar dan harga pasar.
       responses:
@@ -73,6 +88,8 @@ paths:
                     $ref: "./schemas/error.yaml#/Meta"
   /commodities/realtime-prices:
     get:
+      tags:
+        - "Pantauan Harga & Komoditas"
       summary: Pantauan Harga Pasar Riil Komoditas (Dashboard Petani)
       description: >
         Mengambil pantauan harga pasar riil komoditas pertanian (Gabah Kering Panen, GKG, Jagung Pipil, Kedelai Lokal)
@@ -114,6 +131,8 @@ paths:
                     $ref: "./schemas/error.yaml#/Meta"
   /commodities/price-guide:
     get:
+      tags:
+        - "Pantauan Harga & Komoditas"
       summary: Panduan Batas Margin Harga Jual Panen
       description: >
         Mengambil rekomendasi batas harga jual terendah dan tertinggi (toleransi ±15%)
@@ -160,6 +179,8 @@ paths:
                     $ref: "./schemas/error.yaml#/Meta"
   /commodities/market-prices:
     get:
+      tags:
+        - "Pantauan Harga & Komoditas"
       summary: Harga Pasar Komoditas Terbaru (SP2KP Kemendag)
       description: >
         Mengambil data perbandingan harga komoditas pangan dan pertanian dari SP2KP Kemendag RI
@@ -220,6 +241,8 @@ paths:
               schema:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
     post:
+      tags:
+        - "Pantauan Harga & Komoditas"
       summary: Query Harga Pasar Komoditas (SP2KP Kemendag)
       description: Mengambil data perbandingan harga komoditas melalui JSON payload body atau Form parameters.
       parameters:
@@ -298,6 +321,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /commodities/{id}:
     get:
+      tags:
+        - "Pantauan Harga & Komoditas"
       summary: Detail Komoditas
       parameters:
         - name: id
@@ -331,6 +356,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /auth/register:
     post:
+      tags:
+        - "Autentikasi & Pengguna"
       summary: Registrasi Akun Pengguna Baru
       description: >
         Mendaftarkan akun baru (farmer, middleman, atau buyer) beserta informasi lokasi opsional.
@@ -488,6 +515,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /auth/login:
     post:
+      tags:
+        - "Autentikasi & Pengguna"
       summary: Login Pengguna
       description: >
         Autentikasi pengguna menggunakan Nomor Handphone atau NIK sebagai username dan password.
@@ -565,6 +594,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /auth/me:
     get:
+      tags:
+        - "Autentikasi & Pengguna"
       summary: Profil Pengguna Aktif (Sesi JWT)
       description: Mengambil data profil pengguna yang saat ini sedang login berdasarkan token JWT di header Authorization.
       security:
@@ -601,6 +632,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /auth/logout:
     post:
+      tags:
+        - "Autentikasi & Pengguna"
       summary: Logout Pengguna
       description: >
         Mengakhiri sesi pengguna aktif dan memasukkan token JWT ke dalam daftar hitam (blacklist)
@@ -634,6 +667,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /farmer/verification:
     get:
+      tags:
+        - "Verifikasi Kemitraan Petani"
       summary: Status Verifikasi Kemitraan Petani
       description: Memeriksa status verifikasi identitas e-KTP petani, hasil pembacaan OCR, dan hak jual panen.
       security:
@@ -663,6 +698,8 @@ paths:
               schema:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
     post:
+      tags:
+        - "Verifikasi Kemitraan Petani"
       summary: Kirim Dokumen Verifikasi e-KTP Petani
       description: Mengunggah berkas foto e-KTP asli dan data kependudukan hasil pembacaan OCR untuk mengaktifkan status kemitraan resmi dan membuka kuota jual panen.
       security:
@@ -714,6 +751,8 @@ paths:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
   /farmer/listings:
     get:
+      tags:
+        - "Penjualan Panen Petani"
       summary: Daftar Hasil Panen Petani
       description: Mengambil seluruh daftar hasil panen yang didaftarkan oleh petani yang sedang login.
       security:
@@ -736,6 +775,8 @@ paths:
                   meta:
                     $ref: "./schemas/error.yaml#/Meta"
     post:
+      tags:
+        - "Penjualan Panen Petani"
       summary: Jual Hasil Panen (Daftarkan Listing Panen)
       description: Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus terverifikasi (e-KTP diverifikasi) untuk dapat menggunakan fitur ini.
       security:
