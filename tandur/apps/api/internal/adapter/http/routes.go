@@ -37,6 +37,8 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	v1.Get("/swagger", docsHandler.SwaggerUI)
 	v1.Get("/docs", docsHandler.SwaggerUI)
 	v1.Get("/commodities", handler.ListCommodities)
+	v1.Get("/commodities/market-prices", handler.GetMarketPrices)
+	v1.Post("/commodities/market-prices", handler.GetMarketPrices)
 	v1.Get("/commodities/:id", handler.GetCommodity)
 
 	// Auth Routing

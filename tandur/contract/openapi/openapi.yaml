@@ -71,6 +71,144 @@ paths:
                       $ref: "./schemas/commodity.yaml#/Commodity"
                   meta:
                     $ref: "./schemas/error.yaml#/Meta"
+  /commodities/market-prices:
+    get:
+      summary: Harga Pasar Komoditas Terbaru (SP2KP Kemendag)
+      description: >
+        Mengambil data perbandingan harga komoditas pangan dan pertanian dari SP2KP Kemendag RI
+        secara nasional atau spesifik wilayah BPS (berdasarkan kode provinsi dan kode kabupaten/kota).
+      parameters:
+        - name: tanggal
+          in: query
+          description: Tanggal acuan harga (format YYYY-MM-DD). Default hari ini / hari kerja terakhir.
+          required: false
+          schema:
+            type: string
+            example: "2026-11-20"
+        - name: tanggal_pembanding
+          in: query
+          description: Tanggal pembanding untuk menghitung selisih harga (format YYYY-MM-DD). Default H-1.
+          required: false
+          schema:
+            type: string
+            example: "2026-11-19"
+        - name: kode_provinsi
+          in: query
+          description: Kode BPS Provinsi (contoh 35 untuk Jawa Timur). Kosongkan untuk harga nasional.
+          required: false
+          schema:
+            type: string
+            example: "35"
+        - name: kode_kab_kota
+          in: query
+          description: Kode BPS Kabupaten/Kota (contoh 3519 untuk Kabupaten Madiun).
+          required: false
+          schema:
+            type: string
+            example: "3519"
+      responses:
+        "200":
+          description: Berhasil mengambil data harga pasar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Harga pasar komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/commodity.yaml#/SP2KPCommodityPrice"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "500":
+          description: Gagal mengambil data harga pasar SP2KP Kemendag
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+    post:
+      summary: Query Harga Pasar Komoditas (SP2KP Kemendag)
+      description: Mengambil data perbandingan harga komoditas melalui JSON payload body atau Form parameters.
+      parameters:
+        - name: tanggal
+          in: query
+          description: Tanggal acuan harga (opsional lewat query)
+          required: false
+          schema:
+            type: string
+            example: "2026-11-20"
+        - name: tanggal_pembanding
+          in: query
+          description: Tanggal pembanding (opsional lewat query)
+          required: false
+          schema:
+            type: string
+            example: "2026-11-19"
+        - name: kode_provinsi
+          in: query
+          description: Kode BPS Provinsi (opsional lewat query)
+          required: false
+          schema:
+            type: string
+            example: "35"
+        - name: kode_kab_kota
+          in: query
+          description: Kode BPS Kabupaten/Kota (opsional lewat query)
+          required: false
+          schema:
+            type: string
+            example: "3519"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tanggal:
+                  type: string
+                  example: "2026-11-20"
+                tanggal_pembanding:
+                  type: string
+                  example: "2026-11-19"
+                kode_provinsi:
+                  type: string
+                  example: "35"
+                kode_kab_kota:
+                  type: string
+                  example: "3519"
+      responses:
+        "200":
+          description: Berhasil mengambil data harga pasar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Harga pasar komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/commodity.yaml#/SP2KPCommodityPrice"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+        "500":
+          description: Gagal mengambil data harga pasar SP2KP Kemendag
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
   /commodities/{id}:
     get:
       summary: Detail Komoditas

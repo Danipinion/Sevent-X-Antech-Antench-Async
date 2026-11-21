@@ -14,6 +14,7 @@ import (
 	"tandur/api/internal/domain"
 	"tandur/api/internal/infrastructure/cache"
 	"tandur/api/internal/infrastructure/config"
+	"tandur/api/internal/infrastructure/external"
 	"tandur/api/internal/infrastructure/logger"
 	"tandur/api/internal/infrastructure/persistence"
 )
@@ -53,10 +54,13 @@ func main() {
 		logger.Log.Warn("Redis tidak terhubung, menggunakan in-memory token blacklist fallback", "error", err)
 	}
 
-	// 5. Initialize Application Services (Use Cases)
+	// 5. Initialize External Providers & Clients
+	marketPriceClient := external.NewMarketPriceClient(cfg)
+
+	// 6. Initialize Application Services (Use Cases)
 	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
 	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
-	commodityService := application.NewCommodityService(commodityRepo)
+	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient)
 
 	// 6. Initialize HTTP Handlers & Adapter
 	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService)

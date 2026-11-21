@@ -62,7 +62,7 @@ func Load() *Config {
 		S3AccessKey:    getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:    getEnv("S3_SECRET_KEY", ""),
 		S3Region:           getEnv("S3_REGION", "garage"),
-		MarketPriceURL:     getEnv("MARKET_PRICE_API_BASE_URL", ""),
+		MarketPriceURL:     getEnv("MARKET_PRICE_API_BASE_URL", "https://api-sp2kp.kemendag.go.id/report/api/average-price/generate-perbandingan-harga"),
 		JWTSecret:          getEnv("JWT_SECRET", "tandur-secret-key-development-32chars-min!"),
 		JWTExpirationHours: getEnvInt("JWT_EXPIRATION_HOURS", 72),
 	}

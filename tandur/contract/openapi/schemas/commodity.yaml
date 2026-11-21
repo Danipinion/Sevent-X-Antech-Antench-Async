@@ -35,3 +35,71 @@ Commodity:
       type: string
       format: date-time
 
+SP2KPCommodityPrice:
+  type: object
+  required:
+    - variant_id
+    - variant_nama
+    - satuan_display
+    - tanggal
+    - harga
+  properties:
+    variant_id:
+      type: integer
+      example: 2
+    variant_nama:
+      type: string
+      example: "Cabai Merah Keriting"
+    satuan_display:
+      type: string
+      example: "kg"
+    tanggal:
+      type: string
+      example: "2026-11-20"
+    harga:
+      type: number
+      example: 48667
+    tanggal_pembanding:
+      type: string
+      example: "2026-11-19"
+    harga_pembanding:
+      type: number
+      example: 48667
+    delta_harga:
+      type: number
+      example: 0
+    persen_perubahan:
+      type: number
+      example: 0
+    status_perubahan:
+      type: string
+      example: "Tidak Berubah"
+    is_regional:
+      type: boolean
+      example: false
+    region:
+      type: array
+      items:
+        $ref: "#/SP2KPRegionPrice"
+
+SP2KPRegionPrice:
+  type: object
+  properties:
+    region:
+      type: string
+      example: "Region A"
+    satuan_display:
+      type: string
+      example: "kg"
+    harga:
+      type: number
+      example: 14082
+    harga_pembanding:
+      type: number
+      example: 14087
+    persen_perubahan:
+      type: number
+      example: -0.035
+    status_perubahan:
+      type: string
+      example: "Turun"

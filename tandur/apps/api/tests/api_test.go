@@ -1,15 +1,21 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	adapterHttp "tandur/api/internal/adapter/http"
 	"tandur/api/internal/application"
+	"tandur/api/internal/domain"
+	"tandur/api/internal/infrastructure/config"
+	"tandur/api/internal/infrastructure/external"
 	"tandur/api/internal/infrastructure/persistence"
 )
 
@@ -89,5 +95,246 @@ func TestPaginationAndTraceResponses(t *testing.T) {
 	}
 	if res.Meta.Pagination.TotalItems != 478 || res.Meta.Pagination.TotalPages != 24 || !res.Meta.Pagination.HasNext || res.Meta.Pagination.HasPrev {
 		t.Errorf("Unexpected pagination values: %+v", res.Meta.Pagination)
+	}
+}
+
+func TestMarketPriceClient_SP2KP_Integration(t *testing.T) {
+	// 1. Mock SP2KP Server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("Expected method POST, got %s", r.Method)
+		}
+		_ = r.ParseForm()
+		if r.FormValue("tanggal") != "2026-11-20" {
+			t.Errorf("Expected tanggal 2026-11-20, got %s", r.FormValue("tanggal"))
+		}
+		if r.FormValue("tanggal_pembanding") != "2026-11-19" {
+			t.Errorf("Expected tanggal_pembanding 2026-11-19, got %s", r.FormValue("tanggal_pembanding"))
+		}
+		if r.FormValue("kode_provinsi") != "35" {
+			t.Errorf("Expected kode_provinsi 35, got %s", r.FormValue("kode_provinsi"))
+		}
+		if r.FormValue("kode_kab_kota") != "3519" {
+			t.Errorf("Expected kode_kab_kota 3519, got %s", r.FormValue("kode_kab_kota"))
+		}
+
+		mockResp := map[string]interface{}{
+			"status":  "success",
+			"message": "Success retrieving record",
+			"data": []map[string]interface{}{
+				{
+					"variant_id":         2,
+					"variant_nama":       "Cabai Merah Keriting",
+					"satuan_display":     "kg",
+					"tanggal":            "2026-11-20",
+					"harga":              48667,
+					"tanggal_pembanding": "2026-11-19",
+					"harga_pembanding":   48667,
+					"delta_harga":        0,
+					"persen_perubahan":   0,
+					"status_perubahan":   "Tidak Berubah",
+					"is_regional":        false,
+				},
+				{
+					"variant_id":         13,
+					"variant_nama":       "Bawang Merah",
+					"satuan_display":     "kg",
+					"tanggal":            "2026-11-20",
+					"harga":              26333,
+					"tanggal_pembanding": "2026-11-19",
+					"harga_pembanding":   26333,
+					"delta_harga":        0,
+					"persen_perubahan":   0,
+					"status_perubahan":   "Tidak Berubah",
+					"is_regional":        false,
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(mockResp)
+	}))
+	defer mockServer.Close()
+
+	// 2. Client call
+	client := external.NewMarketPriceClientWithHTTP(mockServer.URL, mockServer.Client())
+	prices, err := client.GetCommodityPrices(context.Background(), domain.MarketPriceQuery{
+		Tanggal:           "2026-11-20",
+		TanggalPembanding: "2026-11-19",
+		KodeProvinsi:      "35",
+		KodeKabKota:       "3519",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(prices) != 2 {
+		t.Fatalf("Expected 2 commodities, got %d", len(prices))
+	}
+	if prices[0].VariantNama != "Cabai Merah Keriting" || prices[0].Harga != 48667 {
+		t.Errorf("Unexpected price data: %+v", prices[0])
+	}
+	if prices[1].VariantNama != "Bawang Merah" || prices[1].Harga != 26333 {
+		t.Errorf("Unexpected price data: %+v", prices[1])
+	}
+}
+
+type mockMarketPriceProvider struct {
+	calledDates []string
+	results     map[string][]domain.SP2KPCommodityPrice
+}
+
+func (m *mockMarketPriceProvider) GetCommodityPrices(ctx context.Context, query domain.MarketPriceQuery) ([]domain.SP2KPCommodityPrice, error) {
+	m.calledDates = append(m.calledDates, query.Tanggal)
+	if res, ok := m.results[query.Tanggal]; ok {
+		return res, nil
+	}
+	return []domain.SP2KPCommodityPrice{}, nil
+}
+
+func TestCommodityService_GetMarketPrices_FallbackOnZero(t *testing.T) {
+	today := time.Now().Format("2006-01-02")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+
+	mockProvider := &mockMarketPriceProvider{
+		results: map[string][]domain.SP2KPCommodityPrice{
+			today: {
+				{
+					VariantID:   2,
+					VariantNama: "Cabai Merah Keriting",
+					Harga:       0, // Zero price on holiday/morning
+				},
+			},
+			yesterday: {
+				{
+					VariantID:   2,
+					VariantNama: "Cabai Merah Keriting",
+					Harga:       45000,
+				},
+			},
+		},
+	}
+
+	commodityRepo := persistence.NewMemoryCommodityRepository()
+	service := application.NewCommodityService(commodityRepo, mockProvider)
+
+	// Call without explicit tanggal -> should fallback to yesterday when today has harga 0
+	prices, err := service.GetMarketPrices(context.Background(), domain.MarketPriceQuery{
+		KodeProvinsi: "35",
+		KodeKabKota:  "3519",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(prices) != 1 {
+		t.Fatalf("Expected 1 item, got %d", len(prices))
+	}
+	if prices[0].Harga != 45000 {
+		t.Errorf("Expected fallback to yesterday's price 45000, got %f", prices[0].Harga)
+	}
+}
+
+func TestHTTP_MarketPricesEndpoints(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mockResp := map[string]interface{}{
+			"status":  "success",
+			"message": "Success retrieving record",
+			"data": []map[string]interface{}{
+				{
+					"variant_id":         2,
+					"variant_nama":       "Cabai Merah Keriting",
+					"satuan_display":     "kg",
+					"tanggal":            "2026-11-20",
+					"harga":              48667,
+					"tanggal_pembanding": "2026-11-19",
+					"harga_pembanding":   48667,
+					"delta_harga":        0,
+					"persen_perubahan":   0,
+					"status_perubahan":   "Tidak Berubah",
+					"is_regional":        false,
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(mockResp)
+	}))
+	defer mockServer.Close()
+
+	client := external.NewMarketPriceClientWithHTTP(mockServer.URL, mockServer.Client())
+	repo := persistence.NewMemoryCommodityRepository()
+	service := application.NewCommodityService(repo, client)
+
+	cfg := &config.Config{
+		AppEnv:    "test",
+		JWTSecret: "test-jwt-secret-very-long-string-32-chars",
+	}
+	authService := application.NewAuthService(nil, cfg.JWTSecret, 24*time.Hour)
+	handler := adapterHttp.NewHandler(cfg, nil, service, authService)
+
+	app := fiber.New()
+	adapterHttp.SetupRoutes(app, handler)
+
+	// 1. Test GET /api/v1/commodities/market-prices with query params
+	reqGET := httptest.NewRequest(http.MethodGet, "/api/v1/commodities/market-prices?tanggal=2026-11-20&tanggal_pembanding=2026-11-19&kode_provinsi=35&kode_kab_kota=3519", nil)
+	respGET, err := app.Test(reqGET)
+	if err != nil {
+		t.Fatalf("GET market prices failed: %v", err)
+	}
+	if respGET.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGET.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", respGET.StatusCode, string(body))
+	}
+
+	var resGET struct {
+		Status  string                       `json:"status"`
+		Message string                       `json:"message"`
+		Data    []domain.SP2KPCommodityPrice `json:"data"`
+		Meta    struct {
+			Trace struct {
+				RequestID string `json:"request_id"`
+			} `json:"trace"`
+		} `json:"meta"`
+	}
+	if err := json.NewDecoder(respGET.Body).Decode(&resGET); err != nil {
+		t.Fatalf("Failed to decode GET response: %v", err)
+	}
+	if resGET.Status != "success" {
+		t.Errorf("Expected status success, got %s", resGET.Status)
+	}
+	if len(resGET.Data) != 1 || resGET.Data[0].VariantNama != "Cabai Merah Keriting" {
+		t.Errorf("Unexpected commodities data: %+v", resGET.Data)
+	}
+	if resGET.Meta.Trace.RequestID == "" {
+		t.Errorf("Expected non-empty trace request_id")
+	}
+
+	// 2. Test POST /api/v1/commodities/market-prices with JSON body
+	payload := map[string]string{
+		"tanggal":            "2026-11-20",
+		"tanggal_pembanding": "2026-11-19",
+		"kode_provinsi":      "35",
+		"kode_kab_kota":      "3519",
+	}
+	jsonBody, _ := json.Marshal(payload)
+	reqPOST := httptest.NewRequest(http.MethodPost, "/api/v1/commodities/market-prices", bytes.NewReader(jsonBody))
+	reqPOST.Header.Set("Content-Type", "application/json")
+
+	respPOST, err := app.Test(reqPOST)
+	if err != nil {
+		t.Fatalf("POST market prices failed: %v", err)
+	}
+	if respPOST.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respPOST.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", respPOST.StatusCode, string(body))
+	}
+
+	var resPOST struct {
+		Status string                       `json:"status"`
+		Data   []domain.SP2KPCommodityPrice `json:"data"`
+	}
+	_ = json.NewDecoder(respPOST.Body).Decode(&resPOST)
+	if resPOST.Status != "success" || len(resPOST.Data) != 1 {
+		t.Errorf("Unexpected POST response: %+v", resPOST)
 	}
 }

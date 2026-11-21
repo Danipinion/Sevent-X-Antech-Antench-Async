@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"tandur/api/internal/application"
+	"tandur/api/internal/domain"
 	"tandur/api/internal/infrastructure/config"
 	"tandur/api/internal/infrastructure/persistence"
 )
@@ -74,4 +75,30 @@ func (h *Handler) GetCommodity(c fiber.Ctx) error {
 		return RespondError(c, fiber.StatusNotFound, "COMMODITY_NOT_FOUND", "Komoditas tidak ditemukan")
 	}
 	return RespondSuccess(c, fiber.StatusOK, "Detail komoditas berhasil diambil", commodity)
+}
+
+func (h *Handler) GetMarketPrices(c fiber.Ctx) error {
+	var query domain.MarketPriceQuery
+	_ = c.Bind().Query(&query)
+	_ = c.Bind().Body(&query)
+
+	if query.Tanggal == "" && c.Query("tanggal") != "" {
+		query.Tanggal = c.Query("tanggal")
+	}
+	if query.TanggalPembanding == "" && c.Query("tanggal_pembanding") != "" {
+		query.TanggalPembanding = c.Query("tanggal_pembanding")
+	}
+	if query.KodeProvinsi == "" && c.Query("kode_provinsi") != "" {
+		query.KodeProvinsi = c.Query("kode_provinsi")
+	}
+	if query.KodeKabKota == "" && c.Query("kode_kab_kota") != "" {
+		query.KodeKabKota = c.Query("kode_kab_kota")
+	}
+
+	prices, err := h.commodityService.GetMarketPrices(c.Context(), query)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "MARKET_PRICE_FETCH_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Harga pasar komoditas berhasil diambil", prices)
 }
