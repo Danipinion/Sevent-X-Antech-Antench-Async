@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/gofiber/fiber/v3"
 	adapterHttp "tandur/api/internal/adapter/http"
@@ -36,6 +37,10 @@ func main() {
 		logger.Log.Error("Gagal menghubungkan ke PostgreSQL", "error", err)
 	} else {
 		defer dbPool.Close()
+		// Auto-migrate pending database migrations if any
+		if err := persistence.AutoMigrate(ctx, dbPool); err != nil {
+			logger.Log.Error("Gagal menjalankan auto-migrasi database", "error", err)
+		}
 	}
 
 	// 4. Initialize Repositories (Persistence) & Cache

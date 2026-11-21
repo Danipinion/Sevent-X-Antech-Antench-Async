@@ -28,6 +28,7 @@ services:
       - "${API_PORT:-8080}:8080"
     volumes:
       - ./apps/api:/app
+      - ./database/migrations:/migrations:ro
       - go_modules:/go/pkg/mod
     environment:
       APP_ENV: development
@@ -39,6 +40,8 @@ services:
       S3_BUCKET: ${S3_BUCKET:-tandur}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET:-tandur-secret-key-super-secure-change-in-production}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-72}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +55,7 @@ services:
         - wget
         - --spider
         - -q
-        - http://localhost:8080/health
+        - http://127.0.0.1:8080/health
       interval: 15s
       timeout: 5s
       retries: 5
