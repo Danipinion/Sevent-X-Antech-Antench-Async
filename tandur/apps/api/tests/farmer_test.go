@@ -16,6 +16,7 @@ import (
 	"tandur/api/internal/domain"
 	"tandur/api/internal/infrastructure/config"
 	"tandur/api/internal/infrastructure/persistence"
+	"tandur/api/internal/infrastructure/storage"
 )
 
 func TestFarmerService_VerificationLifecycle(t *testing.T) {
@@ -264,5 +265,70 @@ func TestHTTP_FarmerVerificationAndListingEndpoints(t *testing.T) {
 	if respListSuccess.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(respListSuccess.Body)
 		t.Fatalf("Expected 201 Created for verified farmer, got %d. Body: %s", respListSuccess.StatusCode, string(body))
+	}
+}
+
+func TestGarageStorage_CryptoEncryptionAES256(t *testing.T) {
+	cfg := &config.Config{
+		S3Endpoint: "http://localhost:3900",
+		S3Bucket:   "tandur",
+		JWTSecret:  "tandur-super-secret-master-key-32chars!",
+	}
+	garage := storage.NewGarageStorage(cfg)
+
+	rawPhoto := []byte("SIMULATED_E_KTP_IMAGE_BINARY_DATA_OF_SUGENG_RIYADI_3321041405760002")
+	secretKey := "tandur-aes-master-encryption-key-for-ktp"
+
+	// 1. Uji Enkripsi AES-256-GCM
+	ciphertext, err := storage.EncryptAES256GCM(rawPhoto, secretKey)
+	if err != nil {
+		t.Fatalf("Encryption failed: %v", err)
+	}
+
+	if bytes.Equal(rawPhoto, ciphertext) {
+		t.Fatalf("Ciphertext must not match raw plaintext")
+	}
+
+	// 2. Uji Dekripsi Berhasil dengan Kunci yang Tepat
+	decrypted, err := storage.DecryptAES256GCM(ciphertext, secretKey)
+	if err != nil {
+		t.Fatalf("Decryption failed: %v", err)
+	}
+	if !bytes.Equal(rawPhoto, decrypted) {
+		t.Fatalf("Decrypted data does not match original photo bytes")
+	}
+
+	// 3. Uji Keamanan: Kunci Salah Harus Gagal
+	_, errWrongKey := storage.DecryptAES256GCM(ciphertext, "wrong-unauthorized-key")
+	if errWrongKey == nil {
+		t.Fatalf("Expected decryption failure with wrong key")
+	}
+
+	// 4. Uji Keamanan: Data Dimanipulasi / Dirusak Harus Gagal (GCM Integrity Authentication)
+	tampered := make([]byte, len(ciphertext))
+	copy(tampered, ciphertext)
+	tampered[len(tampered)-1] ^= 0xFF
+	_, errTampered := storage.DecryptAES256GCM(tampered, secretKey)
+	if errTampered == nil {
+		t.Fatalf("Expected integrity authentication error on tampered ciphertext")
+	}
+
+	// 5. Uji Simpan Berkas Terenkripsi ke Garage S3 Storage
+	key := "ktp/petani-sugeng-test.enc"
+	uploadURL, err := garage.UploadEncrypted(context.Background(), key, bytes.NewReader(rawPhoto), "image/jpeg", secretKey)
+	if err != nil {
+		t.Fatalf("UploadEncrypted to Garage failed: %v", err)
+	}
+	if uploadURL != "http://localhost:3900/tandur/ktp/petani-sugeng-test.enc" {
+		t.Errorf("Unexpected Garage URL: %s", uploadURL)
+	}
+
+	// 6. Uji Unduh dan Dekripsi dari Garage S3 Storage
+	downloadedDecrypted, err := garage.DownloadDecrypted(context.Background(), key, secretKey)
+	if err != nil {
+		t.Fatalf("DownloadDecrypted from Garage failed: %v", err)
+	}
+	if !bytes.Equal(rawPhoto, downloadedDecrypted) {
+		t.Fatalf("Downloaded decrypted bytes do not match original e-KTP photo")
 	}
 }

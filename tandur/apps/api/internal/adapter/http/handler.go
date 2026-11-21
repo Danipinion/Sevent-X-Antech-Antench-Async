@@ -2,6 +2,8 @@ package http
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -10,6 +12,7 @@ import (
 	"tandur/api/internal/domain"
 	"tandur/api/internal/infrastructure/config"
 	"tandur/api/internal/infrastructure/persistence"
+	"tandur/api/internal/infrastructure/storage"
 )
 
 type Handler struct {
@@ -18,6 +21,7 @@ type Handler struct {
 	commodityService *application.CommodityService
 	authService      *application.AuthService
 	farmerService    *application.FarmerService
+	storage          storage.ObjectStorage
 	authHandler      *AuthHandler
 }
 
@@ -29,12 +33,18 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		fs = application.NewFarmerService(authService.UserRepo())
 	}
 
+	var objStorage storage.ObjectStorage
+	if cfg != nil {
+		objStorage = storage.NewGarageStorage(cfg)
+	}
+
 	return &Handler{
 		cfg:              cfg,
 		dbPool:           dbPool,
 		commodityService: commodityService,
 		authService:      authService,
 		farmerService:    fs,
+		storage:          objStorage,
 		authHandler:      NewAuthHandler(authService),
 	}
 }
@@ -207,9 +217,21 @@ func (h *Handler) SubmitFarmerVerification(c fiber.Ctx) error {
 		input.DeclarationAccepted = decl == "true" || decl == "1" || decl == "yes"
 	}
 
-	// Cek jika ada file unggahan e-KTP langsung
-	if file, err := c.FormFile("ktp_photo"); err == nil && file != nil && input.KTPPhotoURL == "" {
-		input.KTPPhotoURL = "/uploads/ktp/" + file.Filename
+	// Cek jika ada file unggahan e-KTP langsung lewat multipart/form-data
+	if file, err := c.FormFile("ktp_photo"); err == nil && file != nil {
+		src, errOpen := file.Open()
+		if errOpen == nil {
+			defer src.Close()
+			key := fmt.Sprintf("ktp/%s-%d-%s.enc", userID, time.Now().Unix(), filepath.Base(file.Filename))
+			if h.storage != nil {
+				if uploadedURL, errUpload := h.storage.UploadEncrypted(c.Context(), key, src, file.Header.Get("Content-Type"), h.cfg.JWTSecret); errUpload == nil {
+					input.KTPPhotoURL = uploadedURL
+				}
+			}
+			if input.KTPPhotoURL == "" {
+				input.KTPPhotoURL = fmt.Sprintf("%s/%s/%s", h.cfg.S3Endpoint, h.cfg.S3Bucket, key)
+			}
+		}
 	}
 
 	res, err := h.farmerService.SubmitVerification(c.Context(), userID, input)
