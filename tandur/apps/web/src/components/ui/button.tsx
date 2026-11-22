@@ -15,7 +15,7 @@ const baseStyles =
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-green-600 hover:bg-green-700 active:bg-green-800 text-white disabled:bg-gray-200 disabled:text-gray-400',
+  'bg-[#185b32] hover:bg-[#124827] active:bg-[#0e3a1f] text-white disabled:bg-gray-200 disabled:text-gray-400',
   secondary:
     'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 disabled:bg-gray-100 disabled:text-gray-400',
   outline:
@@ -30,7 +30,7 @@ const variants: Record<Variant, string> = {
 
 const sizes: Record<Size, string> = {
   sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-base',
+  md: 'px-4 py-2 text-basef',
   lg: 'px-6 py-3 text-lg',
 };
 
