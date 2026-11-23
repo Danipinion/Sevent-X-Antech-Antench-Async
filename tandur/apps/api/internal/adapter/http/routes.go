@@ -15,7 +15,7 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"http://localhost:5173", "http://localhost", "*"},
 		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Correlation-ID, X-Trace-ID"},
-		AllowMethods: []string{"GET, POST, PUT, DELETE, OPTIONS"},
+		AllowMethods: []string{"GET, POST, PUT, PATCH, DELETE, OPTIONS"},
 	}))
 
 	// Root Healthcheck
@@ -49,9 +49,33 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	auth.Post("/login", handler.Login)
 	auth.Post("/logout", handler.Logout, handler.AuthMiddleware())
 	auth.Get("/me", handler.Me, handler.AuthMiddleware())
+	auth.Get("/profile", handler.Me, handler.AuthMiddleware())
 	auth.Put("/profile", handler.UpdateProfile, handler.AuthMiddleware())
 	auth.Patch("/profile", handler.UpdateProfile, handler.AuthMiddleware())
 	auth.Post("/profile/photo", handler.UploadProfilePhoto, handler.AuthMiddleware())
+
+	// Buyer Catalog & Exploration (OptionalAuth untuk membedakan business_buyer vs retail_buyer)
+	v1.Get("/categories", handler.ListCategories)
+	v1.Get("/products", handler.ListProducts, handler.OptionalAuthMiddleware())
+	v1.Get("/products/popular", handler.ListPopularProducts, handler.OptionalAuthMiddleware())
+	v1.Get("/products/:id", handler.GetProductDetail, handler.OptionalAuthMiddleware())
+
+	// Buyer Cart & Stock Consolidation
+	cart := v1.Group("/cart", handler.AuthMiddleware())
+	cart.Get("/", handler.GetCart)
+	cart.Post("/items", handler.AddCartItem)
+	cart.Patch("/items/:item_id", handler.UpdateCartItem)
+	cart.Delete("/items/:item_id", handler.DeleteCartItem)
+
+	// Buyer Primary Address & Downstream Orders (Cash on Pickup)
+	v1.Get("/addresses/primary", handler.GetPrimaryAddress, handler.AuthMiddleware())
+	orders := v1.Group("/orders", handler.AuthMiddleware())
+	orders.Post("/checkout-summary", handler.CheckoutSummary)
+	orders.Post("/", handler.CreateBuyerOrder)
+	orders.Get("/", handler.ListBuyerOrders)
+	orders.Get("/:order_id", handler.GetBuyerOrderDetail)
+	orders.Patch("/:order_id/cancel", handler.CancelBuyerOrder)
+	orders.Patch("/:order_id/confirm-receipt", handler.ConfirmBuyerOrderReceipt)
 
 	// Farmer Routing
 	farmer := v1.Group("/farmer", handler.AuthMiddleware())

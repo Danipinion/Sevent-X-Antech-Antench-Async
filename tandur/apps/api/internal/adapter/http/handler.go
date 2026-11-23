@@ -27,14 +27,17 @@ type Handler struct {
 	farmerService    *application.FarmerService
 	orderService     *application.OrderService
 	middlemanService *application.MiddlemanService
+	buyerService     *application.BuyerService
 	storage          storage.ObjectStorage
 	authHandler      *AuthHandler
+	buyerHandler     *BuyerHandler
 }
 
 func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *application.CommodityService, authService *application.AuthService, optionalServices ...interface{}) *Handler {
 	var fs *application.FarmerService
 	var os *application.OrderService
 	var ms *application.MiddlemanService
+	var bs *application.BuyerService
 
 	for _, opt := range optionalServices {
 		switch v := opt.(type) {
@@ -44,11 +47,27 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 			os = v
 		case *application.MiddlemanService:
 			ms = v
+		case *application.BuyerService:
+			bs = v
 		}
 	}
 
 	if fs == nil && authService != nil && authService.UserRepo() != nil {
 		fs = application.NewFarmerService(authService.UserRepo())
+	}
+
+	if bs == nil {
+		var userRepo domain.UserRepository
+		if authService != nil {
+			userRepo = authService.UserRepo()
+		}
+		var buyerRepo domain.BuyerRepository
+		if dbPool != nil {
+			buyerRepo = persistence.NewPostgresBuyerRepository(dbPool)
+		} else {
+			buyerRepo = persistence.NewMemoryBuyerRepository()
+		}
+		bs = application.NewBuyerService(buyerRepo, userRepo)
 	}
 
 	var objStorage storage.ObjectStorage
@@ -64,8 +83,10 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		farmerService:    fs,
 		orderService:     os,
 		middlemanService: ms,
+		buyerService:     bs,
 		storage:          objStorage,
 		authHandler:      NewAuthHandler(authService, objStorage),
+		buyerHandler:     NewBuyerHandler(bs),
 	}
 }
 
@@ -1194,4 +1215,73 @@ func (h *Handler) GetMiddlemanSaleBids(c fiber.Ctx) error {
 
 	return RespondSuccess(c, fiber.StatusOK, "Daftar penawaran pembeli masuk berhasil diambil", bids)
 }
+
+// -----------------------------------------------------------------------------
+// Buyer Module Delegation & Optional Auth Middleware
+// -----------------------------------------------------------------------------
+
+func (h *Handler) OptionalAuthMiddleware() fiber.Handler {
+	return OptionalAuthMiddleware(h.authService)
+}
+
+func (h *Handler) ListCategories(c fiber.Ctx) error {
+	return h.buyerHandler.ListCategories(c)
+}
+
+func (h *Handler) ListProducts(c fiber.Ctx) error {
+	return h.buyerHandler.ListProducts(c)
+}
+
+func (h *Handler) ListPopularProducts(c fiber.Ctx) error {
+	return h.buyerHandler.ListPopularProducts(c)
+}
+
+func (h *Handler) GetProductDetail(c fiber.Ctx) error {
+	return h.buyerHandler.GetProductDetail(c)
+}
+
+func (h *Handler) GetCart(c fiber.Ctx) error {
+	return h.buyerHandler.GetCart(c)
+}
+
+func (h *Handler) AddCartItem(c fiber.Ctx) error {
+	return h.buyerHandler.AddCartItem(c)
+}
+
+func (h *Handler) UpdateCartItem(c fiber.Ctx) error {
+	return h.buyerHandler.UpdateCartItem(c)
+}
+
+func (h *Handler) DeleteCartItem(c fiber.Ctx) error {
+	return h.buyerHandler.DeleteCartItem(c)
+}
+
+func (h *Handler) GetPrimaryAddress(c fiber.Ctx) error {
+	return h.buyerHandler.GetPrimaryAddress(c)
+}
+
+func (h *Handler) CheckoutSummary(c fiber.Ctx) error {
+	return h.buyerHandler.CheckoutSummary(c)
+}
+
+func (h *Handler) CreateBuyerOrder(c fiber.Ctx) error {
+	return h.buyerHandler.CreateBuyerOrder(c)
+}
+
+func (h *Handler) ListBuyerOrders(c fiber.Ctx) error {
+	return h.buyerHandler.ListBuyerOrders(c)
+}
+
+func (h *Handler) GetBuyerOrderDetail(c fiber.Ctx) error {
+	return h.buyerHandler.GetBuyerOrderDetail(c)
+}
+
+func (h *Handler) CancelBuyerOrder(c fiber.Ctx) error {
+	return h.buyerHandler.CancelBuyerOrder(c)
+}
+
+func (h *Handler) ConfirmBuyerOrderReceipt(c fiber.Ctx) error {
+	return h.buyerHandler.ConfirmBuyerOrderReceipt(c)
+}
+
 
