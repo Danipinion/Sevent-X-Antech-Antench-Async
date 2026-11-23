@@ -63,4 +63,26 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	farmer.Put("/listings/:id", handler.UpdateFarmerListing)
 	farmer.Delete("/listings/:id", handler.CancelFarmerListing)
 	farmer.Post("/listings/upload-media", handler.UploadFarmerListingMedia)
+
+	// Farmer Orders (Daftar Pesanan & Penjualan - Mockup Gambar 2)
+	farmer.Get("/orders", handler.ListFarmerOrders)
+	farmer.Get("/orders/:id", handler.GetFarmerOrder)
+	farmer.Post("/orders/:id/accept", handler.AcceptFarmerOrder)
+	farmer.Post("/orders/:id/negotiate", handler.NegotiateFarmerOrder)
+	farmer.Post("/orders/:id/reject", handler.RejectFarmerOrder)
+	farmer.Post("/orders/:id/confirm-ready", handler.ConfirmReadyForPickup)
+
+	// Middleman / Tengkulak Routing
+	middleman := v1.Group("/middleman", handler.AuthMiddleware())
+	middleman.Get("/listings", handler.ListMiddlemanListings)
+	middleman.Get("/listings/:id", handler.GetMiddlemanListing)
+	middleman.Post("/orders", handler.CreateMiddlemanOffer)
+	middleman.Get("/orders", handler.ListMiddlemanOrders)
+	middleman.Get("/orders/:id", handler.GetMiddlemanOrder)
+	middleman.Put("/orders/:id/logistics", handler.UpdateOrderLogistics)
+	middleman.Post("/orders/:id/weighing-and-complete", handler.CompleteWeighingAndSettlement)
+
+	// Public Marketplace
+	v1.Get("/marketplace/listings", handler.ListMiddlemanListings)
+	v1.Get("/marketplace/listings/:id", handler.GetMiddlemanListing)
 }

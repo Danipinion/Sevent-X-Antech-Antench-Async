@@ -20,6 +20,12 @@ tags:
     description: "Pemeriksaan status verifikasi identitas petani dan pengajuan dokumen e-KTP terenkripsi AES-256-GCM ke Garage S3 untuk membuka kuota jual panen."
   - name: "Penjualan Panen Petani"
     description: "Manajemen listing hasil panen milik petani yang siap ditransaksikan ke pembeli/tengkulak, diproteksi guard verifikasi kemitraan."
+  - name: "Pesanan & Penjualan Petani"
+    description: "Pengelolaan pesanan dan penawaran masuk untuk petani, penerimaan/penolakan penawaran tengkulak, negosiasi harga counter, dan konfirmasi armada muat."
+  - name: "Tengkulak & Pembeli Bisnis"
+    description: "Pencarian petani panen, pengajuan penawaran pembelian borongan (min. 500 kg), pengaturan logistik armada, dan penyelesaian timbangan digital."
+  - name: "Marketplace Hasil Panen"
+    description: "Katalog publik hasil panen petani yang dapat dijelajahi oleh calon pembeli dan mitra agribisnis."
   - name: "Sistem & Pemantauan"
     description: "Pemeriksaan kesehatan sistem (healthcheck), konektivitas database PostgreSQL + PostGIS, dan cache Redis."
 paths:
@@ -1162,6 +1168,537 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/error.yaml#/ErrorResponse"
+
+  /farmer/orders:
+    get:
+      tags:
+        - "Pesanan & Penjualan Petani"
+      summary: Daftar Pesanan & Penjualan Petani
+      description: >
+        Mengambil daftar penawaran dan pesanan masuk dari tengkulak/pembeli bisnis ke petani.
+        Mendukung tab status (all, waiting_confirmation, scheduled_pickup, completed, cancelled),
+        pencarian kode/nama, filter tanggal bulan, pagination, dan summary card penjualan.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tab
+          in: query
+          description: Filter tab status pesanan
+          required: false
+          schema:
+            type: string
+            enum: [all, waiting_confirmation, scheduled_pickup, completed, cancelled]
+            default: all
+        - name: search
+          in: query
+          description: Pencarian berdasarkan kode transaksi, nama pembeli, atau komoditas
+          required: false
+          schema:
+            type: string
+        - name: month
+          in: query
+          description: Filter bulan transaksi (format YYYY-MM)
+          required: false
+          schema:
+            type: string
+            example: "2025-02"
+        - name: page
+          in: query
+          description: Nomor halaman
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah pesanan per halaman
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Daftar pesanan petani berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: "./schemas/user.yaml#/FarmerOrderSummary"
+                      pagination:
+                        $ref: "./schemas/error.yaml#/Pagination"
+                      trace:
+                        $ref: "./schemas/error.yaml#/Trace"
+        "401":
+          description: Belum terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/error.yaml#/ErrorResponse"
+
+  /farmer/orders/{id}/accept:
+    post:
+      tags:
+        - "Pesanan & Penjualan Petani"
+      summary: Terima Penawaran & Jadwalkan Penjemputan
+      description: Petani menerima penawaran dari tengkulak. Stok panen akan dialokasikan dan status menjadi dijadwalkan dijemput.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID pesanan
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Penawaran berhasil diterima dan dijadwalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran berhasil disetujui dan jadwal penjemputan telah ditetapkan
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /farmer/orders/{id}/negotiate:
+    post:
+      tags:
+        - "Pesanan & Penjualan Petani"
+      summary: Negosiasi Harga Penawaran
+      description: Petani mengajukan harga counter dan catatan kepada pembeli/tengkulak.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID pesanan
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/NegotiateOrderInput"
+      responses:
+        "200":
+          description: Tawaran negosiasi berhasil dikirimkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Negosiasi harga berhasil dikirimkan ke pembeli
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /farmer/orders/{id}/reject:
+    post:
+      tags:
+        - "Pesanan & Penjualan Petani"
+      summary: Tolak Penawaran Tengkulak
+      description: Petani menolak penawaran yang diajukan dengan memberikan alasan penolakan.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID pesanan
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: Harga tidak sesuai dengan mutu gabah
+      responses:
+        "200":
+          description: Penawaran berhasil ditolak
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran berhasil ditolak
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /farmer/orders/{id}/confirm-ready:
+    post:
+      tags:
+        - "Pesanan & Penjualan Petani"
+      summary: Konfirmasi Siap Muat
+      description: Petani memberi notifikasi bahwa armada dapat langsung melakukan penimbangan dan muat panen di lumbung/gudang.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID pesanan
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Status siap muat berhasil dikonfirmasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Kesiapan muat berhasil dikonfirmasi
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /middleman/listings:
+    get:
+      tags:
+        - "Tengkulak & Pembeli Bisnis"
+      summary: Tengkulak - Cari Petani & Listing Panen
+      description: >
+        Katalog pencarian listing panen petani khusus untuk tengkulak dan pembeli agribisnis.
+        Mendukung filter komoditas, lokasi/radius PostGIS, rentang harga, dan pagination.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: commodity_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 12
+      responses:
+        "200":
+          description: Daftar listing petani berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /middleman/orders:
+    get:
+      tags:
+        - "Tengkulak & Pembeli Bisnis"
+      summary: Riwayat Pesanan & Transaksi Tengkulak
+      description: Mengambil seluruh riwayat penawaran dan pembelian borongan yang diajukan oleh tengkulak.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Riwayat transaksi tengkulak berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+    post:
+      tags:
+        - "Tengkulak & Pembeli Bisnis"
+      summary: Buat Penawaran Pembelian Panen
+      description: Tengkulak mengajukan penawaran pembelian ke petani dengan spesifikasi kuantitas (min. 500 kg), harga, dan estimasi armada logistik.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/CreateOrderOfferInput"
+      responses:
+        "201":
+          description: Penawaran berhasil diajukan ke petani
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran berhasil diajukan ke petani
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /middleman/orders/{id}:
+    get:
+      tags:
+        - "Tengkulak & Pembeli Bisnis"
+      summary: Detail Pesanan / Penawaran Tengkulak
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Detail transaksi berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /middleman/orders/{id}/logistics:
+    put:
+      tags:
+        - "Tengkulak & Pembeli Bisnis"
+      summary: Perbarui Jadwal & Armada Logistik
+      description: Memperbarui jadwal jemput, estimasi slot waktu kedatangan armada, jenis kendaraan, dan identitas supir.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/UpdateLogisticsInput"
+      responses:
+        "200":
+          description: Data logistik berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /middleman/orders/{id}/weighing-and-complete:
+    post:
+      tags:
+        - "Tengkulak & Pembeli Bisnis"
+      summary: Timbangan Digital & Pelunasan Transaksi
+      description: Menyelesaikan penimbangan digital hasil panen di lokasi, mencatat bobot riil, mengunggah sertifikat timbang, dan menerbitkan pelunasan.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/user.yaml#/CompleteWeighingInput"
+      responses:
+        "200":
+          description: Transaksi berhasil diselesaikan dan dilunasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penimbangan dan pelunasan transaksi berhasil diselesaikan
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerPurchaseOrder"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /marketplace/listings:
+    get:
+      tags:
+        - "Marketplace Hasil Panen"
+      summary: Katalog Publik Hasil Panen Petani
+      description: Endpoint publik untuk menjelajahi seluruh hasil panen petani terverifikasi yang siap dibeli.
+      parameters:
+        - name: commodity_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 12
+      responses:
+        "200":
+          description: Daftar hasil panen berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
+
+  /marketplace/listings/{id}:
+    get:
+      tags:
+        - "Marketplace Hasil Panen"
+      summary: Detail Publik Hasil Panen Petani
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Detail hasil panen berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "./schemas/user.yaml#/FarmerListing"
+                  meta:
+                    $ref: "./schemas/error.yaml#/Meta"
 
 components:
   securitySchemes:

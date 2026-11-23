@@ -25,15 +25,25 @@ type Handler struct {
 	commodityService *application.CommodityService
 	authService      *application.AuthService
 	farmerService    *application.FarmerService
+	orderService     *application.OrderService
 	storage          storage.ObjectStorage
 	authHandler      *AuthHandler
 }
 
-func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *application.CommodityService, authService *application.AuthService, farmerService ...*application.FarmerService) *Handler {
+func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *application.CommodityService, authService *application.AuthService, optionalServices ...interface{}) *Handler {
 	var fs *application.FarmerService
-	if len(farmerService) > 0 && farmerService[0] != nil {
-		fs = farmerService[0]
-	} else if authService != nil && authService.UserRepo() != nil {
+	var os *application.OrderService
+
+	for _, opt := range optionalServices {
+		switch v := opt.(type) {
+		case *application.FarmerService:
+			fs = v
+		case *application.OrderService:
+			os = v
+		}
+	}
+
+	if fs == nil && authService != nil && authService.UserRepo() != nil {
 		fs = application.NewFarmerService(authService.UserRepo())
 	}
 
@@ -48,6 +58,7 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		commodityService: commodityService,
 		authService:      authService,
 		farmerService:    fs,
+		orderService:     os,
 		storage:          objStorage,
 		authHandler:      NewAuthHandler(authService, objStorage),
 	}
@@ -490,4 +501,362 @@ func (h *Handler) UploadFarmerListingMedia(c fiber.Ctx) error {
 		"mime_type":  validated.MimeType,
 		"size_bytes": validated.SizeBytes,
 	})
+}
+
+// --- TENGKULAK: CARI PETANI & BUAT PENAWARAN ---
+
+// ListMiddlemanListings menangani pencarian listing panen petani untuk katalog "TENGKULAK - CARI PETANI"
+func (h *Handler) ListMiddlemanListings(c fiber.Ctx) error {
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	status := c.Query("status", "published")
+	commodityID := c.Query("commodity_id")
+
+	filter := domain.ListingFilter{
+		Status:      status,
+		CommodityID: commodityID,
+		Page:        page,
+		Limit:       limit,
+	}
+
+	result, err := h.orderService.ListMarketplaceListings(c.Context(), filter)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Gagal mengambil daftar panen petani: "+err.Error())
+	}
+
+	pagination := &PaginationMeta{
+		Page:       result.Page,
+		PerPage:    result.Limit,
+		TotalItems: result.TotalItems,
+		TotalPages: result.TotalPages,
+		HasNext:    result.Page < result.TotalPages,
+		HasPrev:    result.Page > 1,
+	}
+
+	return RespondSuccessWithPagination(c, fiber.StatusOK, "Daftar panen petani berhasil diambil", result.Items, pagination)
+}
+
+// GetMiddlemanListing mengambil pratinjau detail panen petani untuk tengkulak
+func (h *Handler) GetMiddlemanListing(c fiber.Ctx) error {
+	id := c.Params("id")
+	listing, err := h.orderService.GetMarketplaceListingByID(c.Context(), id)
+	if err != nil {
+		if errors.Is(err, domain.ErrListingNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "LISTING_NOT_FOUND", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+	return RespondSuccess(c, fiber.StatusOK, "Detail panen petani berhasil diambil", listing)
+}
+
+// CreateMiddlemanOffer menangani pengajuan penawaran pembelian panen oleh Tengkulak (TENGKULAK - PENAWARAN)
+func (h *Handler) CreateMiddlemanOffer(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	var input domain.CreateOrderOfferInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", "Format payload tidak valid: "+err.Error())
+	}
+
+	order, err := h.orderService.CreateOffer(c.Context(), userID, input)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrOnlyMiddlemanCanCreateOffer):
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ROLE", err.Error())
+		case errors.Is(err, domain.ErrListingNotFound):
+			return RespondError(c, fiber.StatusNotFound, "LISTING_NOT_FOUND", err.Error())
+		case errors.Is(err, domain.ErrMinOrderQuantity), errors.Is(err, domain.ErrQuantityExceedsAvailable), errors.Is(err, domain.ErrInvalidInput):
+			return RespondError(c, fiber.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		default:
+			return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+		}
+	}
+
+	return RespondSuccess(c, fiber.StatusCreated, "Penawaran pembelian panen berhasil diajukan ke petani", order)
+}
+
+// ListMiddlemanOrders menangani daftar transaksi pembelian tengkulak (TENGKULAK - TRANSAKSI)
+func (h *Handler) ListMiddlemanOrders(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	tab := c.Query("tab", "all")
+	search := c.Query("search")
+
+	filter := domain.OrderFilter{
+		Tab:    tab,
+		Search: search,
+		Page:   page,
+		Limit:  limit,
+	}
+
+	result, err := h.orderService.ListMiddlemanOrders(c.Context(), userID, filter)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Gagal mengambil daftar transaksi tengkulak: "+err.Error())
+	}
+
+	pagination := &PaginationMeta{
+		Page:       result.Page,
+		PerPage:    result.Limit,
+		TotalItems: result.TotalItems,
+		TotalPages: result.TotalPages,
+		HasNext:    result.Page < result.TotalPages,
+		HasPrev:    result.Page > 1,
+	}
+
+	return RespondSuccessWithPaginationAndSummary(c, fiber.StatusOK, "Daftar transaksi tengkulak berhasil diambil", result.Items, pagination, result.Summary)
+}
+
+// GetMiddlemanOrder mengambil detail satu transaksi tengkulak
+func (h *Handler) GetMiddlemanOrder(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	order, err := h.orderService.GetOrderByID(c.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Detail transaksi tengkulak berhasil diambil", order)
+}
+
+// UpdateOrderLogistics memperbarui data armada truk / pengemudi oleh tengkulak
+func (h *Handler) UpdateOrderLogistics(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var input domain.UpdateLogisticsInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", err.Error())
+	}
+
+	order, err := h.orderService.UpdateLogistics(c.Context(), userID, id, input)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Data logistik armada berhasil diperbarui", order)
+}
+
+// CompleteWeighingAndSettlement menyelesaikan transaksi panen berdasarkan hasil timbang digital
+func (h *Handler) CompleteWeighingAndSettlement(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var input domain.CompleteWeighingInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", err.Error())
+	}
+
+	order, err := h.orderService.CompleteWeighingAndSettlement(c.Context(), userID, id, input)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			return RespondError(c, fiber.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Transaksi panen selesai dan lunas", order)
+}
+
+// --- PETANI: PENGELOLAAN PESANAN (MOCKUP GAMBAR 2) ---
+
+// ListFarmerOrders mengambil daftar pesanan masuk untuk dashboard "PETANI - PESANAN"
+func (h *Handler) ListFarmerOrders(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	tab := c.Query("tab", "all")
+	search := c.Query("search")
+	month, _ := strconv.Atoi(c.Query("month", "0"))
+	year, _ := strconv.Atoi(c.Query("year", "0"))
+
+	filter := domain.OrderFilter{
+		Tab:    tab,
+		Search: search,
+		Month:  month,
+		Year:   year,
+		Page:   page,
+		Limit:  limit,
+	}
+
+	result, err := h.orderService.ListFarmerOrders(c.Context(), userID, filter)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Gagal mengambil daftar pesanan petani: "+err.Error())
+	}
+
+	pagination := &PaginationMeta{
+		Page:       result.Page,
+		PerPage:    result.Limit,
+		TotalItems: result.TotalItems,
+		TotalPages: result.TotalPages,
+		HasNext:    result.Page < result.TotalPages,
+		HasPrev:    result.Page > 1,
+	}
+
+	return RespondSuccessWithPaginationAndSummary(c, fiber.StatusOK, "Daftar pesanan petani berhasil diambil", result.Items, pagination, result.Summary)
+}
+
+// GetFarmerOrder mengambil detail satu pesanan petani
+func (h *Handler) GetFarmerOrder(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	order, err := h.orderService.GetOrderByID(c.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Detail pesanan petani berhasil diambil", order)
+}
+
+// AcceptFarmerOrder memproses aksi terima penawaran & jadwalkan oleh petani
+func (h *Handler) AcceptFarmerOrder(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	order, err := h.orderService.AcceptOrder(c.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		if errors.Is(err, domain.ErrInvalidOrderAction) {
+			return RespondError(c, fiber.StatusBadRequest, "INVALID_ACTION", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Penawaran pembeli berhasil diterima dan jadwal penjemputan dikonfirmasi", order)
+}
+
+// NegotiateFarmerOrder memproses penawaran balik/negosiasi oleh petani
+func (h *Handler) NegotiateFarmerOrder(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var input domain.NegotiateOrderInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", "Format data negosiasi tidak valid: "+err.Error())
+	}
+
+	order, err := h.orderService.NegotiateOrder(c.Context(), userID, id, input)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		if errors.Is(err, domain.ErrCounterPriceRequired) || errors.Is(err, domain.ErrInvalidOrderAction) {
+			return RespondError(c, fiber.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Penawaran negosiasi berhasil dikirim ke pembeli", order)
+}
+
+// RejectFarmerOrder memproses penolakan tawaran oleh petani
+func (h *Handler) RejectFarmerOrder(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var body struct {
+		Reason string `json:"reason" form:"reason"`
+	}
+	_ = c.Bind().Body(&body)
+
+	order, err := h.orderService.RejectOrder(c.Context(), userID, id, body.Reason)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Penawaran berhasil ditolak", order)
+}
+
+// ConfirmReadyForPickup memproses tombol [Siap Muat] / [Bagikan Titik Jemput]
+func (h *Handler) ConfirmReadyForPickup(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	order, err := h.orderService.ConfirmReadyForPickup(c.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Status siap muat dan titik jemput berhasil dikonfirmasi ke armada", order)
 }

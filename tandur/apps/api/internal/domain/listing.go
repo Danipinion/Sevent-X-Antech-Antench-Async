@@ -148,3 +148,5 @@ type ListingRepository interface {
 	Update(ctx context.Context, listing *FarmerListing) error
 	SoftDelete(ctx context.Context, id string, farmerID string) error
 }
+
+type FarmerListingRepository = ListingRepository
