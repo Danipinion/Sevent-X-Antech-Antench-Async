@@ -26,6 +26,7 @@ type Handler struct {
 	authService      *application.AuthService
 	farmerService    *application.FarmerService
 	orderService     *application.OrderService
+	middlemanService *application.MiddlemanService
 	storage          storage.ObjectStorage
 	authHandler      *AuthHandler
 }
@@ -33,6 +34,7 @@ type Handler struct {
 func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *application.CommodityService, authService *application.AuthService, optionalServices ...interface{}) *Handler {
 	var fs *application.FarmerService
 	var os *application.OrderService
+	var ms *application.MiddlemanService
 
 	for _, opt := range optionalServices {
 		switch v := opt.(type) {
@@ -40,6 +42,8 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 			fs = v
 		case *application.OrderService:
 			os = v
+		case *application.MiddlemanService:
+			ms = v
 		}
 	}
 
@@ -59,6 +63,7 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		authService:      authService,
 		farmerService:    fs,
 		orderService:     os,
+		middlemanService: ms,
 		storage:          objStorage,
 		authHandler:      NewAuthHandler(authService, objStorage),
 	}
@@ -860,3 +865,333 @@ func (h *Handler) ConfirmReadyForPickup(c fiber.Ctx) error {
 
 	return RespondSuccess(c, fiber.StatusOK, "Status siap muat dan titik jemput berhasil dikonfirmasi ke armada", order)
 }
+
+// ==========================================
+// TENGKULAK / MITRA PENGUMPUL B2B HANDLERS
+// ==========================================
+
+// GetMiddlemanDashboard mengembalikan data metrik, jadwal armada muat, dan harga acuan untuk Beranda Tengkulak
+func (h *Handler) GetMiddlemanDashboard(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	dashboard, err := h.middlemanService.GetDashboard(userID)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Data dashboard beranda tengkulak berhasil dimuat", dashboard)
+}
+
+// GetMiddlemanOrders mengambil daftar Transaksi & Surat Pesanan (PO) dengan tab filter dan summary card
+func (h *Handler) GetMiddlemanOrders(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	filter := domain.MiddlemanOrderFilter{
+		Tab:    c.Query("tab", "all"),
+		Search: c.Query("search", ""),
+		Period: c.Query("period", ""),
+		Page:   page,
+		Limit:  limit,
+	}
+
+	orders, summary, total, err := h.middlemanService.ListOrders(userID, filter)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	pagination := NewPaginationMeta(page, limit, int64(total))
+	return RespondSuccessWithPaginationAndSummary(c, fiber.StatusOK, "Daftar transaksi dan surat pesanan berhasil diambil", orders, pagination, summary)
+}
+
+// UpdateMiddlemanOrderPO memproses modal Edit Transaksi & Surat Pesanan (PO)
+func (h *Handler) UpdateMiddlemanOrderPO(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var input domain.UpdateOrderPOInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "BAD_REQUEST", "Format input tidak valid")
+	}
+
+	order, err := h.middlemanService.UpdateOrderPO(userID, id, input)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "UPDATE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Transaksi & Surat Pesanan (PO) berhasil diperbarui", order)
+}
+
+// CancelMiddlemanOrderPO membatalkan atau menghapus pesanan PO
+func (h *Handler) CancelMiddlemanOrderPO(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	if err := h.middlemanService.CancelOrderPO(userID, id); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "CANCEL_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Surat Pesanan (PO) berhasil dibatalkan", nil)
+}
+
+// ExportMiddlemanOrdersReport mengekspor laporan transaksi PO ke CSV
+func (h *Handler) ExportMiddlemanOrdersReport(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	filter := domain.MiddlemanOrderFilter{
+		Tab:    c.Query("tab", "all"),
+		Search: c.Query("search", ""),
+		Period: c.Query("period", ""),
+	}
+
+	data, filename, err := h.middlemanService.ExportOrdersReport(userID, filter)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "EXPORT_FAILED", err.Error())
+	}
+
+	c.Set("Content-Type", "text/csv")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	return c.Send(data)
+}
+
+// GetMiddlemanOffers mengambil daftar Penawaran & Kesepakatan Harga
+func (h *Handler) GetMiddlemanOffers(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	filter := domain.MiddlemanOfferFilter{
+		Tab:       c.Query("tab", "all"),
+		Commodity: c.Query("commodity", ""),
+		Region:    c.Query("region", ""),
+		Page:      page,
+		Limit:     limit,
+	}
+
+	offers, total, err := h.middlemanService.ListOffers(userID, filter)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	pagination := NewPaginationMeta(page, limit, int64(total))
+	return RespondSuccessWithPagination(c, fiber.StatusOK, "Daftar penawaran harga tebas berhasil diambil", offers, pagination)
+}
+
+// CounterMiddlemanOffer memproses tombol [Tawar Susulan]
+func (h *Handler) CounterMiddlemanOffer(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var input domain.CounterOfferInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "BAD_REQUEST", "Format input tidak valid")
+	}
+
+	offer, err := h.middlemanService.CounterOffer(userID, id, input)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "COUNTER_OFFER_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Tawaran susulan berhasil diajukan ke petani", offer)
+}
+
+// GetMiddlemanInventory menampilkan tabel Inventaris Stok Gudang & 4 ringkasan metrik
+func (h *Handler) GetMiddlemanInventory(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	category := c.Query("category", "all")
+	qualityStatus := c.Query("status", "all")
+	search := c.Query("search", "")
+
+	inventories, summary, total, err := h.middlemanService.ListInventory(userID, category, qualityStatus, search, page, limit)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	pagination := NewPaginationMeta(page, limit, int64(total))
+	return RespondSuccessWithPaginationAndSummary(c, fiber.StatusOK, "Daftar stok inventaris gudang berhasil diambil", inventories, pagination, summary)
+}
+
+// GetMiddlemanInventoryByID menampilkan modal Detail Komoditas Stok
+func (h *Handler) GetMiddlemanInventoryByID(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	inv, err := h.middlemanService.GetInventoryByID(userID, id)
+	if err != nil {
+		return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Stok inventaris tidak ditemukan")
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Detail komoditas stok berhasil diambil", inv)
+}
+
+// CreateMiddlemanInventory memproses modal Tambah Stok Masuk Gudang
+func (h *Handler) CreateMiddlemanInventory(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	var input domain.CreateInventoryInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "BAD_REQUEST", "Format input tidak valid")
+	}
+
+	inv, err := h.middlemanService.CreateInventory(userID, input)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "CREATE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusCreated, "Stok baru berhasil ditambahkan ke inventaris gudang", inv)
+}
+
+// DeleteMiddlemanInventory menghapus lot stok dari inventaris
+func (h *Handler) DeleteMiddlemanInventory(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	if err := h.middlemanService.DeleteInventory(userID, id); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "DELETE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Stok inventaris berhasil dihapus", nil)
+}
+
+// GetMiddlemanMutations mengambil log Riwayat Keluar-Masuk Terakhir
+func (h *Handler) GetMiddlemanMutations(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	mutations, err := h.middlemanService.ListMutations(userID, limit)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Riwayat mutasi keluar-masuk gudang berhasil diambil", mutations)
+}
+
+// GetMiddlemanSales menampilkan Halaman Jual Stok Gudang
+func (h *Handler) GetMiddlemanSales(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	tab := c.Query("tab", "all")
+
+	sales, summary, total, err := h.middlemanService.ListSales(userID, tab, page, limit)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	pagination := NewPaginationMeta(page, limit, int64(total))
+	return RespondSuccessWithPaginationAndSummary(c, fiber.StatusOK, "Daftar komoditas siap jual dan listing berhasil diambil", sales, pagination, summary)
+}
+
+// CreateMiddlemanSaleListing memproses modal Buka Penawaran Jual Baru
+func (h *Handler) CreateMiddlemanSaleListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	var input domain.CreateSaleListingInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "BAD_REQUEST", "Format input tidak valid")
+	}
+
+	sale, err := h.middlemanService.CreateSaleListing(userID, input)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "CREATE_SALE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusCreated, "Penawaran jual komoditas ke pasar/rice mill berhasil dipublikasikan", sale)
+}
+
+// GetMiddlemanSaleListingByID mengambil detail listing penjualan
+func (h *Handler) GetMiddlemanSaleListingByID(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	sale, err := h.middlemanService.GetSaleListingByID(userID, id)
+	if err != nil {
+		return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Listing penjualan tidak ditemukan")
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Detail listing penjualan berhasil diambil", sale)
+}
+
+// CloseMiddlemanSaleListing menutup / mengarsipkan listing penjualan
+func (h *Handler) CloseMiddlemanSaleListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	if err := h.middlemanService.CloseSaleListing(userID, id); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "CLOSE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Listing penjualan berhasil ditutup", nil)
+}
+
+// GetMiddlemanSaleBids mengambil penawaran pembeli grosir/rice mill yang masuk
+func (h *Handler) GetMiddlemanSaleBids(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	bids, err := h.middlemanService.ListSaleBids(userID, id)
+	if err != nil {
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Daftar penawaran pembeli masuk berhasil diambil", bids)
+}
+

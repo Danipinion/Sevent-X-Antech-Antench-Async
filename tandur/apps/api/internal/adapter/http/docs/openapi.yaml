@@ -1460,6 +1460,30 @@ paths:
                     $ref: '#/components/schemas/FarmerPurchaseOrder'
                   meta:
                     $ref: '#/components/schemas/Meta'
+  /middleman/dashboard:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Dashboard Beranda Tengkulak
+      description: Menampilkan ringkasan metrik 4 kartu, jadwal muat & timbang lapangan
+        armada, serta acuan harga pasar real-time penggilingan Demak.
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Data dashboard berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/MiddlemanDashboard'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
   /middleman/listings:
     get:
       tags:
@@ -1512,13 +1536,30 @@ paths:
     get:
       tags:
       - Tengkulak & Pembeli Bisnis
-      summary: Riwayat Pesanan & Transaksi Tengkulak
-      description: Mengambil seluruh riwayat penawaran dan pembelian borongan yang
-        diajukan oleh tengkulak.
+      summary: Riwayat Pesanan & Transaksi Surat Pesanan (PO)
+      description: Mengambil seluruh riwayat transaksi PO dengan tab filter status
+        (all, waiting_confirmation, delivery_order, weighing, completed, cancelled),
+        pencarian kode/petani/komoditas, dan summary metrik 3 kartu.
       security:
       - BearerAuth: []
       parameters:
-      - name: status
+      - name: tab
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - waiting_confirmation
+          - delivery_order
+          - weighing
+          - completed
+          - cancelled
+          default: all
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: period
         in: query
         schema:
           type: string
@@ -1548,7 +1589,14 @@ paths:
                     items:
                       $ref: '#/components/schemas/FarmerPurchaseOrder'
                   meta:
-                    $ref: '#/components/schemas/Meta'
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/MiddlemanOrdersSummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
     post:
       tags:
       - Tengkulak & Pembeli Bisnis
@@ -1581,6 +1629,30 @@ paths:
                     $ref: '#/components/schemas/FarmerPurchaseOrder'
                   meta:
                     $ref: '#/components/schemas/Meta'
+  /middleman/orders/export:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Export Laporan Transaksi PO (Excel / CSV)
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Berkas laporan transaksi berformat CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
   /middleman/orders/{id}:
     get:
       tags:
@@ -1608,6 +1680,74 @@ paths:
                     example: success
                   data:
                     $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    put:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Edit Transaksi & Surat Pesanan (PO)
+      description: Memperbarui tonase timbang, harga tebas, estimasi jadwal timbang
+        sawah, armada, dan catatan khusus lapangan.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderPOInput'
+      responses:
+        '200':
+          description: Surat Pesanan PO berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Transaksi & Surat Pesanan (PO) berhasil diperbarui
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    delete:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Batalkan / Hapus Surat Pesanan (PO)
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Surat pesanan berhasil dibatalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Surat Pesanan (PO) berhasil dibatalkan
                   meta:
                     $ref: '#/components/schemas/Meta'
   /middleman/orders/{id}/logistics:
@@ -1685,6 +1825,479 @@ paths:
                     example: Penimbangan dan pelunasan transaksi berhasil diselesaikan
                   data:
                     $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/offers:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Daftar Penawaran & Kesepakatan Harga
+      description: Menampilkan kartu penawaran harga tebas sawah dengan filter tab
+        (all, active, waiting_response, agreed, cancelled), komoditas, dan wilayah.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - active
+          - waiting_response
+          - agreed
+          - cancelled
+          default: all
+      - name: commodity
+        in: query
+        schema:
+          type: string
+      - name: region
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar penawaran berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanOfferItem'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/offers/{id}/counter:
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tawar Susulan ke Petani
+      description: Mengirimkan penawaran harga susulan ketika penawaran sebelumnya
+        masih menunggu respon atau dalam negosiasi.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CounterOfferInput'
+      responses:
+        '200':
+          description: Tawaran susulan berhasil diajukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Tawaran susulan berhasil diajukan ke petani
+                  data:
+                    $ref: '#/components/schemas/MiddlemanOfferItem'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/inventory:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Inventaris Stok Gudang
+      description: Menampilkan tabel inventaris stok gudang dan ringkasan 4 kartu
+        metrik kapasitas, nilai estimasi, dan peringatan stok.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: category
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - beras
+          - gabah
+          - palawija
+          default: all
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - aman
+          - menipis
+          - perlu_tindakan
+          default: all
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar stok gudang berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanInventory'
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/MiddlemanInventorySummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tambah Stok Masuk Gudang (Internal)
+      description: Mencatat penerimaan stok baru hasil tebas mandiri atau pasokan
+        mitra ke gudang internal.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryInput'
+      responses:
+        '201':
+          description: Stok berhasil ditambahkan ke inventaris
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Stok baru berhasil ditambahkan ke inventaris gudang
+                  data:
+                    $ref: '#/components/schemas/MiddlemanInventory'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/inventory/mutations:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Riwayat Keluar-Masuk Gudang (Mutasi Stok)
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Riwayat mutasi berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanInventoryMutation'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/inventory/{id}:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Detail Komoditas Stok Gudang
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detail stok berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/MiddlemanInventory'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    delete:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Hapus Lot Stok Gudang
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Stok berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Stok inventaris berhasil dihapus
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Jual Stok Gudang
+      description: Menampilkan halaman penjualan stok komoditas gabah dan beras ke
+        rice mill / pedagang pasar dengan 4 kartu ringkasan.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - gabah_basah
+          - beras_premium
+          - palawija
+          default: all
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar komoditas siap jual berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanSalesListing'
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/MiddlemanSalesSummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Buka Penawaran Jual Baru (Ke Rice Mill / Grosir)
+      description: Membuka lelang/listing penjualan dari stok gudang yang tersedia
+        ke jaringan pembeli skala besar.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSaleListingInput'
+      responses:
+        '201':
+          description: Listing penjualan berhasil dipublikasikan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran jual komoditas ke pasar/rice mill berhasil
+                      dipublikasikan
+                  data:
+                    $ref: '#/components/schemas/MiddlemanSalesListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales/{id}:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Detail Listing Penjualan Stok
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detail listing penjualan berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/MiddlemanSalesListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales/{id}/close:
+    put:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tutup / Arsipkan Listing Penjualan Stok
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Listing penjualan berhasil ditutup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Listing penjualan berhasil ditutup
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales/{id}/bids:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Penawaran Pembeli Masuk ke Listing Jual Stok
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Daftar penawaran masuk dari pembeli grosir berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        buyer_name:
+                          type: string
+                          example: Penggilingan Padi Sri Makmur
+                        offered_price_per_kg:
+                          type: number
+                          example: 7200
+                        requested_tons:
+                          type: number
+                          example: 10.0
                   meta:
                     $ref: '#/components/schemas/Meta'
   /marketplace/listings:
@@ -2904,3 +3517,381 @@ components:
         invoice_url:
           type: string
           example: http://localhost:3900/tandur/invoices/inv_123.pdf
+    MiddlemanDashboard:
+      type: object
+      properties:
+        greeting:
+          type: string
+          example: Selamat Pagi, Haji Supardi
+        role_label:
+          type: string
+          example: Mitra Pengumpul Demak
+        work_area:
+          type: string
+          example: Karangawen, Demak
+        total_transactions:
+          type: object
+          properties:
+            value:
+              type: string
+              example: 3 Kontrak
+            description:
+              type: string
+              example: 2 Siap Timbang, 1 Menuju Gudang
+        used_capacity:
+          type: object
+          properties:
+            total_tons:
+              type: number
+              example: 55.5
+            warehouse_tons:
+              type: number
+              example: 38.2
+            otw_tons:
+              type: number
+              example: 17.3
+            description:
+              type: string
+              example: 38,2 Ton di Gudang, 17,3 Ton OTW
+        scheduled_truck:
+          type: object
+          properties:
+            next_schedule:
+              type: string
+              example: Besok, 08:30
+            commodity_detail:
+              type: string
+              example: 'Kedatangan: 7,5 Ton GKP'
+        partner_farmers:
+          type: object
+          properties:
+            total_count:
+              type: integer
+              example: 14
+            description:
+              type: string
+              example: Wilayah Kab. Demak & Kudus
+        scheduled_pickups:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              order_code:
+                type: string
+                example: '#PO-TND-2025-0112'
+              vehicle:
+                type: string
+                example: Truk Isuzu Elf (#01)
+              driver_name:
+                type: string
+                example: Budi (Driver Timbang)
+              commodity_name:
+                type: string
+                example: Jagung Hibrida
+              quantity_tons:
+                type: number
+                example: 5.0
+              status_label:
+                type: string
+                example: Armada Menuju Lokasi
+              scheduled_time:
+                type: string
+                example: Besok, 08:30 WIB
+              pickup_address:
+                type: string
+                example: Desa Karangawen, Demak
+        benchmark_prices:
+          type: array
+          items:
+            type: object
+            properties:
+              commodity_name:
+                type: string
+                example: GKP Ciherang
+              price_per_kg:
+                type: number
+                example: 6800
+              change_amount:
+                type: number
+                example: 150
+              trend:
+                type: string
+                example: up
+    MiddlemanOrdersSummary:
+      type: object
+      properties:
+        total_active_contracts_amount:
+          type: number
+          example: 151850000
+        total_volume_in_delivery_tons:
+          type: number
+          example: 55.0
+        nearest_weighing_schedule:
+          type: string
+          example: Besok 08:30 (Karangawen)
+    MiddlemanOfferItem:
+      type: object
+      properties:
+        id:
+          type: string
+        offer_code:
+          type: string
+          example: '#OFF-TND-011'
+        farmer_name:
+          type: string
+          example: Gapoktan Sumber Makmur
+        location:
+          type: string
+          example: Demak Karangawen
+        commodity_name:
+          type: string
+          example: GKP Ciherang
+        quantity_tons:
+          type: number
+          example: 10.0
+        offered_price:
+          type: number
+          example: 6750
+        farmer_asking_price:
+          type: number
+          example: 6800
+        total_amount:
+          type: number
+          example: 67500000
+        status_label:
+          type: string
+          example: Aktif Berjalan
+        can_counter:
+          type: boolean
+          example: true
+    MiddlemanInventory:
+      type: object
+      properties:
+        id:
+          type: string
+        lot_code:
+          type: string
+          example: LOT-DEM-2025-0142
+        commodity_name:
+          type: string
+          example: Gabah Kering Panen (GKP)
+        category:
+          type: string
+          example: gabah
+        variety:
+          type: string
+          example: Ciherang Super
+        warehouse_name:
+          type: string
+          example: Gudang A - Demak
+        total_weight_tons:
+          type: number
+          example: 18.5
+        average_buy_price:
+          type: number
+          example: 6800
+        current_market_price:
+          type: number
+          example: 7250
+        margin_per_unit:
+          type: number
+          example: 450
+        status:
+          type: string
+          example: aman
+    MiddlemanInventorySummary:
+      type: object
+      properties:
+        total_stock_tons:
+          type: number
+          example: 38.2
+        warehouse_capacity_tons:
+          type: number
+          example: 50.0
+        capacity_percentage:
+          type: number
+          example: 76.4
+        estimated_stock_value:
+          type: number
+          example: 312450000
+        available_capacity_tons:
+          type: number
+          example: 11.8
+        stock_warnings_count:
+          type: integer
+          example: 2
+    CreateInventoryInput:
+      type: object
+      required:
+      - commodity_name
+      - buy_price_per_kg
+      properties:
+        commodity_id:
+          type: string
+        commodity_name:
+          type: string
+          example: Gabah Kering Giling (GKG)
+        category:
+          type: string
+          example: gabah
+        variety:
+          type: string
+          example: Ciherang Super
+        source_gapoktan:
+          type: string
+          example: Gapoktan Sumber Makmur - Demak
+        warehouse_name:
+          type: string
+          example: Gudang Karangawen
+        weight_tons:
+          type: number
+          example: 10.0
+        buy_price_per_kg:
+          type: number
+          example: 7800
+        market_price_per_kg:
+          type: number
+          example: 8300
+        moisture_content:
+          type: number
+          example: 13.5
+        notes:
+          type: string
+          example: Penerimaan hasil panen kelompok tani
+    MiddlemanInventoryMutation:
+      type: object
+      properties:
+        id:
+          type: string
+        lot_code:
+          type: string
+          example: LOT-Dem-0417
+        mutation_type:
+          type: string
+          example: in
+        commodity_name:
+          type: string
+          example: Gabah GKG
+        quantity_tons:
+          type: number
+          example: 10.0
+        partner_name:
+          type: string
+          example: Gapoktan Sumber Makmur
+    MiddlemanSalesSummary:
+      type: object
+      properties:
+        ready_to_sell_tons:
+          type: number
+          example: 28.0
+        active_listings_count:
+          type: integer
+          example: 4
+        incoming_bids_count:
+          type: integer
+          example: 6
+        average_sell_margin:
+          type: string
+          example: +Rp 450 / kg
+    MiddlemanSalesListing:
+      type: object
+      properties:
+        id:
+          type: string
+        inventory_id:
+          type: string
+        lot_code:
+          type: string
+          example: 'LOT: GKP-DEM-0142'
+        commodity_name:
+          type: string
+          example: Gabah Kering Panen (GKP)
+        variety:
+          type: string
+          example: Ciherang
+        offered_tons:
+          type: number
+          example: 10.0
+        cost_price_per_kg:
+          type: number
+          example: 6800
+        selling_price_per_kg:
+          type: number
+          example: 7250
+        total_selling_value:
+          type: number
+          example: 72500000
+        target_margin_per_kg:
+          type: number
+          example: 450
+        delivery_option:
+          type: string
+          example: warehouse_pickup
+        status:
+          type: string
+          example: active
+    CreateSaleListingInput:
+      type: object
+      required:
+      - inventory_id
+      - offered_tons
+      - selling_price_per_kg
+      properties:
+        inventory_id:
+          type: string
+        offered_tons:
+          type: number
+          example: 10.0
+        min_order_tons:
+          type: number
+          example: 2.0
+        selling_price_per_kg:
+          type: number
+          example: 7250
+        delivery_option:
+          type: string
+          example: warehouse_pickup
+        target_markets:
+          type: array
+          items:
+            type: string
+          example:
+          - rice_mill
+          - wholesaler
+        validity_days:
+          type: integer
+          example: 3
+    UpdateOrderPOInput:
+      type: object
+      properties:
+        offered_quantity:
+          type: number
+          example: 5000
+        offered_price:
+          type: number
+          example: 6800
+        pickup_date:
+          type: string
+          example: '2025-05-15'
+        pickup_time_slot:
+          type: string
+          example: 08:30 WIB
+        vehicle_type:
+          type: string
+          example: Truk Engkel (4 Roda)
+        notes:
+          type: string
+          example: Pastikan karung 50 kg cukup dan timbangan digital sudah dikalibrasi.
+    CounterOfferInput:
+      type: object
+      required:
+      - counter_price
+      properties:
+        counter_price:
+          type: number
+          example: 6850
+        counter_notes:
+          type: string
+          example: Penawaran harga susulan disesuaikan dengan mutu gabah super.

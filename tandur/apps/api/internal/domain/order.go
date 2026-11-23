@@ -53,6 +53,11 @@ type FarmerPurchaseOrder struct {
 	BuyerCity              string      `json:"buyer_city,omitempty"`
 	BuyerRating            float64     `json:"buyer_rating"`
 
+	// Informasi Petani (saat dilihat oleh Tengkulak/Pembeli)
+	FarmerName             string      `json:"farmer_name,omitempty"`
+	FarmerBusinessName     string      `json:"farmer_business_name,omitempty"`
+	CommodityVariety       string      `json:"commodity_variety,omitempty"`
+
 	// Harga & Margin
 	OfferedQuantity        float64     `json:"offered_quantity"`
 	OfferedPrice           float64     `json:"offered_price"`
