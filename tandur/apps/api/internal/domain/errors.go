@@ -11,7 +11,7 @@ var (
 	ErrUserNotFound       = errors.New("pengguna tidak ditemukan")
 	ErrPhoneAlreadyExists = errors.New("nomor handphone sudah terdaftar")
 	ErrNIKAlreadyExists   = errors.New("NIK sudah terdaftar")
-	ErrInvalidRole        = errors.New("role tidak valid, pilih: farmer, middleman, atau buyer")
+	ErrInvalidRole        = errors.New("role tidak valid, pilih: farmer, middleman, buyer, retail_buyer, atau business_buyer")
 	ErrInvalidPhone       = errors.New("nomor handphone harus terdiri dari 10-13 digit")
 	ErrInvalidNIK         = errors.New("NIK harus terdiri dari 16 digit angka")
 	ErrPasswordTooShort   = errors.New("password minimal 6 karakter")

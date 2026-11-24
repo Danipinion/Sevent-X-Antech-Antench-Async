@@ -37,3 +37,33 @@ func AuthMiddleware(authService *application.AuthService) fiber.Handler {
 		return c.Next()
 	}
 }
+
+// OptionalAuthMiddleware mengekstrak klaim JWT jika header Authorization tersedia tanpa memblokir akses publik
+func OptionalAuthMiddleware(authService *application.AuthService) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if authService == nil {
+			return c.Next()
+		}
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
+			return c.Next()
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			return c.Next()
+		}
+
+		tokenString := strings.TrimSpace(parts[1])
+		if tokenString == "" {
+			return c.Next()
+		}
+
+		if claims, err := authService.ValidateToken(tokenString); err == nil && claims != nil {
+			c.Locals("user_id", claims.UserID)
+			c.Locals("token", tokenString)
+			c.Locals("claims", claims)
+		}
+		return c.Next()
+	}
+}
