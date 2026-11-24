@@ -45,10 +45,17 @@ func main() {
 
 	// 4. Initialize Repositories (Persistence) & Cache
 	var userRepo *persistence.PostgresUserRepository
-	var listingRepo domain.ListingRepository
+	var listingRepo domain.FarmerListingRepository
+	var orderRepo domain.OrderRepository
+	var middlemanRepo domain.MiddlemanRepository
 	if dbPool != nil {
 		userRepo = persistence.NewPostgresUserRepository(dbPool)
 		listingRepo = persistence.NewPostgresListingRepository(dbPool)
+		orderRepo = persistence.NewPostgresOrderRepository(dbPool)
+		middlemanRepo = persistence.NewPostgresMiddlemanRepository(dbPool)
+	} else {
+		orderRepo = persistence.NewMemoryOrderRepository()
+		middlemanRepo = persistence.NewMemoryMiddlemanRepository(orderRepo)
 	}
 	commodityRepo := persistence.NewMemoryCommodityRepository()
 
@@ -73,9 +80,11 @@ func main() {
 	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
 	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient, marketPriceCache, realtimeCache)
 	farmerService := application.NewFarmerService(userRepo, listingRepo)
+	orderService := application.NewOrderService(orderRepo, listingRepo, userRepo, commodityService)
+	middlemanService := application.NewMiddlemanService(middlemanRepo, orderRepo, listingRepo, commodityService)
 
 	// 6. Initialize HTTP Handlers & Adapter
-	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService, farmerService)
+	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService, farmerService, orderService, middlemanService)
 
 	// 7. Setup Fiber Web Application
 	app := fiber.New(fiber.Config{

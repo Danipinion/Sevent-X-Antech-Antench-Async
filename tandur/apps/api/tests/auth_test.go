@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -99,6 +100,39 @@ func (m *MockUserRepository) UpdateVerification(ctx context.Context, user *domai
 	if user.NIK != nil {
 		m.byNIK[*user.NIK] = user
 	}
+	return nil
+}
+
+func (m *MockUserRepository) UpdateProfile(ctx context.Context, user *domain.User, location *domain.UserLocation) error {
+	existing, ok := m.users[user.ID]
+	if !ok {
+		return domain.ErrUserNotFound
+	}
+	for _, u := range m.users {
+		if u.ID != user.ID && u.Phone == user.Phone {
+			return domain.ErrPhoneAlreadyExists
+		}
+	}
+	existing.Name = user.Name
+	existing.Phone = user.Phone
+	existing.IsBisnis = user.IsBisnis
+	existing.AvatarURL = user.AvatarURL
+	existing.UpdatedAt = time.Now()
+	user.UpdatedAt = existing.UpdatedAt
+
+	if location != nil {
+		if existing.Location != nil {
+			location.ID = existing.Location.ID
+		} else {
+			location.ID = "mock-loc-" + user.ID
+		}
+		location.UserID = user.ID
+		location.UpdatedAt = time.Now()
+		m.locations[user.ID] = location
+		existing.Location = location
+		user.Location = location
+	}
+	m.byPhone[user.Phone] = existing
 	return nil
 }
 
@@ -853,5 +887,387 @@ func TestAuthService_Logout_Lifecycle(t *testing.T) {
 	err = service.Logout(context.Background(), loginRes.Token)
 	if !errors.Is(err, domain.ErrUnauthorized) {
 		t.Errorf("Expected ErrUnauthorized on subsequent logout, got: %v", err)
+	}
+}
+
+func createDummyPNG() []byte {
+	header := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	payload := make([]byte, 128)
+	copy(payload, header)
+	for i := len(header); i < len(payload); i++ {
+		payload[i] = 0xAA
+	}
+	return payload
+}
+
+func TestAuthService_UpdateProfile_Success(t *testing.T) {
+	repo := NewMockUserRepository()
+	service := application.NewAuthService(repo, "secret-test-key-32chars-minimum!", 24*time.Hour)
+
+	user, err := service.Register(context.Background(), application.RegisterInput{
+		Name:     "Budi Lama",
+		Phone:    "081234567890",
+		Password: "password123",
+		Role:     "farmer",
+		IsBisnis: false,
+	})
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	newName := "Budi Baru"
+	newPhone := "+6281299998888"
+	isBisnis := true
+	avatarURL := "https://storage.tandur.id/avatars/new-profile.png"
+	newLat := -6.2088
+	newLng := 106.8456
+	updatedUser, err := service.UpdateProfile(context.Background(), user.ID, application.UpdateProfileInput{
+		Name:      &newName,
+		Phone:     &newPhone,
+		IsBisnis:  &isBisnis,
+		AvatarURL: &avatarURL,
+		Location: &application.UpdateProfileLocationInput{
+			Label:     "Gudang Utama",
+			Address:   "Jl. Pertanian Modern No. 5",
+			Latitude:  &newLat,
+			Longitude: &newLng,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile failed: %v", err)
+	}
+
+	if updatedUser.Name != "Budi Baru" {
+		t.Errorf("Expected name 'Budi Baru', got: %s", updatedUser.Name)
+	}
+	if updatedUser.Phone != "081299998888" {
+		t.Errorf("Expected phone normalized to '081299998888', got: %s", updatedUser.Phone)
+	}
+	if !updatedUser.IsBisnis {
+		t.Errorf("Expected IsBisnis to be true")
+	}
+	if updatedUser.AvatarURL == nil || *updatedUser.AvatarURL != avatarURL {
+		t.Errorf("Expected avatar_url '%s', got: %v", avatarURL, updatedUser.AvatarURL)
+	}
+	if updatedUser.Location == nil || updatedUser.Location.Label != "Gudang Utama" {
+		t.Errorf("Expected location label 'Gudang Utama', got: %v", updatedUser.Location)
+	}
+}
+
+func TestAuthService_UpdateProfile_PreventSensitiveFields(t *testing.T) {
+	repo := NewMockUserRepository()
+	service := application.NewAuthService(repo, "secret-test-key-32chars-minimum!", 24*time.Hour)
+
+	nik := "3201010101019999"
+	user, err := service.Register(context.Background(), application.RegisterInput{
+		NIK:      &nik,
+		Name:     "Akun Sensitif",
+		Phone:    "081300001111",
+		Password: "passwordAsli123",
+		Role:     "farmer",
+	})
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	nameSensitif := "Akun Sensitif"
+	phoneSensitif := "081300001111"
+
+	// 1. Attempt to change NIK -> should be rejected
+	newNIK := "3201010101010000"
+	_, err = service.UpdateProfile(context.Background(), user.ID, application.UpdateProfileInput{
+		Name:  &nameSensitif,
+		Phone: &phoneSensitif,
+		NIK:   &newNIK,
+	})
+	if !errors.Is(err, domain.ErrSensitiveFieldCannotBeModified) {
+		t.Errorf("Expected ErrSensitiveFieldCannotBeModified when updating NIK, got: %v", err)
+	}
+
+	// 2. Attempt to change Role -> should be rejected
+	newRole := "buyer"
+	_, err = service.UpdateProfile(context.Background(), user.ID, application.UpdateProfileInput{
+		Name:  &nameSensitif,
+		Phone: &phoneSensitif,
+		Role:  &newRole,
+	})
+	if !errors.Is(err, domain.ErrSensitiveFieldCannotBeModified) {
+		t.Errorf("Expected ErrSensitiveFieldCannotBeModified when updating Role, got: %v", err)
+	}
+
+	// 3. Attempt to change Password via profile update -> should be rejected
+	newPass := "passwordBaru123"
+	_, err = service.UpdateProfile(context.Background(), user.ID, application.UpdateProfileInput{
+		Name:     &nameSensitif,
+		Phone:    &phoneSensitif,
+		Password: &newPass,
+	})
+	if !errors.Is(err, domain.ErrSensitiveFieldCannotBeModified) {
+		t.Errorf("Expected ErrSensitiveFieldCannotBeModified when updating Password, got: %v", err)
+	}
+
+	// Verify original user data remains untouched
+	savedUser, err := repo.GetByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if *savedUser.NIK != nik {
+		t.Errorf("NIK was altered unexpectedly: %s", *savedUser.NIK)
+	}
+	if savedUser.Role != domain.RoleFarmer {
+		t.Errorf("Role was altered unexpectedly: %s", savedUser.Role)
+	}
+}
+
+func TestAuthService_UpdateProfile_ValidationErrors(t *testing.T) {
+	repo := NewMockUserRepository()
+	service := application.NewAuthService(repo, "secret-test-key-32chars-minimum!", 24*time.Hour)
+
+	user1, _ := service.Register(context.Background(), application.RegisterInput{
+		Name:     "User Pertama",
+		Phone:    "081111111111",
+		Password: "password123",
+		Role:     "farmer",
+	})
+	user2, _ := service.Register(context.Background(), application.RegisterInput{
+		Name:     "User Kedua",
+		Phone:    "082222222222",
+		Password: "password123",
+		Role:     "buyer",
+	})
+
+	// 1. Name is empty
+	emptyName := "   "
+	phone1 := "081111111111"
+	_, err := service.UpdateProfile(context.Background(), user1.ID, application.UpdateProfileInput{
+		Name:  &emptyName,
+		Phone: &phone1,
+	})
+	if !errors.Is(err, domain.ErrNameRequired) {
+		t.Errorf("Expected ErrNameRequired, got: %v", err)
+	}
+
+	// 2. Invalid Phone format
+	name1 := "User Pertama"
+	badPhone := "08123-abc"
+	_, err = service.UpdateProfile(context.Background(), user1.ID, application.UpdateProfileInput{
+		Name:  &name1,
+		Phone: &badPhone,
+	})
+	if !errors.Is(err, domain.ErrInvalidPhone) {
+		t.Errorf("Expected ErrInvalidPhone, got: %v", err)
+	}
+
+	// 3. Phone already taken by user2
+	dupPhone := user2.Phone
+	_, err = service.UpdateProfile(context.Background(), user1.ID, application.UpdateProfileInput{
+		Name:  &name1,
+		Phone: &dupPhone,
+	})
+	if !errors.Is(err, domain.ErrPhoneAlreadyExists) {
+		t.Errorf("Expected ErrPhoneAlreadyExists, got: %v", err)
+	}
+
+	// 4. Invalid Latitude
+	badLat := 95.0
+	_, err = service.UpdateProfile(context.Background(), user1.ID, application.UpdateProfileInput{
+		Name:  &name1,
+		Phone: &phone1,
+		Location: &application.UpdateProfileLocationInput{
+			Latitude: &badLat,
+		},
+	})
+	if !errors.Is(err, domain.ErrInvalidCoordinate) {
+		t.Errorf("Expected ErrInvalidCoordinate for lat > 90, got: %v", err)
+	}
+
+	// 5. Invalid Longitude
+	badLng := 190.0
+	_, err = service.UpdateProfile(context.Background(), user1.ID, application.UpdateProfileInput{
+		Name:  &name1,
+		Phone: &phone1,
+		Location: &application.UpdateProfileLocationInput{
+			Longitude: &badLng,
+		},
+	})
+	if !errors.Is(err, domain.ErrInvalidCoordinate) {
+		t.Errorf("Expected ErrInvalidCoordinate for lng > 180, got: %v", err)
+	}
+}
+
+func TestHTTP_UpdateProfile_And_UploadAvatar(t *testing.T) {
+	repo := NewMockUserRepository()
+	cfg := &config.Config{
+		AppEnv:             "test",
+		JWTSecret:          "test-jwt-secret-very-long-string-32-chars",
+		JWTExpirationHours: 24,
+	}
+	authService := application.NewAuthService(repo, cfg.JWTSecret, 24*time.Hour)
+	commodityRepo := persistence.NewMemoryCommodityRepository()
+	commodityService := application.NewCommodityService(commodityRepo)
+
+	handler := adapterHttp.NewHandler(cfg, nil, commodityService, authService)
+	app := fiber.New()
+	adapterHttp.SetupRoutes(app, handler)
+
+	// 1. Register and Login to get Bearer Token
+	regPayload := map[string]interface{}{
+		"nik":      "3201010101018888",
+		"name":     "Petani Update",
+		"phone":    "081288889999",
+		"password": "password123",
+		"role":     "farmer",
+	}
+	regBody, _ := json.Marshal(regPayload)
+	reqReg := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(regBody))
+	reqReg.Header.Set("Content-Type", "application/json")
+	respReg, err := app.Test(reqReg)
+	if err != nil || respReg.StatusCode != http.StatusCreated {
+		t.Fatalf("Register failed: status %d", respReg.StatusCode)
+	}
+
+	loginPayload := map[string]interface{}{
+		"username": "081288889999",
+		"password": "password123",
+	}
+	loginBody, _ := json.Marshal(loginPayload)
+	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginBody))
+	reqLogin.Header.Set("Content-Type", "application/json")
+	respLogin, err := app.Test(reqLogin)
+	if err != nil || respLogin.StatusCode != http.StatusOK {
+		t.Fatalf("Login failed: status %d", respLogin.StatusCode)
+	}
+
+	var loginResp struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(respLogin.Body).Decode(&loginResp)
+	token := loginResp.Data.Token
+	if token == "" {
+		t.Fatalf("Empty token from login")
+	}
+
+	// 2. PUT /api/v1/auth/profile with JSON -> Success
+	updatePayload := map[string]interface{}{
+		"name":       "Petani Sukses",
+		"phone":      "081288880000",
+		"is_bisnis":  true,
+		"avatar_url": "https://storage.tandur.id/avatars/petani.png",
+		"location": map[string]interface{}{
+			"label":     "Kantor Cabang",
+			"address":   "Jl. Merdeka No. 10",
+			"latitude":  -6.9175,
+			"longitude": 107.6191,
+		},
+	}
+	updateBody, _ := json.Marshal(updatePayload)
+	reqUpdate := httptest.NewRequest(http.MethodPut, "/api/v1/auth/profile", bytes.NewReader(updateBody))
+	reqUpdate.Header.Set("Content-Type", "application/json")
+	reqUpdate.Header.Set("Authorization", "Bearer "+token)
+
+	respUpdate, err := app.Test(reqUpdate)
+	if err != nil {
+		t.Fatalf("Update profile request failed: %v", err)
+	}
+	if respUpdate.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respUpdate.Body)
+		t.Fatalf("Expected status 200 OK for profile update, got %d. Body: %s", respUpdate.StatusCode, string(body))
+	}
+
+	// 3. Attempting to change NIK via PUT /api/v1/auth/profile -> Expect 400 Bad Request
+	hackPayload := map[string]interface{}{
+		"name": "Hacker",
+		"nik":  "3201010101010001",
+	}
+	hackBody, _ := json.Marshal(hackPayload)
+	reqHack := httptest.NewRequest(http.MethodPut, "/api/v1/auth/profile", bytes.NewReader(hackBody))
+	reqHack.Header.Set("Content-Type", "application/json")
+	reqHack.Header.Set("Authorization", "Bearer "+token)
+
+	respHack, err := app.Test(reqHack)
+	if err != nil {
+		t.Fatalf("Hack profile request failed: %v", err)
+	}
+	if respHack.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected status 400 Bad Request for sensitive NIK change, got %d", respHack.StatusCode)
+	}
+
+	// 4. PUT /api/v1/auth/profile with multipart/form-data image upload
+	bufMultipart := &bytes.Buffer{}
+	mpWriter := multipart.NewWriter(bufMultipart)
+	_ = mpWriter.WriteField("name", "Petani Foto Baru")
+	part, err := mpWriter.CreateFormFile("avatar", "new_avatar.png")
+	if err != nil {
+		t.Fatalf("CreateFormFile failed: %v", err)
+	}
+	_, _ = part.Write(createDummyPNG())
+	_ = mpWriter.Close()
+
+	reqMultipart := httptest.NewRequest(http.MethodPut, "/api/v1/auth/profile", bufMultipart)
+	reqMultipart.Header.Set("Content-Type", mpWriter.FormDataContentType())
+	reqMultipart.Header.Set("Authorization", "Bearer "+token)
+
+	respMultipart, err := app.Test(reqMultipart)
+	if err != nil {
+		t.Fatalf("Multipart update profile request failed: %v", err)
+	}
+	if respMultipart.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respMultipart.Body)
+		t.Fatalf("Expected status 200 OK for multipart profile update, got %d. Body: %s", respMultipart.StatusCode, string(body))
+	}
+
+	// 5. POST /api/v1/auth/profile/photo instant upload
+	bufPhoto := &bytes.Buffer{}
+	photoWriter := multipart.NewWriter(bufPhoto)
+	photoPart, err := photoWriter.CreateFormFile("photo", "instant_avatar.png")
+	if err != nil {
+		t.Fatalf("CreateFormFile for photo failed: %v", err)
+	}
+	_, _ = photoPart.Write(createDummyPNG())
+	_ = photoWriter.Close()
+
+	reqPhoto := httptest.NewRequest(http.MethodPost, "/api/v1/auth/profile/photo", bufPhoto)
+	reqPhoto.Header.Set("Content-Type", photoWriter.FormDataContentType())
+	reqPhoto.Header.Set("Authorization", "Bearer "+token)
+
+	respPhoto, err := app.Test(reqPhoto)
+	if err != nil {
+		t.Fatalf("Photo upload request failed: %v", err)
+	}
+	if respPhoto.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respPhoto.Body)
+		t.Fatalf("Expected status 200 OK for photo upload, got %d. Body: %s", respPhoto.StatusCode, string(body))
+	}
+
+	// 6. Verify via GET /api/v1/auth/me
+	reqMe := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	reqMe.Header.Set("Authorization", "Bearer "+token)
+
+	respMe, err := app.Test(reqMe)
+	if err != nil {
+		t.Fatalf("Me request failed: %v", err)
+	}
+	if respMe.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200 OK for Me, got %d", respMe.StatusCode)
+	}
+
+	var meResp struct {
+		Data struct {
+			Name      string  `json:"name"`
+			AvatarURL *string `json:"avatar_url"`
+			NIK       *string `json:"nik"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(respMe.Body).Decode(&meResp)
+	if meResp.Data.Name != "Petani Foto Baru" {
+		t.Errorf("Expected name 'Petani Foto Baru', got '%s'", meResp.Data.Name)
+	}
+	if meResp.Data.AvatarURL == nil || *meResp.Data.AvatarURL == "" {
+		t.Errorf("Expected non-empty avatar_url after photo upload")
+	}
+	if meResp.Data.NIK == nil || *meResp.Data.NIK != "3201010101018888" {
+		t.Errorf("NIK was altered unexpectedly: %v", meResp.Data.NIK)
 	}
 }

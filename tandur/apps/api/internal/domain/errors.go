@@ -26,4 +26,5 @@ var (
 	ErrKTPPhotoRequired   = errors.New("foto dokumen e-KTP asli wajib diunggah")
 	ErrDeclarationRequired = errors.New("anda harus menyetujui pernyataan keabsahan dokumen e-KTP")
 	ErrKTPAddressRequired = errors.New("alamat lengkap sesuai KTP wajib diisi")
+	ErrSensitiveFieldCannotBeModified = errors.New("data sensitif seperti NIK, role, atau password tidak dapat diubah melalui update profile")
 )

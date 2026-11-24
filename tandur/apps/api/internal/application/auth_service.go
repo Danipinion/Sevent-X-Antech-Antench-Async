@@ -82,6 +82,40 @@ type LoginInput struct {
 	Password string `json:"password" form:"password"`
 }
 
+type UpdateProfileLocationInput struct {
+	Label     string   `json:"label"`
+	Address   string   `json:"address"`
+	Village   string   `json:"village"`
+	District  string   `json:"district"`
+	City      string   `json:"city"`
+	Province  string   `json:"province"`
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
+}
+
+type UpdateProfileInput struct {
+	Name      *string                     `json:"name" form:"name"`
+	Phone     *string                     `json:"phone" form:"phone"`
+	AvatarURL *string                     `json:"avatar_url" form:"avatar_url"`
+	IsBisnis  *bool                       `json:"is_bisnis" form:"is_bisnis"`
+	Location  *UpdateProfileLocationInput `json:"location,omitempty"`
+
+	// Flat location fields for form/parameter input
+	Label     *string  `json:"label,omitempty" form:"label"`
+	Address   *string  `json:"address,omitempty" form:"address"`
+	Village   *string  `json:"village,omitempty" form:"village"`
+	District  *string  `json:"district,omitempty" form:"district"`
+	City      *string  `json:"city,omitempty" form:"city"`
+	Province  *string  `json:"province,omitempty" form:"province"`
+	Latitude  *float64 `json:"latitude,omitempty" form:"latitude"`
+	Longitude *float64 `json:"longitude,omitempty" form:"longitude"`
+
+	// Sensitive fields (to explicitly detect and prevent modifications)
+	NIK      *string `json:"nik,omitempty" form:"nik"`
+	Role     *string `json:"role,omitempty" form:"role"`
+	Password *string `json:"password,omitempty" form:"password"`
+}
+
 type LoginResult struct {
 	Token     string       `json:"token"`
 	TokenType string       `json:"token_type"`
@@ -401,6 +435,186 @@ func (s *AuthService) GetProfile(ctx context.Context, userID string) (*domain.Us
 	if err != nil {
 		return nil, err
 	}
+	user.CanSellHarvest = user.CheckCanSellHarvest()
+	return user, nil
+}
+
+// UpdateProfile memperbarui profil pengguna dengan memastikan data sensitif seperti NIK, role, atau password tidak dapat diubah
+func (s *AuthService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (*domain.User, error) {
+	if s.userRepo == nil {
+		return nil, errors.New("user repository tidak tersedia")
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !user.IsActive {
+		return nil, domain.ErrAccountInactive
+	}
+
+	// 1. Validasi perlindungan data sensitif
+	if input.NIK != nil && strings.TrimSpace(*input.NIK) != "" {
+		cleanNIK := strings.TrimSpace(*input.NIK)
+		if user.NIK == nil || *user.NIK != cleanNIK {
+			return nil, domain.ErrSensitiveFieldCannotBeModified
+		}
+	}
+	if input.Role != nil && strings.TrimSpace(*input.Role) != "" {
+		if !strings.EqualFold(strings.TrimSpace(*input.Role), string(user.Role)) {
+			return nil, domain.ErrSensitiveFieldCannotBeModified
+		}
+	}
+	if input.Password != nil && strings.TrimSpace(*input.Password) != "" {
+		return nil, domain.ErrSensitiveFieldCannotBeModified
+	}
+
+	// 2. Pembaruan Nama (jika disediakan)
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, domain.ErrNameRequired
+		}
+		if len(name) > 150 {
+			name = name[:150]
+		}
+		user.Name = name
+	}
+
+	// 3. Pembaruan Nomor Handphone (jika disediakan)
+	if input.Phone != nil {
+		phone := normalizePhone(*input.Phone)
+		if len(phone) < 10 || len(phone) > 13 || !isDigitsOnly(phone) {
+			return nil, domain.ErrInvalidPhone
+		}
+		if phone != user.Phone {
+			existing, err := s.userRepo.GetByPhone(ctx, phone)
+			if err == nil && existing != nil && existing.ID != user.ID {
+				return nil, domain.ErrPhoneAlreadyExists
+			}
+			user.Phone = phone
+		}
+	}
+
+	// 4. Pembaruan Foto Profil / Avatar URL (jika disediakan)
+	if input.AvatarURL != nil {
+		avatar := strings.TrimSpace(*input.AvatarURL)
+		if avatar != "" {
+			user.AvatarURL = &avatar
+		} else {
+			user.AvatarURL = nil
+		}
+	}
+
+	// 5. Pembaruan Status Akun Bisnis (jika disediakan)
+	if input.IsBisnis != nil {
+		user.IsBisnis = *input.IsBisnis
+	}
+
+	// 6. Pembaruan Lokasi (jika disediakan baik via object maupun flat fields)
+	var location *domain.UserLocation
+	if user.Location != nil {
+		locCopy := *user.Location
+		location = &locCopy
+	} else {
+		location = &domain.UserLocation{
+			UserID:    user.ID,
+			Label:     "Utama",
+			IsPrimary: true,
+		}
+	}
+
+	hasLocationUpdate := false
+
+	if input.Location != nil {
+		hasLocationUpdate = true
+		if strings.TrimSpace(input.Location.Label) != "" {
+			location.Label = strings.TrimSpace(input.Location.Label)
+		}
+		if strings.TrimSpace(input.Location.Address) != "" {
+			location.Address = strings.TrimSpace(input.Location.Address)
+		}
+		if strings.TrimSpace(input.Location.Village) != "" {
+			location.Village = strings.TrimSpace(input.Location.Village)
+		}
+		if strings.TrimSpace(input.Location.District) != "" {
+			location.District = strings.TrimSpace(input.Location.District)
+		}
+		if strings.TrimSpace(input.Location.City) != "" {
+			location.City = strings.TrimSpace(input.Location.City)
+		}
+		if strings.TrimSpace(input.Location.Province) != "" {
+			location.Province = strings.TrimSpace(input.Location.Province)
+		}
+		if input.Location.Latitude != nil {
+			lat := *input.Location.Latitude
+			if lat < -90 || lat > 90 {
+				return nil, domain.ErrInvalidCoordinate
+			}
+			location.Latitude = lat
+		}
+		if input.Location.Longitude != nil {
+			lng := *input.Location.Longitude
+			if lng < -180 || lng > 180 {
+				return nil, domain.ErrInvalidCoordinate
+			}
+			location.Longitude = lng
+		}
+	}
+
+	if input.Address != nil {
+		hasLocationUpdate = true
+		location.Address = strings.TrimSpace(*input.Address)
+	}
+	if input.Label != nil && strings.TrimSpace(*input.Label) != "" {
+		hasLocationUpdate = true
+		location.Label = strings.TrimSpace(*input.Label)
+	}
+	if input.Village != nil {
+		hasLocationUpdate = true
+		location.Village = strings.TrimSpace(*input.Village)
+	}
+	if input.District != nil {
+		hasLocationUpdate = true
+		location.District = strings.TrimSpace(*input.District)
+	}
+	if input.City != nil {
+		hasLocationUpdate = true
+		location.City = strings.TrimSpace(*input.City)
+	}
+	if input.Province != nil {
+		hasLocationUpdate = true
+		location.Province = strings.TrimSpace(*input.Province)
+	}
+	if input.Latitude != nil {
+		hasLocationUpdate = true
+		lat := *input.Latitude
+		if lat < -90 || lat > 90 {
+			return nil, domain.ErrInvalidCoordinate
+		}
+		location.Latitude = lat
+	}
+	if input.Longitude != nil {
+		hasLocationUpdate = true
+		lng := *input.Longitude
+		if lng < -180 || lng > 180 {
+			return nil, domain.ErrInvalidCoordinate
+		}
+		location.Longitude = lng
+	}
+
+	var locToSave *domain.UserLocation
+	if hasLocationUpdate && strings.TrimSpace(location.Address) != "" {
+		locToSave = location
+	} else if user.Location != nil {
+		locToSave = user.Location
+	}
+
+	if err := s.userRepo.UpdateProfile(ctx, user, locToSave); err != nil {
+		return nil, err
+	}
+
+	user.Location = locToSave
 	user.CanSellHarvest = user.CheckCanSellHarvest()
 	return user, nil
 }

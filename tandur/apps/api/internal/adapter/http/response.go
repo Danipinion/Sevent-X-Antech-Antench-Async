@@ -34,6 +34,7 @@ type PaginationMeta struct {
 type Meta struct {
 	Trace      TraceMeta       `json:"trace"`
 	Pagination *PaginationMeta `json:"pagination,omitempty"`
+	Summary    interface{}     `json:"summary,omitempty"`
 }
 
 type ErrorMeta struct {
@@ -148,6 +149,11 @@ func RespondSuccess(c fiber.Ctx, statusCode int, message string, data interface{
 
 // RespondSuccessWithPagination mengirim respons berhasil lengkap dengan meta.trace dan meta.pagination
 func RespondSuccessWithPagination(c fiber.Ctx, statusCode int, message string, data interface{}, pagination *PaginationMeta) error {
+	return RespondSuccessWithPaginationAndSummary(c, statusCode, message, data, pagination, nil)
+}
+
+// RespondSuccessWithPaginationAndSummary mengirim respons berhasil dengan meta.trace, meta.pagination, dan meta.summary
+func RespondSuccessWithPaginationAndSummary(c fiber.Ctx, statusCode int, message string, data interface{}, pagination *PaginationMeta, summary interface{}) error {
 	reqID, corrID, traceID, spanID, startTime := getOrInitTraceContext(c)
 
 	meta := Meta{
@@ -162,6 +168,7 @@ func RespondSuccessWithPagination(c fiber.Ctx, statusCode int, message string, d
 			ServiceNode:      serviceNodeName,
 		},
 		Pagination: pagination,
+		Summary:    summary,
 	}
 
 	return c.Status(statusCode).JSON(SuccessResponse{

@@ -31,9 +31,9 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User, 
 	queryUser := `
 		INSERT INTO users (
 			nik, name, phone, password_hash, role, is_bisnis, is_active,
-			is_verified, verification_status, ktp_photo_url, birth_place, birth_date, ktp_address
+			is_verified, verification_status, ktp_photo_url, birth_place, birth_date, ktp_address, avatar_url
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, created_at, updated_at;
 	`
 
@@ -56,6 +56,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User, 
 		user.BirthPlace,
 		user.BirthDate,
 		user.KTPAddress,
+		user.AvatarURL,
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
@@ -110,7 +111,7 @@ func (r *PostgresUserRepository) GetByPhone(ctx context.Context, phone string) (
 	query := `
 		SELECT id, nik, name, phone, password_hash, role, is_bisnis, is_active,
 		       is_verified, verification_status, ktp_photo_url, birth_place, birth_date,
-		       ktp_address, verified_at, rejection_reason, created_at, updated_at
+		       ktp_address, verified_at, rejection_reason, avatar_url, created_at, updated_at
 		FROM users
 		WHERE phone = $1;
 	`
@@ -134,6 +135,7 @@ func (r *PostgresUserRepository) GetByPhone(ctx context.Context, phone string) (
 		&user.KTPAddress,
 		&user.VerifiedAt,
 		&user.RejectionReason,
+		&user.AvatarURL,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -156,7 +158,7 @@ func (r *PostgresUserRepository) GetByNIK(ctx context.Context, nik string) (*dom
 	query := `
 		SELECT id, nik, name, phone, password_hash, role, is_bisnis, is_active,
 		       is_verified, verification_status, ktp_photo_url, birth_place, birth_date,
-		       ktp_address, verified_at, rejection_reason, created_at, updated_at
+		       ktp_address, verified_at, rejection_reason, avatar_url, created_at, updated_at
 		FROM users
 		WHERE nik = $1;
 	`
@@ -180,6 +182,7 @@ func (r *PostgresUserRepository) GetByNIK(ctx context.Context, nik string) (*dom
 		&user.KTPAddress,
 		&user.VerifiedAt,
 		&user.RejectionReason,
+		&user.AvatarURL,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -202,7 +205,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 	query := `
 		SELECT id, nik, name, phone, password_hash, role, is_bisnis, is_active,
 		       is_verified, verification_status, ktp_photo_url, birth_place, birth_date,
-		       ktp_address, verified_at, rejection_reason, created_at, updated_at
+		       ktp_address, verified_at, rejection_reason, avatar_url, created_at, updated_at
 		FROM users
 		WHERE id = $1;
 	`
@@ -226,6 +229,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 		&user.KTPAddress,
 		&user.VerifiedAt,
 		&user.RejectionReason,
+		&user.AvatarURL,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -274,6 +278,108 @@ func (r *PostgresUserRepository) UpdateVerification(ctx context.Context, user *d
 		user.ID,
 	)
 	return err
+}
+
+func (r *PostgresUserRepository) UpdateProfile(ctx context.Context, user *domain.User, location *domain.UserLocation) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	queryUser := `
+		UPDATE users
+		SET name = $1,
+		    phone = $2,
+		    is_bisnis = $3,
+		    avatar_url = $4,
+		    updated_at = NOW()
+		WHERE id = $5;
+	`
+	_, err = tx.Exec(ctx, queryUser,
+		user.Name,
+		user.Phone,
+		user.IsBisnis,
+		user.AvatarURL,
+		user.ID,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if strings.Contains(pgErr.ConstraintName, "phone") {
+				return domain.ErrPhoneAlreadyExists
+			}
+		}
+		return err
+	}
+
+	if location != nil && strings.TrimSpace(location.Address) != "" {
+		var existingLocID string
+		checkQuery := `SELECT id FROM user_locations WHERE user_id = $1 AND is_primary = true LIMIT 1;`
+		err = tx.QueryRow(ctx, checkQuery, user.ID).Scan(&existingLocID)
+
+		if err == nil && existingLocID != "" {
+			updateLoc := `
+				UPDATE user_locations
+				SET label = $1,
+				    address = $2,
+				    village = $3,
+				    district = $4,
+				    city = $5,
+				    province = $6,
+				    location = ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography,
+				    updated_at = NOW()
+				WHERE id = $9;
+			`
+			_, err = tx.Exec(ctx, updateLoc,
+				location.Label,
+				location.Address,
+				location.Village,
+				location.District,
+				location.City,
+				location.Province,
+				location.Longitude,
+				location.Latitude,
+				existingLocID,
+			)
+			if err != nil {
+				return err
+			}
+			location.ID = existingLocID
+		} else {
+			insertLoc := `
+				INSERT INTO user_locations (
+					user_id, label, address, village, district, city, province, location, is_primary
+				) VALUES (
+					$1, $2, $3, $4, $5, $6, $7,
+					ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography,
+					true
+				)
+				RETURNING id, created_at, updated_at;
+			`
+			location.UserID = user.ID
+			location.IsPrimary = true
+			err = tx.QueryRow(ctx, insertLoc,
+				location.UserID,
+				location.Label,
+				location.Address,
+				location.Village,
+				location.District,
+				location.City,
+				location.Province,
+				location.Longitude,
+				location.Latitude,
+			).Scan(&location.ID, &location.CreatedAt, &location.UpdatedAt)
+			if err != nil {
+				return err
+			}
+		}
+		user.Location = location
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresUserRepository) attachPrimaryLocation(ctx context.Context, user *domain.User) {
