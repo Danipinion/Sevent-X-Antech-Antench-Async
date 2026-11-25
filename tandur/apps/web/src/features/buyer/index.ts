@@ -1,5 +1,3 @@
-/**
- * Feature: buyer
- * Architectural Scope: Feature-Based module for buyer in TANDUR Web
- */
-export const featureName = 'buyer';
+export * from './BuyerHomePage';
+export * from './ProductDetailPage';
+export * from './CartPage';
