@@ -25,8 +25,7 @@ services:
       dockerfile: infrastructure/docker/backend/Dockerfile
     container_name: tandur-api
     restart: unless-stopped
-    ports:
-      - "${API_PORT:-8080}:8080"
+    network_mode: host
     volumes:
       - ./apps/api:/app
       - ./database/migrations:/migrations:ro
@@ -34,9 +33,9 @@ services:
     environment:
       APP_ENV: development
       APP_PORT: 8080
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT: http://garage:3900
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5435/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://127.0.0.1:6380/0
+      S3_ENDPOINT: http://127.0.0.1:3900
       S3_REGION: ${S3_REGION:-garage}
       S3_BUCKET: ${S3_BUCKET:-tandur}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
@@ -61,8 +60,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      - tandur-network
 
   postgres:
     image: postgis/postgis:17-3.5
