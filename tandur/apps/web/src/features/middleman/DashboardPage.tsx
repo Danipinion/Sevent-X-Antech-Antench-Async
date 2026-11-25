@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   FileText,
@@ -11,13 +11,14 @@ import {
   ArrowUp,
   TrendingUp,
 } from 'lucide-react';
+import { fetchApi, type Commodity } from '@/services/api';
 
 interface DashboardPageProps {
   onNavigate?: (route: string) => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
-  const harvestPrices = [
+  const initialHarvestPrices = [
     {
       name: 'GKP Ciherang',
       desc: 'Gabah Kering Panen sawah',
@@ -48,6 +49,52 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     },
   ];
 
+  const [harvestPrices, setHarvestPrices] = useState(initialHarvestPrices);
+
+  const storedUser = (() => {
+    try {
+      const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const displayName = storedUser?.name || 'Haji Supardi';
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadPrices() {
+      try {
+        const res = await fetchApi<{ data?: Commodity[] } | Commodity[]>('/commodities');
+        const list = Array.isArray((res as any)?.data)
+          ? (res as any).data
+          : Array.isArray(res)
+          ? res
+          : [];
+
+        if (isMounted && list.length > 0) {
+          const mapped = list.slice(0, 4).map((c: any) => ({
+            name: c.name,
+            desc: `Standar ${c.category || 'Komoditas Pasar'}`,
+            price: `Rp ${(c.current_market_price || c.base_price || 0).toLocaleString('id-ID')}`,
+            trend: (c.current_market_price > c.base_price ? 'up' : 'stabil') as 'up' | 'stabil',
+            trendLabel:
+              c.current_market_price > c.base_price
+                ? `+Rp ${(c.current_market_price - c.base_price).toLocaleString('id-ID')}`
+                : '— Stabil',
+          }));
+          setHarvestPrices(mapped);
+        }
+      } catch {
+        // Fallback aman tetap menggunakan default
+      }
+    }
+    loadPrices();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#FAF8F3] p-4 sm:p-6 lg:p-8 font-sans text-[#1E241E]">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -63,7 +110,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 Musim Panen Gadu • Pantauan Aktif
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-[#1A201A] tracking-tight">
-                Selamat Pagi, Haji Supardi
+                Selamat Pagi, {displayName}
               </h1>
               <p className="text-sm text-[#5C645C] leading-relaxed">
                 Ringkasan pengadaan komoditas dan jadwal timbang gabah wilayah Demak & sekitarnya terkelola secara real-time.

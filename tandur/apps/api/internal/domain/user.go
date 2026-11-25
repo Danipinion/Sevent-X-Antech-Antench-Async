@@ -127,6 +127,32 @@ type UserRepository interface {
 	GetByPhone(ctx context.Context, phone string) (*User, error)
 	GetByNIK(ctx context.Context, nik string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	GetByToken(ctx context.Context, token string) (*User, error)
+	SaveToken(token, userID string)
 	UpdateVerification(ctx context.Context, user *User) error
 	UpdateProfile(ctx context.Context, user *User, location *UserLocation) error
+}
+
+type RegisterInput struct {
+	Name         string   `json:"name"`
+	NIK          string   `json:"nik"`
+	Phone        string   `json:"phone"`
+	Password     string   `json:"password"`
+	Role         UserRole `json:"role"`
+	Address      string   `json:"address"`
+	Village      string   `json:"village"`
+	District     string   `json:"district"`
+	City         string   `json:"city"`
+	Province     string   `json:"province"`
+	VillageCode  string   `json:"village_code"`
+	DistrictCode string   `json:"district_code"`
+	CityCode     string   `json:"city_code"`
+	ProvinceCode string   `json:"province_code"`
+	Latitude     float64  `json:"latitude"`
+	Longitude    float64  `json:"longitude"`
+}
+
+type LoginInput struct {
+	NIK      string `json:"nik"`
+	Password string `json:"password"`
 }

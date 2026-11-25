@@ -24,12 +24,14 @@ func main() {
 
 	// 3. Initialize Repositories (Persistence)
 	commodityRepo := persistence.NewMemoryCommodityRepository()
+	userRepo := persistence.NewMemoryUserRepository()
 
 	// 4. Initialize Application Services (Use Cases)
 	commodityService := application.NewCommodityService(commodityRepo)
+	userService := application.NewUserService(userRepo)
 
 	// 5. Initialize HTTP Handlers & Adapter
-	httpHandler := adapterHttp.NewHandler(cfg, commodityService)
+	httpHandler := adapterHttp.NewHandler(cfg, commodityService, userService)
 
 	// 6. Setup Fiber Web Application
 	app := fiber.New(fiber.Config{

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Truck,
   MapPin,
@@ -16,12 +16,38 @@ import {
   ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
+import { fetchApi, type FarmerPurchaseOrder } from '@/services/api';
 
 type OrderTab = 'all' | 'pending' | 'scheduled' | 'completed' | 'cancelled';
 
 export default function FarmerOrdersPage() {
   const [activeTab, setActiveTab] = useState<OrderTab>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [, setOrders] = useState<FarmerPurchaseOrder[]>([]);
+
+  // Fetch pesanan panen dari API backend (/orders)
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchOrders() {
+      try {
+        const res = await fetchApi<{ data?: FarmerPurchaseOrder[] } | FarmerPurchaseOrder[]>('/orders');
+        const list = Array.isArray((res as any)?.data)
+          ? (res as any).data
+          : Array.isArray(res)
+          ? res
+          : [];
+        if (isMounted && list.length > 0) {
+          setOrders(list);
+        }
+      } catch {
+        // Fallback aman
+      }
+    }
+    fetchOrders();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const tabs: { id: OrderTab; label: string; count: number }[] = [
     { id: 'all', label: 'Semua Pesanan', count: 14 },

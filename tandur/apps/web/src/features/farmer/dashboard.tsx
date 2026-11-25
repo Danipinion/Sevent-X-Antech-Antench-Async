@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   Send,
   Lock,
 } from 'lucide-react';
+import { fetchApi, type Commodity, type FarmerPurchaseOrder } from '@/services/api';
 
 interface CommodityPrice {
   id: string;
@@ -47,7 +48,18 @@ export default function FarmerDashboardPage({ onNavigate }: FarmerDashboardPageP
       navigate(route);
     }
   };
-  const commodityPrices: CommodityPrice[] = [
+
+  const storedUser = (() => {
+    try {
+      const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const displayName = storedUser?.name ? storedUser.name.split(' ')[0] : 'Sugeng';
+
+  const initialCommodityPrices: CommodityPrice[] = [
     {
       id: 'gkp',
       category: 'PADI / BERAS',
@@ -86,7 +98,7 @@ export default function FarmerDashboardPage({ onNavigate }: FarmerDashboardPageP
     },
   ];
 
-  const recentOrders: OrderSummary[] = [
+  const initialOrders: OrderSummary[] = [
     {
       id: '#TRX-9945',
       idColor: 'text-[#9A4D16]',
@@ -133,6 +145,131 @@ export default function FarmerDashboardPage({ onNavigate }: FarmerDashboardPageP
     },
   ];
 
+  const [commodityPrices, setCommodityPrices] = useState<CommodityPrice[]>(initialCommodityPrices);
+  const [recentOrders, setRecentOrders] = useState<OrderSummary[]>(initialOrders);
+  const [lastUpdated, setLastUpdated] = useState<string>('Hari ini, 07:30 WIB');
+
+  // Integrasi Fetching API Komoditas & Pesanan (disesuaikan dengan domain)
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchData() {
+      // 1. Fetch data komoditas dari backend (/commodities)
+      try {
+        const res = await fetchApi<{ data?: Commodity[] } | Commodity[]>('/commodities');
+        const list = Array.isArray((res as any)?.data)
+          ? (res as any).data
+          : Array.isArray(res)
+          ? res
+          : [];
+
+        if (isMounted && list.length > 0) {
+          const mapped: CommodityPrice[] = list.map((item: any, idx: number) => {
+            const priceVal =
+              item.current_market_price || item.average_price || item.base_price || 0;
+            const trendText =
+              item.trend_label ||
+              (item.trend === 'UP'
+                ? '↑ Naik'
+                : item.trend === 'DOWN'
+                ? '↓ Turun'
+                : '— Stabil');
+            const isPos =
+              item.trend === 'UP' ||
+              (item.percentage_change && item.percentage_change > 0) ||
+              (item.current_market_price > item.base_price);
+
+            const isPalawija =
+              item.category?.toLowerCase().includes('palawija') ||
+              item.name?.toLowerCase().includes('jagung') ||
+              item.name?.toLowerCase().includes('kedelai');
+
+            return {
+              id: item.id || `com-${idx}`,
+              category: (item.category || 'KOMODITAS').toUpperCase(),
+              name: item.name || 'Komoditas',
+              price: `Rp ${priceVal.toLocaleString('id-ID')}`,
+              trend: trendText,
+              isPositive: isPos,
+              icon: isPalawija ? (
+                <Sprout className="w-4 h-4 text-[#8C5828]" />
+              ) : (
+                <Grip className="w-4 h-4 text-[#156E33]" />
+              ),
+            };
+          });
+
+          setCommodityPrices((prev) => {
+            const ids = new Set(mapped.map((m) => m.id));
+            const remaining = prev.filter((p) => !ids.has(p.id));
+            return [...mapped, ...remaining];
+          });
+          setLastUpdated(
+            `Hari ini, ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`
+          );
+        }
+      } catch {
+        // Fallback aman tetap menggunakan initialCommodityPrices
+      }
+
+      // 2. Fetch data pesanan dari backend (/orders)
+      try {
+        const resOrders = await fetchApi<{ data?: FarmerPurchaseOrder[] } | FarmerPurchaseOrder[]>('/orders');
+        const listOrders = Array.isArray((resOrders as any)?.data)
+          ? (resOrders as any).data
+          : Array.isArray(resOrders)
+          ? resOrders
+          : [];
+
+        if (isMounted && listOrders.length > 0) {
+          const mappedOrders: OrderSummary[] = listOrders.map((ord: any) => {
+            const isCompleted = ord.status === 'completed';
+            const isOnWay =
+              ord.status === 'scheduled_pickup' || ord.status === 'on-way';
+
+            return {
+              id: ord.order_code || ord.id || '#TRX',
+              idColor: isCompleted
+                ? 'text-[#156E33]'
+                : isOnWay
+                ? 'text-[#9A4D16]'
+                : 'text-[#1C241E]',
+              commodity: `${ord.commodity_name || 'Komoditas'} • ${ord.offered_quantity || 0} ${ord.unit || 'Ton'}`,
+              buyer: ord.buyer_name || 'Mitra Pembeli',
+              weighDate: ord.pickup_date || 'Terjadwal',
+              totalValue: `Rp ${(ord.total_price || ord.total_offered_price || 0).toLocaleString('id-ID')}`,
+              valueColor: isCompleted
+                ? 'text-[#156E33]'
+                : isOnWay
+                ? 'text-[#9A4D16]'
+                : 'text-[#1C241E]',
+              status: isCompleted
+                ? 'completed'
+                : isOnWay
+                ? 'on-way'
+                : 'unweighed',
+              statusLabel:
+                ord.status_label ||
+                (isCompleted
+                  ? 'Lunas & Terkirim'
+                  : isOnWay
+                  ? 'Menuju Lokasi'
+                  : 'Belum Timbang'),
+            };
+          });
+          setRecentOrders(mappedOrders);
+        }
+      } catch {
+        // Fallback aman tetap menggunakan initialOrders
+      }
+    }
+
+    fetchData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const renderStatusBadge = (status: OrderSummary['status'], label: string) => {
     switch (status) {
       case 'on-way':
@@ -175,7 +312,7 @@ export default function FarmerDashboardPage({ onNavigate }: FarmerDashboardPageP
 
             <div className="space-y-2">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1C241E]">
-                Selamat Pagi, Sugeng!
+                Selamat Pagi, {displayName}!
               </h1>
               <p className="text-sm sm:text-base text-[#5C635E] leading-relaxed">
                 Musim Panen Gabah &amp; Palawija siap ditransaksikan. Akses pembeli langsung tanpa
@@ -210,7 +347,7 @@ export default function FarmerDashboardPage({ onNavigate }: FarmerDashboardPageP
 
             <div className="inline-flex items-center gap-2 self-start sm:self-auto px-3 py-1.5 rounded-full bg-[#EFECE6]/80 text-xs font-medium text-[#3D4740]">
               <span className="w-2 h-2 rounded-full bg-[#156E33]" />
-              Terakhir diperbarui: Hari ini, 07:30 WIB
+              Terakhir diperbarui: {lastUpdated}
             </div>
           </div>
 

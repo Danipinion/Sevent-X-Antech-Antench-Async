@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
   CheckCircle2,
@@ -14,6 +14,7 @@ import {
   MapPin,
   Truck,
 } from 'lucide-react';
+import { fetchApi, type UserDomain } from '@/services/api';
 
 interface ProfilePageProps {
   role?: "farmer" | "middleman" | "buyer";
@@ -39,20 +40,103 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
   const defaultAddress = isMiddleman
     ? "Gudang Komoditas Utama Demak, Jl. Raya Pantura No. 45, Kec. Karanganyar, Kab. Demak, Jawa Tengah"
     : "Desa Karangawen, RT 03 / RW 02, Kec. Karangawen, Kab. Demak, Jawa Tengah\n(Patokan: Sebelah Barat Penggilingan Padi Berkah)";
-  const memberId = isMiddleman ? "TNDR-TGLK-1092" : "TNDR-DMK-2804";
+  const memberId =
+    storedUser?.id
+      ? storedUser.id.startsWith("usr_")
+        ? `TNDR-${storedUser.id.substring(4, 12).toUpperCase()}`
+        : storedUser.id
+      : isMiddleman
+      ? "TNDR-TGLK-1092"
+      : "TNDR-DMK-2804";
 
+  const [fullName, setFullName] = useState<string>(defaultName);
+  const [nik, setNik] = useState<string>(defaultNik);
   const [whatsappNumber, setWhatsappNumber] = useState<string>(defaultPhone);
   const [email, setEmail] = useState<string>(defaultEmail);
   const [address, setAddress] = useState<string>(defaultAddress);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const handleSave = () => {
-    Swal.fire({
-      icon: "success",
-      title: "Profil Berhasil Disimpan",
-      text: "Informasi profil dan kontak Anda telah diperbarui.",
-      timer: 1800,
-      showConfirmButton: false,
-    });
+  // Fetch profil dari backend API saat komponen di-mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadUserProfile() {
+      try {
+        const res = await fetchApi<{ data?: UserDomain } | UserDomain>('/users/profile');
+        const user = (res as any)?.data ?? res;
+        if (isMounted && user) {
+          if (user.name) setFullName(user.name);
+          if (user.nik) setNik(user.nik);
+          if (user.phone) {
+            setWhatsappNumber(user.phone.replace(/^\+?62/, ''));
+          }
+          if (user.email) setEmail(user.email);
+          if (user.ktp_address) setAddress(user.ktp_address);
+        }
+      } catch {
+        // Fallback tetap menggunakan data yang tersimpan di localStorage / default
+      }
+    }
+    loadUserProfile();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await fetchApi('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: fullName,
+          phone: `+62${whatsappNumber.replace(/[^0-9]/g, '')}`,
+          email,
+          ktp_address: address,
+        }),
+      });
+
+      // Update penyimpanan lokal
+      if (storedUser) {
+        const updated = {
+          ...storedUser,
+          name: fullName,
+          phone: whatsappNumber,
+          email,
+          ktp_address: address,
+        };
+        localStorage.setItem('user', JSON.stringify(updated));
+      }
+
+      await Swal.fire({
+        icon: "success",
+        title: "Profil Berhasil Disimpan",
+        text: "Informasi profil dan kontak Anda telah diperbarui ke sistem.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch {
+      // Jika backend endpoint belum siap / offline, simpan secara lokal
+      if (storedUser) {
+        const updated = {
+          ...storedUser,
+          name: fullName,
+          phone: whatsappNumber,
+          email,
+          ktp_address: address,
+        };
+        localStorage.setItem('user', JSON.stringify(updated));
+      }
+
+      await Swal.fire({
+        icon: "success",
+        title: "Profil Berhasil Disimpan",
+        text: "Informasi profil dan kontak Anda telah disimpan.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -116,7 +200,7 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
                 </span>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-[#F5F2EB] px-4 py-3 text-sm font-medium text-[#1C241E]">
-                <span>{defaultName}</span>
+                <span>{fullName}</span>
                 <Check className="w-4 h-4 text-[#156E33]" />
               </div>
               <p className="flex items-center gap-1.5 text-[11px] text-[#7A827C]">
@@ -137,7 +221,7 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
                 </span>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-[#F5F2EB] px-4 py-3 text-sm font-medium text-[#3D4740]">
-                <span>{defaultNik}</span>
+                <span>{nik}</span>
                 <Lock className="w-4 h-4 text-[#7A827C]" />
               </div>
               <p className="flex items-start gap-1.5 text-[11px] text-[#7A827C]">
@@ -238,10 +322,11 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
             <button
               type="button"
               onClick={handleSave}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-sm font-bold shadow-xs transition-colors cursor-pointer"
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#156E33] hover:bg-[#105728] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold shadow-xs transition-colors cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Simpan Perubahan
+              {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
             </button>
           </div>
         </div>

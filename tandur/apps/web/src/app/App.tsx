@@ -37,6 +37,93 @@ import {
   CartPage,
 } from "../features/buyer";
 
+// Helper untuk membaca user aktif yang sedang login dari storage
+function getActiveUser(defaultRole: "farmer" | "middleman") {
+  try {
+    const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      const roleText =
+        u.role === "farmer"
+          ? "Mitra Petani"
+          : u.role === "middleman"
+          ? "Mitra Tengkulak"
+          : "Mitra";
+      const regionText = u.city || u.regency || "Demak";
+      return {
+        name: u.name || (defaultRole === "farmer" ? "Sugeng Santoso" : "Haji Supardi"),
+        subtitle: `${roleText} • ${regionText}`,
+        region: regionText,
+      };
+    }
+  } catch {
+    // fallback
+  }
+  return {
+    name: defaultRole === "farmer" ? "Sugeng Santoso" : "Haji Supardi",
+    subtitle: defaultRole === "farmer" ? "Mitra Petani • Demak" : "Mitra Pembeli Demak",
+    region: "Demak",
+  };
+}
+
+// Protected Route untuk membatasi akses URL berdasarkan peran akun
+interface ProtectedRouteProps {
+  allowedRoles: string[];
+  children: React.ReactElement;
+}
+
+function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+
+  if (!token || !userStr) {
+    return <Navigate to="/login" replace />;
+  }
+
+  try {
+    const user = JSON.parse(userStr);
+    if (!allowedRoles.includes(user.role)) {
+      // Alihkan ke portal resmi milik akun pengguna tersebut
+      if (user.role === "farmer") return <Navigate to="/farmer" replace />;
+      if (user.role === "middleman") return <Navigate to="/middleman" replace />;
+      if (user.role === "buyer") return <Navigate to="/produk" replace />;
+      return <Navigate to="/login" replace />;
+    }
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
+function FarmerLayoutWrapper() {
+  const activeUser = getActiveUser("farmer");
+  return (
+    <DashboardLayout
+      menu={farmerMenu}
+      roleLabel="Mitra Petani"
+      region={activeUser.region}
+      footerNote="Terverifikasi"
+      user={{ name: activeUser.name, subtitle: activeUser.subtitle }}
+      profileTo="/farmer/profil"
+    />
+  );
+}
+
+function MiddlemanLayoutWrapper() {
+  const activeUser = getActiveUser("middleman");
+  return (
+    <DashboardLayout
+      menu={middlemanMenu}
+      roleLabel="Mitra Tengkulak"
+      region={activeUser.region}
+      footerNote="Pasar Tani Terverifikasi"
+      user={{ name: activeUser.name, subtitle: activeUser.subtitle }}
+      profileTo="/middleman/profil"
+    />
+  );
+}
+
 // Wrapper agar navigasi internal di Beranda Petani berjalan lancar
 function FarmerDashboardWrapper() {
   const navigate = useNavigate();
@@ -131,14 +218,9 @@ export default function App() {
         <Route
           path="/farmer"
           element={
-            <DashboardLayout
-              menu={farmerMenu}
-              roleLabel="Mitra Petani"
-              region="Demak"
-              footerNote="Terverifikasi"
-              user={{ name: "Pak Sugeng", subtitle: "Mitra Petani • Demak" }}
-              profileTo="/farmer/profil"
-            />
+            <ProtectedRoute allowedRoles={["farmer"]}>
+              <FarmerLayoutWrapper />
+            </ProtectedRoute>
           }
         >
           {/* Default /farmer langsung ke Beranda */}
@@ -161,14 +243,9 @@ export default function App() {
         <Route
           path="/middleman"
           element={
-            <DashboardLayout
-              menu={middlemanMenu}
-              roleLabel="Mitra Tengkulak"
-              region="Demak"
-              footerNote="Pasar Tani Terverifikasi"
-              user={{ name: "Haji Supardi", subtitle: "Mitra Pembeli Demak" }}
-              profileTo="/middleman/profil"
-            />
+            <ProtectedRoute allowedRoles={["middleman"]}>
+              <MiddlemanLayoutWrapper />
+            </ProtectedRoute>
           }
         >
           {/* Default /middleman langsung ke Beranda Tengkulak */}

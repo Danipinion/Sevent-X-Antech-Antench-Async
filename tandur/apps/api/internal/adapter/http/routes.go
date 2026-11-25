@@ -25,4 +25,14 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	v1.Get("/health", handler.HealthCheck)
 	v1.Get("/commodities", handler.ListCommodities)
 	v1.Get("/commodities/:id", handler.GetCommodity)
+
+	// Auth Routing
+	auth := v1.Group("/auth")
+	auth.Post("/register", handler.Register)
+	auth.Post("/login", handler.Login)
+
+	// User Profile Routing
+	users := v1.Group("/users")
+	users.Get("/profile", handler.GetProfile)
+	users.Put("/profile", handler.UpdateProfile)
 }
