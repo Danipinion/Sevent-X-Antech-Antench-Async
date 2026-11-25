@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/frontend/Dockerfile
+      network: host
     container_name: tandur-web
     restart: unless-stopped
     ports:
