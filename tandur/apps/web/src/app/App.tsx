@@ -1,14 +1,20 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
 import Login from "../features/authentication/login";
 import Register from "../features/authentication/register";
 import {
   DashboardLayout,
+  farmerMenu,
   middlemanMenu,
-  farmerMenu, // Pastikan farmerMenu sudah di-export dari @/components/layout/dashboard/index
 } from "@/components/layout/dashboard/index";
 import Layout from "../components/layout/storeFront/Layout";
 
-// Import halaman-halaman Petani
+// Import halaman-halaman Petani (Farmer)
 import FarmerDashboardPage from "../features/farmer/dashboard";
 import SellHarvestPage from "../features/farmer/sellHervest";
 import FarmerOrdersPage from "../features/orders/farmerOrders";
@@ -24,20 +30,32 @@ import {
 import { InventoryListPage, SellStockPage } from "../features/inventory";
 import { MiddlemanTransactionPage } from "../features/orders";
 
+// Import halaman-halaman Pembeli (Storefront / Buyer)
 import {
   BuyerHomePage,
   ProductDetailPage,
   CartPage,
- 
 } from "../features/buyer";
 
-// Wrapper agar tombol "Cari Pasokan Petani" di Beranda Tengkulak bisa berpindah halaman
+// Wrapper agar navigasi internal di Beranda Petani berjalan lancar
+function FarmerDashboardWrapper() {
+  const navigate = useNavigate();
+  return (
+    <FarmerDashboardPage
+      onNavigate={(route) => {
+        navigate(route);
+      }}
+    />
+  );
+}
+
+// Wrapper agar tombol "Cari Pasokan Petani" di Beranda Tengkulak berpindah halaman
 function MiddlemanDashboardWrapper() {
   const navigate = useNavigate();
   return (
     <MiddlemanDashboardPage
       onNavigate={(route) => {
-        if (route === "/cari-pasokan") {
+        if (route === "/cari-pasokan" || route === "cari-pasokan") {
           navigate("/middleman/cari-pasokan");
         } else {
           navigate(route);
@@ -47,25 +65,69 @@ function MiddlemanDashboardWrapper() {
   );
 }
 
+// Komponen penentu root route berdasarkan session/role login
+function RootRedirect() {
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  if (token && userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user.role === "farmer") return <Navigate to="/farmer" replace />;
+      if (user.role === "middleman") return <Navigate to="/middleman" replace />;
+      if (user.role === "buyer") return <Navigate to="/produk" replace />;
+    } catch {
+      // ignore JSON parse error
+    }
+  }
+  return <Navigate to="/login" replace />;
+}
+
+// Komponen pengarah rute profil global (/profil, /profile, /akun)
+function ProfileRedirect() {
+  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user.role === "middleman") return <Navigate to="/middleman/profil" replace />;
+      if (user.role === "farmer") return <Navigate to="/farmer/profil" replace />;
+    } catch {
+      // ignore JSON parse error
+    }
+  }
+  return <Navigate to="/farmer/profil" replace />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        {/* Rute Awal / Root */}
+        <Route path="/" element={<RootRedirect />} />
 
-        {/* Katalog / pembeli: header + footer */}
+        {/* Rute Profil Global */}
+        <Route path="/profil" element={<ProfileRedirect />} />
+        <Route path="/profile" element={<ProfileRedirect />} />
+        <Route path="/akun" element={<ProfileRedirect />} />
+
+        {/* Otentikasi */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/login" element={<Navigate to="/login" replace />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/auth/register" element={<Navigate to="/register" replace />} />
+
+        {/* Katalog / Pembeli / Storefront: header + footer */}
         <Route element={<Layout cartCount={3} />}>
           <Route path="/produk" element={<BuyerHomePage />} />
+          <Route path="/katalog" element={<Navigate to="/produk" replace />} />
           <Route
             path="/produk/beras-pandan-wangi"
             element={<ProductDetailPage />}
           />
+          <Route path="/produk/:id" element={<ProductDetailPage />} />
           <Route path="/keranjang" element={<CartPage />} />
         </Route>
 
-        {/* Petani: header + sidebar dashboard, tanpa footer */}
+        {/* Mitra Petani: header + sidebar dashboard (farmerMenu) */}
         <Route
           path="/farmer"
           element={
@@ -75,18 +137,27 @@ export default function App() {
               region="Demak"
               footerNote="Terverifikasi"
               user={{ name: "Pak Sugeng", subtitle: "Mitra Petani • Demak" }}
+              profileTo="/farmer/profil"
             />
           }
         >
           {/* Default /farmer langsung ke Beranda */}
-          <Route index element={<FarmerDashboardPage />} />
+          <Route index element={<FarmerDashboardWrapper />} />
+          <Route path="beranda" element={<Navigate to="/farmer" replace />} />
+
+          {/* Rute sesuai farmerMenu */}
           <Route path="jual-panen" element={<SellHarvestPage />} />
           <Route path="pesanan" element={<FarmerOrdersPage />} />
-          <Route path="profil" element={<FarmerProfilePage />} />
           <Route path="verifikasi" element={<FarmerVerificationPage />} />
+          <Route path="profil" element={<FarmerProfilePage role="farmer" />} />
+
+          {/* Alias backward-compatible */}
+          <Route path="hasil-panen" element={<Navigate to="/farmer/jual-panen" replace />} />
+          <Route path="stok" element={<Navigate to="/farmer/jual-panen" replace />} />
+          <Route path="transaksi" element={<Navigate to="/farmer/pesanan" replace />} />
         </Route>
 
-        {/* Tengkulak: header + sidebar dashboard, tanpa footer */}
+        {/* Mitra Tengkulak: header + sidebar dashboard (middlemanMenu) */}
         <Route
           path="/middleman"
           element={
@@ -96,19 +167,27 @@ export default function App() {
               region="Demak"
               footerNote="Pasar Tani Terverifikasi"
               user={{ name: "Haji Supardi", subtitle: "Mitra Pembeli Demak" }}
+              profileTo="/middleman/profil"
             />
           }
         >
           {/* Default /middleman langsung ke Beranda Tengkulak */}
           <Route index element={<MiddlemanDashboardWrapper />} />
+          <Route path="beranda" element={<Navigate to="/middleman" replace />} />
+
+          {/* Rute sesuai middlemanMenu */}
           <Route path="cari-pasokan" element={<FindFarmersPage />} />
           <Route path="inventaris" element={<InventoryListPage />} />
           <Route path="jual-stok" element={<SellStockPage />} />
           <Route path="penawaran" element={<PriceNegotiationPage />} />
           <Route path="transaksi" element={<MiddlemanTransactionPage />} />
+          <Route path="profil" element={<FarmerProfilePage role="middleman" />} />
+
+          {/* Alias backward-compatible */}
+          <Route path="cari-petani" element={<Navigate to="/middleman/cari-pasokan" replace />} />
         </Route>
 
-        {/* Harus paling bawah */}
+        {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

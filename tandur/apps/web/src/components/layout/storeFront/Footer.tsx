@@ -1,4 +1,4 @@
-import { Leaf, MapPin, Clock } from "lucide-react";
+import { MapPin, Clock } from "lucide-react";
 
 const categories = [
   "Beras Kuning Giling",

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
   PlusCircle,
@@ -33,7 +34,19 @@ interface OrderSummary {
   statusLabel: string;
 }
 
-export default function FarmerDashboardPage() {
+interface FarmerDashboardPageProps {
+  onNavigate?: (route: string) => void;
+}
+
+export default function FarmerDashboardPage({ onNavigate }: FarmerDashboardPageProps = {}) {
+  const navigate = useNavigate();
+  const handleNavigate = (route: string) => {
+    if (onNavigate) {
+      onNavigate(route);
+    } else {
+      navigate(route);
+    }
+  };
   const commodityPrices: CommodityPrice[] = [
     {
       id: 'gkp',
@@ -173,6 +186,7 @@ export default function FarmerDashboardPage() {
             <div className="pt-1">
               <button
                 type="button"
+                onClick={() => handleNavigate('/farmer/jual-panen')}
                 className="inline-flex items-center gap-2 bg-[#156E33] hover:bg-[#105728] active:scale-[0.99] text-white font-semibold text-sm px-5 py-3 rounded-xl shadow-xs transition-all cursor-pointer"
               >
                 <PlusCircle className="w-4 h-4" />
@@ -256,6 +270,7 @@ export default function FarmerDashboardPage() {
 
             <button
               type="button"
+              onClick={() => handleNavigate('/farmer/pesanan')}
               className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#156E33] hover:text-[#105728] transition-colors self-start sm:self-auto cursor-pointer"
             >
               Kelola Semua Pesanan

@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
     Bell,
     ChevronDown,
-    Leaf,
     Menu,
     Search,
     ShieldCheck,

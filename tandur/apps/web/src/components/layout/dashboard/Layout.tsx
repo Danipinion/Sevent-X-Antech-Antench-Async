@@ -10,6 +10,7 @@ type DashboardLayoutProps = {
   user: DashboardUser;
   region?: string;
   footerNote?: string;
+  profileTo?: string;
 };
 
 export const DashboardLayout = ({
@@ -18,6 +19,7 @@ export const DashboardLayout = ({
   user,
   region,
   footerNote,
+  profileTo,
 }: DashboardLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
@@ -57,7 +59,11 @@ export const DashboardLayout = ({
 
       {/* Area konten, digeser selebar sidebar (256px) di desktop */}
       <div className="flex min-h-screen flex-col lg:pl-64">
-        <DashboardHeader user={user} onMenuClick={() => setSidebarOpen(true)} />
+        <DashboardHeader
+          user={user}
+          onMenuClick={() => setSidebarOpen(true)}
+          profileTo={profileTo}
+        />
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-9">
           <Outlet />

@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   MapPin,
   SlidersHorizontal,
   Tractor,
   Truck,
   MessageSquare,
-  Map,
   LayoutGrid,
   ShoppingCart,
   FileText,

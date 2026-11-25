@@ -9,9 +9,6 @@ import { UserRound, LockKeyhole, Eye, EyeOff } from "lucide-react";
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 const LOGIN_ENDPOINT = `${API_URL}/api/v1/auth/login`;
 
-// Halaman tujuan setelah login berhasil
-const REDIRECT_AFTER_LOGIN = "/";
-
 const Login = () => {
   const navigate = useNavigate();
 
@@ -60,7 +57,16 @@ const Login = () => {
         showConfirmButton: false,
       });
 
-      navigate(REDIRECT_AFTER_LOGIN, { replace: true });
+      const targetRoute =
+        user?.role === "farmer"
+          ? "/farmer"
+          : user?.role === "middleman"
+          ? "/middleman"
+          : user?.role === "buyer"
+          ? "/produk"
+          : "/farmer";
+
+      navigate(targetRoute, { replace: true });
     } catch (err) {
       let message = "Terjadi kesalahan. Silakan coba lagi.";
 

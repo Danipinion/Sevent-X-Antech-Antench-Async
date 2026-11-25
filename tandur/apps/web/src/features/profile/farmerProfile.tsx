@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import Swal from 'sweetalert2';
 import {
   CheckCircle2,
   IdCard,
@@ -14,12 +15,45 @@ import {
   Truck,
 } from 'lucide-react';
 
-export default function FarmerProfilePage() {
-  const [whatsappNumber, setWhatsappNumber] = useState<string>('812-8990-1234');
-  const [email, setEmail] = useState<string>('sugeng.santoso.tani@gmail.com');
-  const [address, setAddress] = useState<string>(
-    'Desa Karangawen, RT 03 / RW 02, Kec. Karangawen, Kab. Demak, Jawa Tengah\n(Patokan: Sebelah Barat Penggilingan Padi Berkah)'
-  );
+interface ProfilePageProps {
+  role?: "farmer" | "middleman" | "buyer";
+}
+
+export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
+  const storedUser = (() => {
+    try {
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const currentRole = role || storedUser?.role || "farmer";
+  const isMiddleman = currentRole === "middleman";
+
+  const defaultName = storedUser?.name || (isMiddleman ? "Haji Supardi" : "Sugeng Santoso");
+  const defaultNik = storedUser?.nik || (isMiddleman ? "3521092804750008" : "3521092804750002");
+  const defaultPhone = storedUser?.phone || (isMiddleman ? "813-2890-5678" : "812-8990-1234");
+  const defaultEmail = storedUser?.email || (isMiddleman ? "supardi.tengkulak.demak@gmail.com" : "sugeng.santoso.tani@gmail.com");
+  const defaultAddress = isMiddleman
+    ? "Gudang Komoditas Utama Demak, Jl. Raya Pantura No. 45, Kec. Karanganyar, Kab. Demak, Jawa Tengah"
+    : "Desa Karangawen, RT 03 / RW 02, Kec. Karangawen, Kab. Demak, Jawa Tengah\n(Patokan: Sebelah Barat Penggilingan Padi Berkah)";
+  const memberId = isMiddleman ? "TNDR-TGLK-1092" : "TNDR-DMK-2804";
+
+  const [whatsappNumber, setWhatsappNumber] = useState<string>(defaultPhone);
+  const [email, setEmail] = useState<string>(defaultEmail);
+  const [address, setAddress] = useState<string>(defaultAddress);
+
+  const handleSave = () => {
+    Swal.fire({
+      icon: "success",
+      title: "Profil Berhasil Disimpan",
+      text: "Informasi profil dan kontak Anda telah diperbarui.",
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] p-4 sm:p-6 lg:p-8 text-[#1C241E] font-sans">
@@ -28,11 +62,12 @@ export default function FarmerProfilePage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#EFECE6]">
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1C241E]">
-              Data Diri Petani
+              Data Diri {isMiddleman ? "Mitra Tengkulak" : "Petani"}
             </h1>
             <p className="text-xs sm:text-sm text-[#5C635E]">
-              Kelola informasi identitas resmi dan kontak aktif Anda untuk kelancaran verifikasi
-              timbang gabah serta transfer hasil panen.
+              {isMiddleman
+                ? "Kelola informasi identitas resmi dan kontak aktif Anda untuk kelancaran pengadaan komoditas dan logistik gudang."
+                : "Kelola informasi identitas resmi dan kontak aktif Anda untuk kelancaran verifikasi timbang gabah serta transfer hasil panen."}
             </p>
           </div>
 
@@ -55,13 +90,15 @@ export default function FarmerProfilePage() {
                   Informasi Identitas &amp; Kontak
                 </h2>
                 <p className="text-xs text-[#7A827C]">
-                  Data ini digunakan sebagai dasar hukum akad jual beli gabah.
+                  {isMiddleman
+                    ? "Data ini digunakan sebagai dasar kerja sama pengadaan dan distribusi hasil panen."
+                    : "Data ini digunakan sebagai dasar hukum akad jual beli gabah."}
                 </p>
               </div>
             </div>
 
             <span className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-[#EFECE6] text-xs font-semibold text-[#5C635E]">
-              ID: TNDR-DMK-2804
+              ID: {memberId}
             </span>
           </div>
 
@@ -79,7 +116,7 @@ export default function FarmerProfilePage() {
                 </span>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-[#F5F2EB] px-4 py-3 text-sm font-medium text-[#1C241E]">
-                <span>Sugeng Santoso</span>
+                <span>{defaultName}</span>
                 <Check className="w-4 h-4 text-[#156E33]" />
               </div>
               <p className="flex items-center gap-1.5 text-[11px] text-[#7A827C]">
@@ -100,7 +137,7 @@ export default function FarmerProfilePage() {
                 </span>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-[#F5F2EB] px-4 py-3 text-sm font-medium text-[#3D4740]">
-                <span>3521092804750002</span>
+                <span>{defaultNik}</span>
                 <Lock className="w-4 h-4 text-[#7A827C]" />
               </div>
               <p className="flex items-start gap-1.5 text-[11px] text-[#7A827C]">
@@ -200,6 +237,7 @@ export default function FarmerProfilePage() {
             </button>
             <button
               type="button"
+              onClick={handleSave}
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-sm font-bold shadow-xs transition-colors cursor-pointer"
             >
               <Check className="w-4 h-4" />

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Bell, CircleUserRound, Menu, Search } from "lucide-react";
 
 export type DashboardUser = {
@@ -12,12 +13,15 @@ type DashboardHeaderProps = {
   onMenuClick: () => void;
   /** Titik hijau di ikon lonceng */
   hasUnread?: boolean;
+  /** Link tujuan ketika profil diklik (default: "profil") */
+  profileTo?: string;
 };
 
 export const DashboardHeader = ({
   user,
   onMenuClick,
   hasUnread = true,
+  profileTo = "profil",
 }: DashboardHeaderProps) => (
   <header
     className="
@@ -76,7 +80,11 @@ export const DashboardHeader = ({
       {/* Pemisah */}
       <span aria-hidden="true" className="mx-3 hidden h-7 w-px bg-[#eadfd2] sm:mx-5 sm:block" />
 
-      <div className="ml-2 flex items-center gap-2.5 sm:ml-0">
+      <Link
+        to={profileTo}
+        className="ml-2 flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-[#f3ede5] cursor-pointer sm:ml-0"
+        title="Lihat Profil Akun"
+      >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f9f3eb]">
           <CircleUserRound size={20} strokeWidth={1.7} className="text-[#2a7f3e]" />
         </span>
@@ -85,7 +93,7 @@ export const DashboardHeader = ({
           <p className="text-[13px] font-semibold text-[#1d1b17]">{user.name}</p>
           <p className="text-[11px] text-[#92693e]">{user.subtitle}</p>
         </div>
-      </div>
+      </Link>
     </div>
   </header>
 );

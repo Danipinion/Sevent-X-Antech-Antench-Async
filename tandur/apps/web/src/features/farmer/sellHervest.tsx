@@ -6,7 +6,6 @@ import {
   Sprout,
   CircleDot,
   Flame,
-  Calendar,
   MapPin,
   TrendingUp,
   Image as ImageIcon,
