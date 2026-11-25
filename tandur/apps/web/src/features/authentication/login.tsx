@@ -8,55 +8,15 @@ import {
   LockKeyhole,
   Eye,
   EyeOff,
-  Sprout,
-  Truck,
-  Store,
 } from "lucide-react";
 
 // TODO: sesuaikan path endpoint dengan Swagger backend
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 const LOGIN_ENDPOINT = `${API_URL}/api/v1/auth/login`;
 
-type LoginRole = "farmer" | "middleman" | "buyer";
-
-const LOGIN_ROLES: {
-  value: LoginRole;
-  title: string;
-  desc: string;
-  icon: typeof Sprout;
-  iconBg: string;
-  iconColor: string;
-}[] = [
-  {
-    value: "farmer",
-    title: "Petani",
-    desc: "Portal Mitra Petani",
-    icon: Sprout,
-    iconBg: "bg-[#e3f3e8]",
-    iconColor: "text-[#185b32]",
-  },
-  {
-    value: "middleman",
-    title: "Tengkulak",
-    desc: "Portal Mitra Tengkulak",
-    icon: Truck,
-    iconBg: "bg-[#f6e8df]",
-    iconColor: "text-[#a0521d]",
-  },
-  {
-    value: "buyer",
-    title: "Pembeli",
-    desc: "Belanja Komoditas Tani",
-    icon: Store,
-    iconBg: "bg-[#fbf0cf]",
-    iconColor: "text-[#9a6b00]",
-  },
-];
-
 const Login = () => {
   const navigate = useNavigate();
 
-  const [selectedRole, setSelectedRole] = useState<LoginRole>("farmer");
   const [nik, setNik] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -80,29 +40,6 @@ const Login = () => {
       if (!token) {
         console.error("Response login tanpa token");
         throw new Error("Server tidak mengirim token login.");
-      }
-
-      // Validasi pembatasan peran login
-      if (user && user.role && user.role !== selectedRole) {
-        const roleNames: Record<string, string> = {
-          farmer: "Mitra Petani",
-          middleman: "Mitra Tengkulak",
-          buyer: "Pembeli",
-        };
-
-        const actualRoleName = roleNames[user.role] || user.role;
-        const selectedRoleName = roleNames[selectedRole] || selectedRole;
-
-        await Swal.fire({
-          icon: "warning",
-          title: "Akses Peran Tidak Sesuai",
-          html: `Akun ini terdaftar sebagai <b>${actualRoleName}</b>, bukan <b>${selectedRoleName}</b>.<br/><br/>Halaman ini khusus untuk masuk sebagai <b>${selectedRoleName}</b>. Silakan pilih tab <b>${actualRoleName}</b> di atas untuk melanjutkan.`,
-          confirmButtonColor: "#185b32",
-          confirmButtonText: "Mengerti",
-        });
-
-        setSubmitting(false);
-        return;
       }
 
       // "Ingat Saya" -> localStorage (tetap login), jika tidak -> sessionStorage
@@ -227,47 +164,8 @@ const Login = () => {
             </h1>
 
             <p className="mt-1 text-[14px] leading-6 text-[#66615b]">
-              Silakan pilih peran akun dan masukkan Nomor Induk Kependudukan Anda untuk melanjutkan.
+              Silakan masukkan Nomor Induk Kependudukan dan kata sandi Anda untuk melanjutkan.
             </p>
-          </div>
-
-          {/* Pilihan Peran Login */}
-          <div className="mb-5 space-y-1.5">
-            <label className="block pl-1 text-[12px] font-medium text-[#52617a]">
-              Masuk Sebagai
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {LOGIN_ROLES.map((r) => {
-                const Icon = r.icon;
-                const isSelected = selectedRole === r.value;
-                return (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setSelectedRole(r.value)}
-                    className={`
-                      flex flex-col items-center justify-center gap-1.5 rounded-[16px] border p-2.5 text-center transition-all cursor-pointer
-                      ${
-                        isSelected
-                          ? "border-[#185b32] bg-[#f0f9f3] text-[#185b32] font-semibold shadow-sm ring-2 ring-[#185b32]/20"
-                          : "border-[#dfe6ef] bg-[#f7f9fb] text-[#52617a] hover:bg-gray-100/70"
-                      }
-                    `}
-                  >
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                        isSelected
-                          ? "bg-[#185b32] text-white"
-                          : `${r.iconBg} ${r.iconColor}`
-                      }`}
-                    >
-                      <Icon size={16} />
-                    </div>
-                    <span className="text-[12px] tracking-tight">{r.title}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* Form Login */}
