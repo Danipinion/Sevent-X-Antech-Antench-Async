@@ -332,16 +332,22 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*LoginResult
 	// 3. Jika identifier adalah 16 digit angka, coba cari berdasarkan NIK
 	if len(cleanID) == 16 && isDigitsOnly(cleanID) {
 		user, err = s.userRepo.GetByNIK(ctx, cleanID)
+		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+			return nil, err
+		}
 	}
 
 	// 4. Jika belum ditemukan (atau bukan 16 digit), coba cari berdasarkan nomor Handphone (dinormalisasi)
 	if user == nil {
 		normalizedPhone := normalizePhone(identifier)
 		user, err = s.userRepo.GetByPhone(ctx, normalizedPhone)
+		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+			return nil, err
+		}
 	}
 
 	// 5. Jika akun tidak ditemukan
-	if err != nil || user == nil {
+	if user == nil {
 		return nil, domain.ErrInvalidCredentials
 	}
 
