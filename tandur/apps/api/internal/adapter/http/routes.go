@@ -54,6 +54,12 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	auth.Patch("/profile", handler.UpdateProfile, handler.AuthMiddleware())
 	auth.Post("/profile/photo", handler.UploadProfilePhoto, handler.AuthMiddleware())
 
+	// User Profile Routing (alias kompatibel untuk frontend /users/profile)
+	users := v1.Group("/users", handler.AuthMiddleware())
+	users.Get("/profile", handler.Me)
+	users.Put("/profile", handler.UpdateProfile)
+	users.Patch("/profile", handler.UpdateProfile)
+
 	// Buyer Catalog & Exploration (OptionalAuth untuk membedakan business_buyer vs retail_buyer)
 	v1.Get("/categories", handler.ListCategories)
 	v1.Get("/products", handler.ListProducts, handler.OptionalAuthMiddleware())
