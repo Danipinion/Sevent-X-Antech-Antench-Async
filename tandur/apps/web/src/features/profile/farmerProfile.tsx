@@ -13,6 +13,9 @@ import {
   FileText,
   MapPin,
   Truck,
+  LocateFixed,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { fetchApi, type UserDomain } from '@/services/api';
 
@@ -36,24 +39,34 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
   const defaultName = storedUser?.name || (isMiddleman ? "Haji Supardi" : "Sugeng Santoso");
   const defaultNik = storedUser?.nik || (isMiddleman ? "3521092804750008" : "3521092804750002");
   const defaultPhone = storedUser?.phone || (isMiddleman ? "813-2890-5678" : "812-8990-1234");
-  const defaultEmail = storedUser?.email || (isMiddleman ? "supardi.tengkulak.demak@gmail.com" : "sugeng.santoso.tani@gmail.com");
-  const defaultAddress = isMiddleman
-    ? "Gudang Komoditas Utama Demak, Jl. Raya Pantura No. 45, Kec. Karanganyar, Kab. Demak, Jawa Tengah"
-    : "Desa Karangawen, RT 03 / RW 02, Kec. Karangawen, Kab. Demak, Jawa Tengah\n(Patokan: Sebelah Barat Penggilingan Padi Berkah)";
-  const memberId =
-    storedUser?.id
-      ? storedUser.id.startsWith("usr_")
-        ? `TNDR-${storedUser.id.substring(4, 12).toUpperCase()}`
-        : storedUser.id
-      : isMiddleman
-      ? "TNDR-TGLK-1092"
-      : "TNDR-DMK-2804";
+  const defaultEmail =
+    storedUser?.email ||
+    (isMiddleman ? "supardi.tengkulak.demak@gmail.com" : "sugeng.santoso.tani@gmail.com");
+  const defaultAddress =
+    storedUser?.ktp_address ||
+    (isMiddleman
+      ? "Gudang Komoditas Utama Demak, Jl. Raya Pantura No. 45, Kec. Karanganyar, Kab. Demak, Jawa Tengah"
+      : "Desa Karangawen, RT 03 / RW 02, Kec. Karangawen, Kab. Demak, Jawa Tengah\n(Patokan: Sebelah Barat Penggilingan Padi Berkah)");
+
+  const memberId = storedUser?.id
+    ? storedUser.id.startsWith("usr_")
+      ? `TNDR-${storedUser.id.substring(4, 12).toUpperCase()}`
+      : storedUser.id
+    : isMiddleman
+    ? "TNDR-TGLK-1092"
+    : "TNDR-DMK-2804";
 
   const [fullName, setFullName] = useState<string>(defaultName);
   const [nik, setNik] = useState<string>(defaultNik);
   const [whatsappNumber, setWhatsappNumber] = useState<string>(defaultPhone);
   const [email, setEmail] = useState<string>(defaultEmail);
   const [address, setAddress] = useState<string>(defaultAddress);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    storedUser?.lat && storedUser?.lng
+      ? { lat: Number(storedUser.lat), lng: Number(storedUser.lng) }
+      : null
+  );
+  const [isLocating, setIsLocating] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Fetch profil dari backend API saat komponen di-mount
@@ -71,6 +84,9 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
           }
           if (user.email) setEmail(user.email);
           if (user.ktp_address) setAddress(user.ktp_address);
+          if (user.latitude && user.longitude) {
+            setCoords({ lat: Number(user.latitude), lng: Number(user.longitude) });
+          }
         }
       } catch {
         // Fallback tetap menggunakan data yang tersimpan di localStorage / default
@@ -82,6 +98,82 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
     };
   }, []);
 
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      Swal.fire({
+        icon: "error",
+        title: "Browser Tidak Mendukung GPS",
+        text: "Perangkat atau browser Anda tidak mendukung akses lokasi otomatis.",
+        confirmButtonColor: "#156E33",
+      });
+      return;
+    }
+
+    setIsLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = Number(position.coords.latitude.toFixed(6));
+        const lng = Number(position.coords.longitude.toFixed(6));
+        setCoords({ lat, lng });
+
+        let resolvedAddress = "";
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=id`
+          );
+          if (response.ok) {
+            const geoData = await response.json();
+            if (geoData?.display_name) {
+              resolvedAddress = geoData.display_name;
+            }
+          }
+        } catch {
+          // Jika reverse geocoding gagal/offline, tetap isi koordinat GPS
+        }
+
+        const formattedText = resolvedAddress
+          ? `${resolvedAddress}\n(Titik Koordinat GPS: ${lat}, ${lng})`
+          : `Titik Lokasi Terdeteksi (Koordinat GPS: ${lat}, ${lng})`;
+
+        setAddress(formattedText);
+        setIsLocating(false);
+
+        await Swal.fire({
+          icon: "success",
+          title: "Lokasi Terkini Ditemukan",
+          text: "Alamat dan titik koordinat GPS berhasil dimasukkan ke kolom titik jemput.",
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      },
+      async (error) => {
+        setIsLocating(false);
+        let errorMsg = "Gagal mengakses lokasi perangkat Anda.";
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMsg =
+            "Izin akses lokasi ditolak. Silakan aktifkan izin lokasi (GPS) pada browser Anda lalu coba lagi.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          errorMsg = "Informasi sinyal GPS tidak tersedia saat ini.";
+        } else if (error.code === error.TIMEOUT) {
+          errorMsg = "Waktu permintaan akses lokasi habis. Silakan coba kembali.";
+        }
+
+        await Swal.fire({
+          icon: "warning",
+          title: "Akses Lokasi Gagal",
+          text: errorMsg,
+          confirmButtonColor: "#156E33",
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -92,10 +184,10 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
           phone: `+62${whatsappNumber.replace(/[^0-9]/g, '')}`,
           email,
           ktp_address: address,
+          ...(coords ? { latitude: coords.lat, longitude: coords.lng } : {}),
         }),
       });
 
-      // Update penyimpanan lokal
       if (storedUser) {
         const updated = {
           ...storedUser,
@@ -103,6 +195,7 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
           phone: whatsappNumber,
           email,
           ktp_address: address,
+          ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
         };
         localStorage.setItem('user', JSON.stringify(updated));
       }
@@ -110,12 +203,11 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
       await Swal.fire({
         icon: "success",
         title: "Profil Berhasil Disimpan",
-        text: "Informasi profil dan kontak Anda telah diperbarui ke sistem.",
+        text: "Informasi profil dan titik lokasi Anda telah diperbarui ke sistem.",
         timer: 1800,
         showConfirmButton: false,
       });
     } catch {
-      // Jika backend endpoint belum siap / offline, simpan secara lokal
       if (storedUser) {
         const updated = {
           ...storedUser,
@@ -123,6 +215,7 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
           phone: whatsappNumber,
           email,
           ktp_address: address,
+          ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
         };
         localStorage.setItem('user', JSON.stringify(updated));
       }
@@ -130,7 +223,7 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
       await Swal.fire({
         icon: "success",
         title: "Profil Berhasil Disimpan",
-        text: "Informasi profil dan kontak Anda telah disimpan.",
+        text: "Informasi profil dan titik lokasi Anda telah disimpan.",
         timer: 1800,
         showConfirmButton: false,
       });
@@ -282,42 +375,83 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
 
           {/* Row 3: Alamat Domisili & Titik Kumpul */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-bold text-[#1C241E]">
                 Alamat Domisili &amp; Titik Kumpul Hasil Panen
               </label>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#9A4D16] hover:underline cursor-pointer"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                Titik Jemput Armada
-              </button>
+
+              <div className="flex items-center gap-3">
+                {coords && (
+                  <a
+                    href={`https://www.google.com/maps?q=${coords.lat},${coords.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#156E33] hover:underline"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Buka di Google Maps
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isLocating}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDF3E7] hover:bg-[#F9E6CE] text-xs font-bold text-[#9A4D16] transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {isLocating ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <LocateFixed className="w-3.5 h-3.5" />
+                  )}
+                  {isLocating ? "Mendeteksi GPS..." : "Gunakan Lokasi Saat Ini"}
+                </button>
+              </div>
             </div>
 
             <div className="flex items-start gap-3 rounded-xl bg-[#F5F2EB] border border-transparent focus-within:border-[#156E33] focus-within:bg-white p-4 transition-colors">
-              <MapPin className="w-4 h-4 text-[#7A827C] shrink-0 mt-1" />
+              <button
+                type="button"
+                onClick={handleGetCurrentLocation}
+                disabled={isLocating}
+                title="Klik untuk ambil lokasi saat ini"
+                className="p-1.5 -m-1 rounded-lg hover:bg-[#E8F5EC] text-[#156E33] transition-colors shrink-0 mt-0.5 cursor-pointer"
+              >
+                <MapPin className="w-4 h-4" />
+              </button>
               <textarea
                 rows={3}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
+                placeholder="Klik 'Gunakan Lokasi Saat Ini' atau ketik alamat lengkap titik jemput armada..."
                 className="w-full bg-transparent text-sm font-medium text-[#1C241E] leading-relaxed outline-none resize-none"
               />
             </div>
 
-            <p className="flex items-center gap-1.5 text-[11px] text-[#7A827C]">
-              <Truck className="w-3.5 h-3.5 shrink-0" />
-              Digunakan sopir truk Tandur saat menjemput gabah basah langsung dari tepi sawah.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-[#7A827C]">
+              <p className="flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5 shrink-0" />
+                Digunakan sopir truk Tandur saat menjemput gabah basah langsung dari tepi sawah.
+              </p>
+              {coords && (
+                <span className="font-mono text-[#156E33] font-semibold">
+                  GPS: {coords.lat}, {coords.lng}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Footer Action Buttons */}
           <div className="pt-4 border-t border-[#F2EFE9] flex items-center justify-end gap-3">
             <button
               type="button"
+              onClick={() => {
+                setAddress(defaultAddress);
+                setCoords(null);
+              }}
               className="px-5 py-2.5 rounded-xl bg-[#EFECE6] hover:bg-[#E5E1D8] text-sm font-bold text-[#1C241E] transition-colors cursor-pointer"
             >
-              Batal
+              Reset
             </button>
             <button
               type="button"

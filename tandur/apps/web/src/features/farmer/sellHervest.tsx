@@ -552,7 +552,7 @@ export default function SellHarvestPage() {
                 </span>
                 <span className="w-2 h-2 rounded-full bg-[#156E33]" />
               </div>
-              <p className="text-2xl sm:text-3xl font-extrabold text-[#1C241E]">
+              <p className="text-2xl sm:text-3xl font-bold text-[#1C241E]">
                 Rp {formatRupiah(grossRevenue)}
               </p>
               <p className="text-xs text-[#7A827C]">

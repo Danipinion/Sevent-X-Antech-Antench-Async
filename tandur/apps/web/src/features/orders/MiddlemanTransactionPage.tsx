@@ -326,7 +326,7 @@ export const MiddlemanTransactionPage: React.FC = () => {
               <span className="text-[#B8B0A0]">•</span>
               <span className="text-[#236B37]">B2B Mitra Tengkulak</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#1A201A]">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#1A201A]">
               Transaksi &amp; Surat Pesanan (PO)
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D]">
@@ -364,7 +364,7 @@ export const MiddlemanTransactionPage: React.FC = () => {
                 <br />
                 Kontrak PO
               </div>
-              <div className="text-xl font-extrabold text-[#1A201A] mt-1">
+              <div className="text-xl font-bold text-[#1A201A] mt-1">
                 {formatCompactRupiah(totalContractValue)}
               </div>
             </div>
@@ -380,7 +380,7 @@ export const MiddlemanTransactionPage: React.FC = () => {
                 <br />
                 Pengiriman
               </div>
-              <div className="text-xl font-extrabold text-[#1A201A] mt-1">
+              <div className="text-xl font-bold text-[#1A201A] mt-1">
                 {inTransitTons} Ton
               </div>
             </div>
@@ -396,7 +396,7 @@ export const MiddlemanTransactionPage: React.FC = () => {
                 <br />
                 Aktif
               </div>
-              <div className="text-xl font-extrabold text-[#1A201A] mt-1">
+              <div className="text-xl font-bold text-[#1A201A] mt-1">
                 {upcomingCount} Lokasi
               </div>
             </div>

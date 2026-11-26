@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -5,6 +6,7 @@ import {
   Navigate,
   useNavigate,
 } from "react-router-dom";
+import TandurSplashScreen from "../components/splash";
 import Login from "../features/authentication/login";
 import Register from "../features/authentication/register";
 import {
@@ -83,7 +85,6 @@ function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
   try {
     const user = JSON.parse(userStr);
     if (!allowedRoles.includes(user.role)) {
-      // Alihkan ke portal resmi milik akun pengguna tersebut
       if (user.role === "farmer") return <Navigate to="/farmer" replace />;
       if (user.role === "middleman") return <Navigate to="/middleman" replace />;
       if (user.role === "buyer") return <Navigate to="/produk" replace />;
@@ -202,6 +203,18 @@ function ProfileRedirect() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+
+  if (showSplash) {
+    return (
+      <TandurSplashScreen
+        duration={3000}
+        onComplete={() => setShowSplash(false)}
+        backgroundImageUrl="/tandur-bg.jpg"
+      />
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>

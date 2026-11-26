@@ -125,7 +125,7 @@ export const ProductDetailPage: React.FC = () => {
         <div className="max-w-3xl mx-auto bg-white rounded-2xl border border-[#ECE6DA] p-12 text-center space-y-4">
           <PackageOpen className="w-10 h-10 text-[#8A5A19] mx-auto" />
           <div className="space-y-1">
-            <h1 className="text-lg font-extrabold text-[#1A201A]">
+            <h1 className="text-lg font-bold text-[#1A201A]">
               Komoditas Tidak Ditemukan
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D]">
@@ -262,11 +262,11 @@ export const ProductDetailPage: React.FC = () => {
             <div className="p-6 space-y-5">
               <div>
                 <h1 className="text-xl sm:text-2xl font-extrabold text-[#1A201A] leading-snug">
-                  {pName}
+                  {product.title}
                 </h1>
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-extrabold text-[#236B37]">
-                    Rp {pPrice.toLocaleString('id-ID')}
+                    Rp {(product.price_per_kg || 0).toLocaleString('id-ID')}
                   </span>
                   <span className="text-xs sm:text-sm text-[#7A827A]">/ {pUnit}</span>
                   <span className="text-xs font-semibold text-[#8A5A19]">
@@ -331,7 +331,7 @@ export const ProductDetailPage: React.FC = () => {
           {/* Right Column (5 cols): Sticky Order Box */}
           <div className="lg:col-span-5 lg:sticky lg:top-6 bg-white rounded-2xl border border-[#ECE6DA] p-6 space-y-5 shadow-[0_4px_16px_rgba(0,0,0,0.03)]">
             <div>
-              <h2 className="text-base font-extrabold text-[#1A201A]">
+              <h2 className="text-base font-bold text-[#1A201A]">
                 Atur Jumlah Pembelian
               </h2>
               <p className="text-xs text-[#6D756D] mt-0.5">
@@ -351,7 +351,7 @@ export const ProductDetailPage: React.FC = () => {
                   <Minus className="w-4 h-4" />
                 </button>
                 <div className="w-24 text-center">
-                  <span className="text-base font-extrabold text-[#1A201A]">
+                  <span className="text-base font-bold text-[#1A201A]">
                     {quantityKg}
                   </span>{' '}
                   <span className="text-xs text-[#6D756D]">{pUnit}</span>
@@ -381,7 +381,7 @@ export const ProductDetailPage: React.FC = () => {
                 <span className="text-xs font-bold text-[#1A201A]">
                   Total Estimasi Bayar
                 </span>
-                <span className="text-xl font-extrabold text-[#236B37]">
+                <span className="text-xl font-bold text-[#236B37]">
                   Rp {subtotal.toLocaleString('id-ID')}
                 </span>
               </div>

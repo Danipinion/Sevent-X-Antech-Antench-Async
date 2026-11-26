@@ -307,7 +307,7 @@ export const BuyerHomePage: React.FC = () => {
                 <Sprout className="w-3.5 h-3.5" />
                 Pasar Tani Langsung • Bayar di Tempat (Cash on Pickup)
               </div>
-              <h1 className="text-2xl sm:text-4xl font-extrabold text-[#1A201A] tracking-tight leading-tight">
+              <h1 className="text-2xl sm:text-4xl font-bold text-[#1A201A] tracking-tight leading-tight">
                 Hasil Panen Segar &amp; Beras Berkualitas Langsung dari Lumbung Petani
               </h1>
               <p className="text-xs sm:text-sm text-[#6D756D] leading-relaxed">
@@ -518,21 +518,21 @@ export const BuyerHomePage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Card Body */}
-                    <div className="p-4 space-y-2.5">
-                      <Link
-                        to={`/produk/${product.id}`}
-                        className="block text-sm font-extrabold text-[#1A201A] hover:text-[#236B37] leading-snug line-clamp-2"
-                      >
-                        {pTitle}
-                      </Link>
+                  {/* Card Body */}
+                  <div className="p-4 space-y-2.5">
+                    <Link
+                      to={`/produk/${product.id}`}
+                      className="block text-sm font-extrabold text-[#1A201A] hover:text-[#236B37] leading-snug line-clamp-2"
+                    >
+                      {product.title}
+                    </Link>
 
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-extrabold text-[#236B37]">
-                          Rp {pPrice.toLocaleString('id-ID')}
-                        </span>
-                        <span className="text-xs text-[#7A827A]">/ {pUnit}</span>
-                      </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-extrabold text-[#236B37]">
+                        Rp {(product.price_per_kg || 0).toLocaleString('id-ID')}
+                      </span>
+                      <span className="text-xs text-[#7A827A]">/ kg</span>
+                    </div>
 
                       <div className="pt-1 border-t border-[#F0EBE1] space-y-1 text-xs text-[#6D756D]">
                         <div className="font-semibold text-[#1A201A] truncate">

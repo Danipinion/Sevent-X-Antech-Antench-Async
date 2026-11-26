@@ -393,7 +393,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 Total Nilai Kontrak (Otomatis)
               </label>
               <div className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3EFE6] border border-[#E2DACB] flex items-center justify-between gap-2">
-                <span className="text-xs sm:text-sm font-extrabold text-[#236B37]">
+                <span className="text-xs sm:text-sm font-bold text-[#236B37]">
                   {formatRupiah(totalContract)}
                 </span>
                 <span className="text-[11px] text-[#7A827A]">

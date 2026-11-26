@@ -25,8 +25,6 @@ const categories = [
 ];
 
 const topLinks = [
-  { label: "Poin Berbasis Mitra Tani", href: "/mitra-tani" },
-  { label: "Unduh Aplikasi", href: "/aplikasi" },
   { label: "Mulai Jual Hasil Panen", href: "/jual" },
 ];
 
@@ -121,7 +119,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
       <div className="bg-green-800 text-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-[11px] sm:text-xs">
           <p className="truncate">
-            Gratis Ongkir Pasar Raya se-seluruh Jawa &amp; Bali dengan min. belanja Rp200.000
+            Gratis Ongkir Pasar Raya Seluruh Jawa &amp; Bali dengan min. belanja Rp200.000
           </p>
           <ul className="hidden items-center gap-4 md:flex">
             {topLinks.map((l) => (
@@ -149,20 +147,20 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
 
-          {/* Logo Tandur */}
-          <Link to="/produk" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg">
-              <img src="/favicon.svg" alt="logo" className="h-8 w-8" />
-            </span>
-            <span className="leading-none">
-              <span className="block text-base font-extrabold tracking-tight text-green-800 sm:text-lg">
-                TANDUR
-              </span>
-              <span className="block text-[9px] font-medium tracking-widest text-gray-500">
-                AGRIBISNIS
-              </span>
-            </span>
-          </Link>
+                    {/* Logo */}
+                    <a href="/" className="flex shrink-0 items-center gap-2">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg ">
+                            <img src="/favicon.svg" alt="logo" />
+                        </span>
+                        <span className="leading-none">
+                            <span className="block text-base font-extrabold tracking-tight text-green-800 sm:text-lg">
+                                TANDUR
+                            </span>
+                            <span className="block text-[9px] font-medium tracking-widest text-gray-500">
+                                AGRIBISNIS
+                            </span>
+                        </span>
+                    </a>
 
           {/* Location */}
           <button
@@ -446,16 +444,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                   >
                     Semua Produk
                   </Link>
-                  {categories.map((c) => (
-                    <Link
-                      key={c.slug}
-                      to={c.href}
-                      onClick={() => setCategoryDropdownOpen(false)}
-                      className="block px-4 py-2 text-xs text-gray-600 hover:bg-green-50 hover:text-green-800"
-                    >
-                      {c.label}
-                    </Link>
-                  ))}
+                  
                 </div>
               )}
             </li>
@@ -468,12 +457,6 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                 </Link>
               </li>
             ))}
-
-            <li>
-              <Link to="/promo" className="block py-2.5 font-semibold text-orange-600 hover:text-orange-700">
-                Promo Spesial
-              </Link>
-            </li>
           </ul>
 
           <p className="hidden shrink-0 items-center gap-1.5 text-xs text-gray-700 lg:flex">
@@ -511,15 +494,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                 </Link>
               </li>
             ))}
-            <li>
-              <Link
-                to="/promo"
-                onClick={() => setMenuOpen(false)}
-                className="block py-3 font-semibold text-orange-600"
-              >
-                Promo Spesial
-              </Link>
-            </li>
+          
             {topLinks.map((l) => (
               <li key={l.href}>
                 <Link

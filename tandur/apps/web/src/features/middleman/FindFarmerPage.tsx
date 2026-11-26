@@ -317,7 +317,7 @@ export const FindFarmersPage: React.FC = () => {
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-[28px] font-extrabold text-[#1A201A] tracking-tight">
+            <h1 className="text-2xl sm:text-[28px] font-bold text-[#1A201A] tracking-tight">
               Pasokan Panen Langsung dari Petani
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D] max-w-2xl leading-relaxed">
@@ -363,7 +363,7 @@ export const FindFarmersPage: React.FC = () => {
         ) : filteredSupplies.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#ECE6DA] p-14 flex flex-col items-center justify-center text-center space-y-3">
             <PackageOpen className="w-10 h-10 text-[#8A5A19]" />
-            <h3 className="text-base font-extrabold text-[#1A201A]">
+            <h3 className="text-base font-bold text-[#1A201A]">
               Belum Ada Pasokan Panen Tersedia
             </h3>
             <p className="text-xs sm:text-sm text-[#6D756D] max-w-md">
@@ -390,7 +390,7 @@ export const FindFarmersPage: React.FC = () => {
                       <Tractor className="w-7 h-7 stroke-[1.8]" />
                     </div>
                     <div className="space-y-1.5">
-                      <h2 className="text-lg font-extrabold text-[#1A201A]">
+                      <h2 className="text-lg font-bold text-[#1A201A]">
                         {selectedSupply.farmer_group ||
                           selectedSupply.farmer_name ||
                           'Petani Mitra Tandur'}
@@ -452,7 +452,7 @@ export const FindFarmersPage: React.FC = () => {
               )}
 
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-base font-extrabold text-[#1A201A]">
+                <div className="flex items-center gap-2 text-base font-bold text-[#1A201A]">
                   <LayoutGrid className="w-4 h-4 text-[#236B37]" />
                   <h3>Daftar Pasokan Siap Borong</h3>
                 </div>
@@ -492,11 +492,11 @@ export const FindFarmersPage: React.FC = () => {
                       </div>
 
                       <div>
-                        <h4 className="text-base sm:text-lg font-extrabold text-[#1A201A]">
+                        <h4 className="text-base sm:text-lg font-bold text-[#1A201A]">
                           {item.title || item.commodity_name || 'Hasil Panen Petani'}
                         </h4>
                         <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                          <span className="text-xl sm:text-2xl font-extrabold text-[#236B37]">
+                          <span className="text-xl sm:text-2xl font-bold text-[#236B37]">
                             {formatRupiah(priceKg)}
                           </span>
                           <span className="text-xs text-[#7A827A]">/ {item.unit || 'kg'}</span>
@@ -552,14 +552,14 @@ export const FindFarmersPage: React.FC = () => {
                       <FileText className="w-4 h-4" />
                     </div>
                     <div>
-                      <h2 className="text-base font-extrabold text-[#1A201A]">
+                      <h2 className="text-base font-bold text-[#1A201A]">
                         Order Borongan (PO)
                       </h2>
                       <p className="text-xs text-[#6D756D]">Pengadaan Resmi Skala B2B</p>
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-[#E1F3E5] text-[#236B37] text-[11px] font-bold">
-                    Surat Pesanan
+                    Pesanan
                   </span>
                 </div>
 
@@ -568,7 +568,7 @@ export const FindFarmersPage: React.FC = () => {
                     <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A5A19]">
                       KOMODITAS YANG DIPESAN
                     </div>
-                    <div className="text-sm sm:text-base font-extrabold text-[#1A201A] mt-0.5">
+                    <div className="text-sm sm:text-base font-bold text-[#1A201A] mt-0.5">
                       {selectedSupply.title || selectedSupply.commodity_name}
                     </div>
                     <div className="text-xs font-bold text-[#236B37] mt-0.5">
@@ -584,7 +584,7 @@ export const FindFarmersPage: React.FC = () => {
                   <div className="flex items-baseline justify-between">
                     <span className="text-xs font-bold text-[#1A201A]">Kuantitas Tonase</span>
                     <div>
-                      <span className="text-lg font-extrabold text-[#236B37]">
+                      <span className="text-lg font-bold text-[#236B37]">
                         {tonnage.toFixed(1)}
                       </span>{' '}
                       <span className="text-xs text-[#6D756D]">
@@ -645,7 +645,7 @@ export const FindFarmersPage: React.FC = () => {
                       <div className="text-[11px] font-semibold text-[#8A5A19]">
                         Total Nilai Pesanan (PO)
                       </div>
-                      <div className="text-lg sm:text-xl font-extrabold text-[#236B37]">
+                      <div className="text-lg sm:text-xl font-bold text-[#236B37]">
                         {formatRupiah(totalValue)}
                       </div>
                     </div>

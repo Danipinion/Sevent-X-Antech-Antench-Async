@@ -167,7 +167,7 @@ export const OpenSellOfferModal: React.FC<OpenSellOfferModalProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-extrabold tracking-wider uppercase text-[#7A827A]">
+                      <span className="text-[9px] font-bold tracking-wider uppercase text-[#7A827A]">
                         {lot.siloLabel}
                       </span>
                       <span
@@ -178,7 +178,7 @@ export const OpenSellOfferModal: React.FC<OpenSellOfferModalProps> = ({
                         {isSelected && <span className="w-2 h-2 rounded-full bg-[#236B37]" />}
                       </span>
                     </div>
-                    <div className="font-extrabold text-sm text-[#1A201A] mt-1">
+                    <div className="font-bold text-sm text-[#1A201A] mt-1">
                       {lot.name}
                     </div>
                     <div className="text-[11px] text-[#6D756D] mt-0.5">{lot.subText}</div>
@@ -263,7 +263,7 @@ export const OpenSellOfferModal: React.FC<OpenSellOfferModalProps> = ({
                     type="number"
                     value={offerPrice}
                     onChange={(e) => setOfferPrice(Number(e.target.value) || 0)}
-                    className="w-full pl-9 pr-10 py-3 rounded-xl bg-[#F3F9F4] border border-[#236B37] text-sm font-extrabold text-[#1A201A] focus:outline-none"
+                    className="w-full pl-9 pr-10 py-3 rounded-xl bg-[#F3F9F4] border border-[#236B37] text-sm font-bold text-[#1A201A] focus:outline-none"
                   />
                   <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-[#7A827A]">
                     /kg
@@ -283,13 +283,13 @@ export const OpenSellOfferModal: React.FC<OpenSellOfferModalProps> = ({
                 <div className="mt-2 pt-2 border-t border-[#EAE2D3] flex items-end justify-between">
                   <div>
                     <div className="text-[10px] text-[#7A827A]">Nilai Kotor Transaksi</div>
-                    <div className="text-sm font-extrabold text-[#1A201A]">
+                    <div className="text-sm font-bold text-[#1A201A]">
                       {formatRupiah(grossValue)}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-[10px] text-[#7A827A]">Estimasi Laba Bersih</div>
-                    <div className="text-sm font-extrabold text-[#236B37]">
+                    <div className="text-sm font-bold text-[#236B37]">
                       +{formatRupiah(netProfit)}
                     </div>
                   </div>

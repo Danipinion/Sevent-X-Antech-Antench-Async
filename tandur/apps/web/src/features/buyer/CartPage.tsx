@@ -224,7 +224,7 @@ export const CartPage: React.FC = () => {
               <ArrowLeft className="w-3.5 h-3.5" />
               Lanjut Belanja Komoditas
             </Link>
-            <h1 className="text-2xl font-extrabold text-[#1A201A]">
+            <h1 className="text-2xl font-bold text-[#1A201A]">
               Keranjang Belanja &amp; Jadwal Ambil
             </h1>
           </div>
@@ -271,7 +271,7 @@ export const CartPage: React.FC = () => {
                   className="bg-white rounded-2xl border border-[#ECE6DA] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-[0_2px_8px_rgba(0,0,0,0.015)]"
                 >
                   <div className="space-y-1.5">
-                    <h3 className="text-sm sm:text-base font-extrabold text-[#1A201A]">
+                    <h3 className="text-sm sm:text-base font-bold text-[#1A201A]">
                       {item.title}
                     </h3>
                     <div className="flex items-center gap-1.5 text-xs text-[#6D756D]">
@@ -285,7 +285,7 @@ export const CartPage: React.FC = () => {
 
                   <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0">
                     <div className="text-base font-extrabold text-[#1A201A]">
-                      Rp {(item.subtotal || 0).toLocaleString('id-ID')}
+                      Rp {item.subtotal.toLocaleString('id-ID')}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -328,7 +328,7 @@ export const CartPage: React.FC = () => {
               className="lg:col-span-5 bg-white rounded-2xl border border-[#ECE6DA] p-6 space-y-5 shadow-[0_4px_16px_rgba(0,0,0,0.03)]"
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-[#1A201A]">
+                <h2 className="text-base font-bold text-[#1A201A]">
                   Ringkasan &amp; Jadwal Ambil
                 </h2>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#E1F3E5] text-[#236B37] text-[11px] font-bold">
@@ -387,7 +387,7 @@ export const CartPage: React.FC = () => {
                   <span className="font-bold text-[#1A201A]">
                     Total Pembayaran
                   </span>
-                  <span className="text-xl font-extrabold text-[#236B37]">
+                  <span className="text-xl font-bold text-[#236B37]">
                     Rp {totalAmount.toLocaleString('id-ID')}
                   </span>
                 </div>

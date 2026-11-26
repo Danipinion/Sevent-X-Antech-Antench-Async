@@ -316,7 +316,7 @@ export const SellStockPage: React.FC = () => {
               <Truck className="w-3.5 h-3.5" />
               DISTRIBUSI &amp; PENJUALAN STOK GUDANG
             </div>
-            <h1 className="text-2xl sm:text-[26px] font-extrabold text-[#1A201A]">
+            <h1 className="text-2xl sm:text-[26px] font-bold text-[#1A201A]">
               Jual Stok Gudang
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D]">
@@ -379,7 +379,7 @@ export const SellStockPage: React.FC = () => {
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-extrabold text-[#1A201A]">{totalReadyTons}</span>
+                <span className="text-2xl font-bold text-[#1A201A]">{totalReadyTons}</span>
                 <span className="text-sm font-bold text-[#236B37]">Ton</span>
               </div>
               <p className="text-xs font-semibold text-[#8A5A19] mt-1">
@@ -401,7 +401,7 @@ export const SellStockPage: React.FC = () => {
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-extrabold text-[#1A201A]">{activeOffers.length}</span>
+                <span className="text-2xl font-bold text-[#1A201A]">{activeOffers.length}</span>
                 <span className="text-sm font-bold text-[#1A201A]">Komoditas</span>
               </div>
               <p className="text-xs text-[#6D756D] mt-1">
@@ -423,7 +423,7 @@ export const SellStockPage: React.FC = () => {
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-extrabold text-[#1A201A]">
+                <span className="text-2xl font-bold text-[#1A201A]">
                   {formatCompactRupiah(totalPotentialValue)}
                 </span>
               </div>
@@ -448,7 +448,7 @@ export const SellStockPage: React.FC = () => {
             </div>
             <div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-extrabold text-[#236B37]">
+                <span className="text-2xl font-bold text-[#236B37]">
                   {averageMarginPerKg >= 0 ? `+${formatRupiah(averageMarginPerKg)}` : formatRupiah(averageMarginPerKg)}
                 </span>
                 <span className="text-xs text-[#6D756D]">/ kg</span>
@@ -467,7 +467,7 @@ export const SellStockPage: React.FC = () => {
         {/* Filter Bar */}
         <div className="bg-white rounded-2xl border border-[#ECE6DA] p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-[0_2px_8px_rgba(0,0,0,0.015)]">
           <div>
-            <h2 className="text-sm sm:text-base font-extrabold text-[#1A201A]">
+            <h2 className="text-sm sm:text-base font-bold text-[#1A201A]">
               Stok Komoditas Siap Ditawarkan
             </h2>
             <p className="text-xs text-[#6D756D]">
@@ -509,7 +509,7 @@ export const SellStockPage: React.FC = () => {
         ) : filteredOffers.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#ECE6DA] p-14 flex flex-col items-center justify-center text-center space-y-3">
             <PackageOpen className="w-10 h-10 text-[#8A5A19]" />
-            <h3 className="text-base font-extrabold text-[#1A201A]">
+            <h3 className="text-base font-bold text-[#1A201A]">
               Belum Ada Listing Penjualan Stok
             </h3>
             <p className="text-xs sm:text-sm text-[#6D756D] max-w-md">
@@ -540,7 +540,7 @@ export const SellStockPage: React.FC = () => {
                       {renderCategoryIcon(item.category)}
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-base sm:text-lg font-extrabold text-[#1A201A]">
+                          <h3 className="text-base sm:text-lg font-bold text-[#1A201A]">
                             {item.commodity_name}
                           </h3>
                           <span className="px-2.5 py-0.5 rounded-full bg-[#E1F3E5] text-[#236B37] text-[11px] font-bold">
@@ -564,7 +564,7 @@ export const SellStockPage: React.FC = () => {
                   <div className="bg-[#FAF8F3] rounded-xl p-4 border border-[#EFEAE0] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <div className="text-[11px] text-[#7A827A]">Volume Siap Jual</div>
-                      <div className="text-base font-extrabold text-[#1A201A] mt-0.5">
+                      <div className="text-base font-bold text-[#1A201A] mt-0.5">
                         {item.offered_tons.toFixed(1)} Ton
                       </div>
                       <div className="text-[11px] text-[#7A827A]">
@@ -574,7 +574,7 @@ export const SellStockPage: React.FC = () => {
 
                     <div>
                       <div className="text-[11px] text-[#7A827A]">Modal Tebas / Beli</div>
-                      <div className="text-base font-extrabold text-[#1A201A] mt-0.5">
+                      <div className="text-base font-bold text-[#1A201A] mt-0.5">
                         {formatRupiah(item.cost_price_per_kg)}{' '}
                         <span className="text-xs font-normal text-[#7A827A]">/kg</span>
                       </div>
@@ -583,7 +583,7 @@ export const SellStockPage: React.FC = () => {
 
                     <div>
                       <div className="text-[11px] text-[#7A827A]">Acuan Pasar &amp; Pengambilan</div>
-                      <div className="text-base font-extrabold text-[#8A5A19] mt-0.5">
+                      <div className="text-base font-bold text-[#8A5A19] mt-0.5">
                         {item.market_ref_price}
                       </div>
                       <div className="text-[11px] text-[#7A827A]">
@@ -593,7 +593,7 @@ export const SellStockPage: React.FC = () => {
 
                     <div>
                       <div className="text-[11px] text-[#7A827A]">Harga Buka Jual</div>
-                      <div className="text-base font-extrabold text-[#236B37] mt-0.5">
+                      <div className="text-base font-bold text-[#236B37] mt-0.5">
                         {formatRupiah(item.selling_price_per_kg)}{' '}
                         <span className="text-xs font-normal text-[#7A827A]">/kg</span>
                       </div>

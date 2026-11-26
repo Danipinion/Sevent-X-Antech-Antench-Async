@@ -412,7 +412,7 @@ export const InventoryDetailModal: React.FC<InventoryDetailModalProps> = ({
                   <div className="text-[10px] font-bold tracking-wider uppercase text-[#7A827A]">
                     KOMODITAS UTAMA
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold text-[#1A201A] mt-0.5">
+                  <div className="text-lg sm:text-xl font-bold text-[#1A201A] mt-0.5">
                     {item.name}
                   </div>
                   <div className="text-xs text-[#6D756D] mt-0.5">{item.variety}</div>
@@ -433,7 +433,7 @@ export const InventoryDetailModal: React.FC<InventoryDetailModalProps> = ({
                 <div className="bg-[#F6F2EA] rounded-xl p-4 border border-[#EDE6D8] flex flex-col justify-between">
                   <div className="text-xs text-[#6D756D]">Total Stok Fisik</div>
                   <div className="mt-1 flex items-baseline gap-1.5">
-                    <span className="text-xl font-extrabold text-[#236B37]">
+                    <span className="text-xl font-bold text-[#236B37]">
                       {item.totalStockTon}
                     </span>
                     <span className="text-xs text-[#7A827A]">({item.totalStockKg})</span>
@@ -460,7 +460,7 @@ export const InventoryDetailModal: React.FC<InventoryDetailModalProps> = ({
                 <div className="bg-[#F6F2EA] rounded-xl p-4 border border-[#EDE6D8] flex flex-col justify-between">
                   <div className="text-xs text-[#6D756D]">Harga Tebas Rata-rata</div>
                   <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-lg font-extrabold text-[#1A201A]">
+                    <span className="text-lg font-bold text-[#1A201A]">
                       {item.avgBuyPrice}
                     </span>
                     <span className="text-xs text-[#7A827A]">/ kg</span>
@@ -473,7 +473,7 @@ export const InventoryDetailModal: React.FC<InventoryDetailModalProps> = ({
                   <div className="text-xs text-[#6D756D]">Acuan Jual Pasar Demak</div>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-extrabold text-[#236B37]">
+                      <span className="text-lg font-bold text-[#236B37]">
                         {item.marketRefPrice}
                       </span>
                       <span className="text-xs text-[#7A827A]">/ kg</span>

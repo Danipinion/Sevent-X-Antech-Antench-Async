@@ -340,7 +340,7 @@ export default function FarmerOrdersPage() {
               </div>
               <div>
                 <p className="text-[11px] text-[#7A827C]">Total Pendapatan Lunas</p>
-                <p className="text-sm sm:text-base font-extrabold text-[#1C241E]">
+                <p className="text-sm sm:text-base font-bold text-[#1C241E]">
                   Rp {formatRupiah(totalRevenue)}
                 </p>
               </div>
@@ -352,7 +352,7 @@ export default function FarmerOrdersPage() {
               </div>
               <div>
                 <p className="text-[11px] text-[#7A827C]">Panen Aktif</p>
-                <p className="text-sm sm:text-base font-extrabold text-[#1C241E]">
+                <p className="text-sm sm:text-base font-bold text-[#1C241E]">
                   {listings.length} <span className="text-xs font-medium text-[#7A827C]">Produk</span>
                 </p>
               </div>
@@ -623,7 +623,7 @@ export default function FarmerOrdersPage() {
                             {isCompleted ? 'Total Dana Diterima' : 'Nilai Kesepakatan'}
                           </p>
                           <p
-                            className={`text-lg sm:text-xl font-extrabold ${
+                            className={`text-lg sm:text-xl font-bold ${
                               isCompleted ? 'text-[#156E33]' : 'text-[#1C241E]'
                             }`}
                           >

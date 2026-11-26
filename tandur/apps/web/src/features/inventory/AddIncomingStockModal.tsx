@@ -166,7 +166,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[82vh] overflow-y-auto">
           {/* Section 1 */}
           <div className="space-y-3">
-            <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#236B37]">
               <LayoutGrid className="w-3.5 h-3.5" />
               1. KOMODITAS, VARIETAS &amp; ASAL PASOKAN
             </div>
@@ -232,7 +232,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
 
           {/* Section 2 */}
           <div className="space-y-2.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#236B37]">
               <Warehouse className="w-3.5 h-3.5" />
               2. LOKASI PENYIMPANAN &amp; ALOKASI SILO
             </div>
@@ -254,7 +254,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
 
           {/* Section 3 */}
           <div className="space-y-2.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#236B37]">
               <Scale className="w-3.5 h-3.5" />
               3. STOK FISIK, BOBOT TIMBANG &amp; UJI KADAR AIR
             </div>
@@ -308,7 +308,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
 
           {/* Section 4 */}
           <div className="space-y-3">
-            <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#236B37]">
               <Banknote className="w-3.5 h-3.5" />
               4. HARGA BELI TEBAS, ACUAN PASAR &amp; ESTIMASI MARGIN
             </div>
@@ -368,7 +368,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
               <div className="bg-[#F6F2EA] rounded-xl p-3.5 border border-[#EDE6D8]">
                 <div className="text-[11px] text-[#6D756D]">Total Estimasi Nilai Tebas Transaksi</div>
                 <div className="mt-1 flex items-baseline justify-between gap-2">
-                  <span className="text-base font-extrabold text-[#236B37]">
+                  <span className="text-base font-bold text-[#236B37]">
                     {formatRupiah(totalBuyCost)}
                   </span>
                   <span className="text-[10px] text-[#7A827A]">
@@ -379,7 +379,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
 
               <div className="bg-[#F6F2EA] rounded-xl p-3.5 border border-[#EDE6D8]">
                 <div className="text-[11px] text-[#6D756D]">Status &amp; Estimasi Potensi Margin Bersih</div>
-                <div className="mt-1 text-base font-extrabold text-[#8A5A19]">
+                <div className="mt-1 text-base font-bold text-[#8A5A19]">
                   +{formatRupiah(netMarginTotal)}
                 </div>
               </div>

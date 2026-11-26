@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@font-face {
+  font-family: 'Ahsing';
+  src: url('/fonts/Ahsing.otf') format('opentype'),
+       url('/fonts/Ahsing.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}

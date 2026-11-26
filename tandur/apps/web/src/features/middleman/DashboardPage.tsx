@@ -261,7 +261,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">
+              <div className="text-2xl font-bold text-[#1A201A]">
                 {isLoading ? '...' : `${activeOrders.length} Kontrak`}
               </div>
               <div className="mt-1.5 flex items-center gap-2 text-xs font-medium">
@@ -285,7 +285,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">
+              <div className="text-2xl font-bold text-[#1A201A]">
                 {isLoading ? '...' : `${totalTonase} Ton`}
               </div>
               <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium truncate">
@@ -307,7 +307,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A] truncate">
+              <div className="text-2xl font-bold text-[#1A201A] truncate">
                 {isLoading
                   ? '...'
                   : nearestScheduleOrder?.schedule_info ||
@@ -352,7 +352,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">
+              <div className="text-2xl font-bold text-[#1A201A]">
                 {isLoading ? '...' : `${uniqueFarmersCount} Mitra`}
               </div>
               <div className="mt-1.5 text-xs text-[#6D756D] truncate">
@@ -552,7 +552,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                       <div className="text-xs text-[#6D756D] mt-0.5">{item.desc}</div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-sm font-extrabold">
+                      <div className="text-sm font-bold">
                         <span className={item.trend === 'up' ? 'text-[#236B37]' : 'text-[#1A201A]'}>
                           {item.price}
                         </span>{' '}

@@ -252,7 +252,7 @@ export const NotificationBell = ({ hasUnread }: NotificationBellProps) => {
         <div className="absolute right-0 mt-2.5 w-80 sm:w-96 rounded-2xl border border-[#ECE6DA] bg-white shadow-xl overflow-hidden z-50">
           <div className="flex items-center justify-between border-b border-[#F0EBE1] bg-[#FAF8F3] px-4 py-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs sm:text-sm font-extrabold text-[#1A201A]">
+              <h3 className="text-xs sm:text-sm font-bold text-[#1A201A]">
                 Notifikasi
               </h3>
               {unreadCount > 0 && (

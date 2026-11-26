@@ -553,10 +553,12 @@ export default function FarmerVerificationPage() {
                     )}
                   </div>
                 ) : (
-                  /* Placeholder e-KTP ketika belum ada foto */
-                  <div className="sm:col-span-5 rounded-xl bg-gradient-to-br from-[#E8F0F7] via-[#F0F5FA] to-[#DDE9F2] border-2 border-dashed border-[#A5CDE8] p-4 flex flex-col items-center justify-center text-center aspect-[1.6/1] space-y-2">
-                    <div className="w-10 h-10 rounded-full bg-white text-[#156E33] flex items-center justify-center shadow-xs">
-                      <CreditCard className="w-5 h-5" />
+                  <div className="sm:col-span-5 rounded-xl bg-gradient-to-br from-[#CBE5F6] via-[#E5F2FA] to-[#B7DCF4] border border-[#A5CDE8] p-3 shadow-xs relative overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-[#8BB8D8] pb-1.5 mb-2">
+                      <span className="text-[9px] font-extrabold tracking-wider text-[#1B3B5A]">
+                        REPUBLIK INDONESIA
+                      </span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#156E33]" />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-[#1B3B5A]">Belum Ada Foto e-KTP</p>

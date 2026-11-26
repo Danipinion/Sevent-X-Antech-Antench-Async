@@ -248,7 +248,7 @@ export const PriceNegotiationPage: React.FC = () => {
               <Handshake className="w-4 h-4" />
               NEGOSIASI &amp; KONTRAK HARGA PANEN
             </div>
-            <h1 className="text-2xl sm:text-[26px] font-extrabold text-[#1A201A]">
+            <h1 className="text-2xl sm:text-[26px] font-bold text-[#1A201A]">
               Penawaran &amp; Kesepakatan Harga
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D] max-w-2xl leading-relaxed">
@@ -344,7 +344,7 @@ export const PriceNegotiationPage: React.FC = () => {
         ) : filteredItems.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#ECE6DA] p-12 flex flex-col items-center justify-center text-center space-y-2.5">
             <Handshake className="w-9 h-9 text-[#8A5A19]" />
-            <h3 className="text-base font-extrabold text-[#1A201A]">
+            <h3 className="text-base font-bold text-[#1A201A]">
               Belum Ada Penawaran atau Kesepakatan Harga
             </h3>
             <p className="text-xs sm:text-sm text-[#6D756D] max-w-md">
@@ -365,13 +365,13 @@ export const PriceNegotiationPage: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex items-start gap-3.5">
                     <div
-                      className={`w-10 h-10 rounded-xl ${item.initialsBg} ${item.initialsText} font-extrabold text-sm flex items-center justify-center shrink-0`}
+                      className={`w-10 h-10 rounded-xl ${item.initialsBg} ${item.initialsText} font-bold text-sm flex items-center justify-center shrink-0`}
                     >
                       {item.initials}
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <h2 className="text-base font-extrabold text-[#1A201A]">
+                        <h2 className="text-base font-bold text-[#1A201A]">
                           {item.farmerName}
                         </h2>
                         {item.status === 'Aktif Berjalan' ? (
@@ -395,7 +395,7 @@ export const PriceNegotiationPage: React.FC = () => {
 
                   <div className="sm:text-right">
                     <div className="text-[11px] text-[#6D756D]">{item.totalLabel}</div>
-                    <div className="text-lg sm:text-xl font-extrabold text-[#1A201A]">
+                    <div className="text-lg sm:text-xl font-bold text-[#1A201A]">
                       {item.totalValue}
                     </div>
                   </div>
@@ -412,7 +412,7 @@ export const PriceNegotiationPage: React.FC = () => {
 
                   <div>
                     <div className="text-[11px] text-[#7A827A]">{item.col2Label}</div>
-                    <div className="text-xs sm:text-sm font-extrabold text-[#236B37] mt-0.5">
+                    <div className="text-xs sm:text-sm font-bold text-[#236B37] mt-0.5">
                       {item.col2Price}{' '}
                       <span className="text-[11px] font-normal text-[#7A827A]">/ kg</span>
                     </div>

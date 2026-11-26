@@ -422,7 +422,7 @@ export const InventoryListPage: React.FC = () => {
               <Warehouse className="w-3.5 h-3.5" />
               GUDANG UTAMA &amp; SILO PENAMPUNGAN
             </div>
-            <h1 className="text-2xl sm:text-[26px] font-extrabold text-[#1A201A] tracking-tight">
+            <h1 className="text-2xl sm:text-[26px] font-bold text-[#1A201A] tracking-tight">
               Inventaris Stok Gudang
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D]">
@@ -459,7 +459,7 @@ export const InventoryListPage: React.FC = () => {
               <div>
                 <div className="text-xs font-medium text-[#6D756D]">Total Stok Gudang</div>
                 <div className="mt-1 flex items-baseline gap-1.5">
-                  <span className="text-2xl font-extrabold text-[#236B37]">
+                  <span className="text-2xl font-bold text-[#236B37]">
                     {summaryStats.totalTons}
                   </span>
                   <span className="text-sm font-semibold text-[#6D756D]">Ton</span>
@@ -494,7 +494,7 @@ export const InventoryListPage: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-xs font-medium text-[#6D756D]">Estimasi Nilai Stok</div>
-                <div className="mt-1 text-2xl font-extrabold text-[#8A5A19]">
+                <div className="mt-1 text-2xl font-bold text-[#8A5A19]">
                   {formatCompactRupiah(summaryStats.totalEstimatedValue)}
                 </div>
               </div>
@@ -521,7 +521,7 @@ export const InventoryListPage: React.FC = () => {
               <div>
                 <div className="text-xs font-medium text-[#6D756D]">Kapasitas Tersedia</div>
                 <div className="mt-1 flex items-baseline gap-1.5">
-                  <span className="text-2xl font-extrabold text-[#1A201A]">
+                  <span className="text-2xl font-bold text-[#1A201A]">
                     {summaryStats.availableTons}
                   </span>
                   <span className="text-sm font-semibold text-[#6D756D]">Ton</span>
@@ -554,7 +554,7 @@ export const InventoryListPage: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-xs font-medium text-[#6D756D]">Peringatan Stok</div>
-                <div className="mt-1 text-2xl font-extrabold text-[#B6771E]">
+                <div className="mt-1 text-2xl font-bold text-[#B6771E]">
                   {summaryStats.alertCount} Komoditas
                 </div>
               </div>
