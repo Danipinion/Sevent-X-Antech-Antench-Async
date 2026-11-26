@@ -226,7 +226,7 @@ export const BuyerHomePage: React.FC = () => {
         catName.toLowerCase() === selectedCategory.toLowerCase() ||
         catName.toLowerCase().includes(selectedCategory.toLowerCase()) ||
         selectedCategory.toLowerCase().includes(catName.toLowerCase()) ||
-        (selectedCategory.includes('Beras') && (catName.toLowerCase().includes('beras') || catName.toLowerCase().includes('gabah'))) ||
+        (selectedCategory.includes('Beras') && (catName.toLowerCase().includes('beras') || catName.toLowerCase().includes('gabah') || catName.toLowerCase().includes('padi'))) ||
         (selectedCategory.includes('Sayur') && catName.toLowerCase().includes('sayur')) ||
         (selectedCategory.includes('Buah') && catName.toLowerCase().includes('buah')) ||
         (selectedCategory.includes('Bibit') && (catName.toLowerCase().includes('bibit') || catName.toLowerCase().includes('ternak'))) ||

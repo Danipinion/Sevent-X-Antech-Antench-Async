@@ -278,6 +278,61 @@ export interface NegotiationOffer {
   payment_method?: string;
 }
 
+export function normalizeMarketplaceListingToProduct(item: any): BuyerProduct {
+  if (!item) return {} as BuyerProduct;
+
+  const price = Number(item.price_per_unit ?? item.price ?? item.price_per_kg ?? 0);
+  const stock = Number(
+    item.available_quantity ?? item.estimated_quantity ?? item.available_stock ?? item.stock_kg ?? 0
+  );
+  const minOrder = Number(item.min_order_quantity ?? item.min_order_kg ?? 1);
+  const mediaUrls: string[] = Array.isArray(item.media_urls)
+    ? item.media_urls
+    : item.primary_image_url
+    ? [item.primary_image_url]
+    : item.image_url
+    ? [item.image_url]
+    : [];
+  const primaryImg =
+    item.primary_image_url || item.image_url || (mediaUrls.length > 0 ? mediaUrls[0] : '');
+
+  const isFarmer =
+    item.farmer_id ||
+    item.source === 'farmer' ||
+    (!item.middleman_id && !item.inventory_id && !item.selling_price_per_kg);
+
+  return {
+    id: String(item.id),
+    source: (item.source || (isFarmer ? 'farmer' : 'middleman')) as 'farmer' | 'middleman',
+    source_label: item.source_label || (isFarmer ? 'Petani Mitra' : 'Mitra Gudang'),
+    commodity_id: item.commodity_id,
+    commodity_name: item.commodity_name || item.title || 'Komoditas',
+    category_id: item.category_id || item.category || 'cat-umum',
+    category_name: item.category || item.category_name || item.commodity_name || 'Komoditas',
+    name: item.title || item.name || item.commodity_name || 'Komoditas Panen',
+    description: item.description || '',
+    price: price,
+    unit: item.unit || 'kg',
+    available_stock: stock,
+    min_order_quantity: minOrder,
+    is_preorder: Boolean(item.is_preorder),
+    estimated_harvest_date: item.estimated_harvest_date || item.ready_date,
+    primary_image_url: primaryImg,
+    media_urls: mediaUrls,
+    seller: item.seller || {
+      id: item.farmer_id || item.middleman_id || 'seller',
+      name: item.farmer_name || item.farmer_group || item.seller_name || 'Petani Mitra',
+      phone: item.farmer_phone,
+      role: (isFarmer ? 'farmer' : 'middleman') as 'farmer' | 'middleman',
+      role_label: isFarmer ? 'Petani Mitra' : 'Mitra Gudang',
+      city: item.pickup_address || item.seller_city || 'Demak, Jawa Tengah',
+      address: item.pickup_address,
+      latitude: item.latitude || -7.0519,
+      longitude: item.longitude || 110.5342,
+    },
+  };
+}
+
 // ==========================================
 // API SERVICES PER ROLE
 // ==========================================
@@ -286,7 +341,7 @@ export const BuyerApi = {
   getCategories: () =>
     fetchApi<{ status: string; data: ProductCategory[] }>('/categories'),
 
-  getProducts: (params?: {
+  getProducts: async (params?: {
     category_id?: string;
     category?: string;
     search?: string;
@@ -296,26 +351,96 @@ export const BuyerApi = {
     radius?: number;
     page?: number;
     limit?: number;
-  }) => {
+  }): Promise<{ status: string; data: BuyerProduct[] }> => {
     const q = new URLSearchParams();
-    if (params?.category_id) q.set('category_id', params.category_id);
-    if (params?.category && params.category !== 'Semua') q.set('category_id', params.category);
+    if (params?.category_id) q.set('commodity_id', params.category_id);
     if (params?.search) q.set('search', params.search);
-    if (params?.source) q.set('source', params.source);
-    if (params?.lat !== undefined) q.set('lat', String(params.lat));
-    if (params?.lng !== undefined) q.set('lng', String(params.lng));
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     const qs = q.toString() ? `?${q.toString()}` : '';
-    return fetchApi<{ status: string; data: BuyerProduct[] | { items: BuyerProduct[] } }>(`/products${qs}`);
+
+    let items: BuyerProduct[] = [];
+    try {
+      // Prioritaskan endpoint /marketplace/listings untuk katalog pembeli /produk
+      const res = await fetchApi<any>(`/marketplace/listings${qs}`);
+      const rawList = Array.isArray(res?.data?.items)
+        ? res.data.items
+        : Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.items)
+        ? res.items
+        : Array.isArray(res)
+        ? res
+        : [];
+      items = rawList.map(normalizeMarketplaceListingToProduct);
+    } catch {
+      // Fallback ke endpoint /products bila /marketplace/listings gagal
+    }
+
+    if (items.length === 0) {
+      try {
+        const pQ = new URLSearchParams();
+        if (params?.category_id) pQ.set('category_id', params.category_id);
+        if (params?.search) pQ.set('search', params.search);
+        const pQs = pQ.toString() ? `?${pQ.toString()}` : '';
+        const fallbackRes = await fetchApi<any>(`/products${pQs}`);
+        const fallbackList = Array.isArray(fallbackRes?.data?.items)
+          ? fallbackRes.data.items
+          : Array.isArray(fallbackRes?.data)
+          ? fallbackRes.data
+          : Array.isArray(fallbackRes)
+          ? fallbackRes
+          : [];
+        items = fallbackList.map(normalizeMarketplaceListingToProduct);
+      } catch {
+        // Abaikan
+      }
+    }
+
+    return { status: 'success', data: items };
   },
 
-  getPopularProducts: () =>
-    fetchApi<{ status: string; data: BuyerProduct[] }>('/products/popular'),
+  getPopularProducts: async (): Promise<{ status: string; data: BuyerProduct[] }> => {
+    try {
+      const res = await fetchApi<any>('/marketplace/listings?limit=6');
+      const rawList = Array.isArray(res?.data?.items)
+        ? res.data.items
+        : Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res)
+        ? res
+        : [];
+      if (rawList.length > 0) {
+        return { status: 'success', data: rawList.map(normalizeMarketplaceListingToProduct) };
+      }
+    } catch {
+      // Fallback
+    }
 
-  getProductDetail: (id: string, source?: string) => {
+    try {
+      const res = await fetchApi<{ status: string; data: BuyerProduct[] }>('/products/popular');
+      const list = Array.isArray((res as any)?.data) ? (res as any).data : [];
+      return { status: 'success', data: list.map(normalizeMarketplaceListingToProduct) };
+    } catch {
+      return { status: 'success', data: [] };
+    }
+  },
+
+  getProductDetail: async (id: string, source?: string): Promise<{ status: string; data: BuyerProduct }> => {
+    try {
+      const res = await fetchApi<any>(`/marketplace/listings/${id}`);
+      const item = (res as any)?.data || res;
+      if (item && (item.id || item.title || item.name)) {
+        return { status: 'success', data: normalizeMarketplaceListingToProduct(item) };
+      }
+    } catch {
+      // Lanjut coba /products/${id}
+    }
+
     const qs = source ? `?source=${source}` : '';
-    return fetchApi<{ status: string; data: BuyerProduct }>(`/products/${id}${qs}`);
+    const fallbackRes = await fetchApi<any>(`/products/${id}${qs}`);
+    const item = (fallbackRes as any)?.data || fallbackRes;
+    return { status: 'success', data: normalizeMarketplaceListingToProduct(item) };
   },
 
   getCart: () =>

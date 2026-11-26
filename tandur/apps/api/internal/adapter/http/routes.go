@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/logger"
@@ -17,6 +19,27 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Correlation-ID, X-Trace-ID"},
 		AllowMethods: []string{"GET, POST, PUT, PATCH, DELETE, OPTIONS"},
 	}))
+
+	// URL rewrite: allow endpoints called without /api/v1 prefix (e.g. /farmer/*, /middleman/*, /marketplace/*, /listings, Swagger try-it-out)
+	app.Use(func(c fiber.Ctx) error {
+		p := c.Path()
+		if !strings.HasPrefix(p, "/api/v1") &&
+			!strings.HasPrefix(p, "/swagger") &&
+			!strings.HasPrefix(p, "/docs") &&
+			!strings.HasPrefix(p, "/scalar") &&
+			!strings.HasPrefix(p, "/openapi") &&
+			!strings.HasPrefix(p, "/health") &&
+			!strings.HasPrefix(p, "/metrics") &&
+			!strings.HasPrefix(p, "/tandur") &&
+			!strings.HasPrefix(p, "/uploads") {
+			if p == "/listings" {
+				c.Path("/api/v1/marketplace/listings")
+			} else {
+				c.Path("/api/v1" + p)
+			}
+		}
+		return c.Next()
+	})
 
 	// Root Healthcheck
 	app.Get("/health", handler.HealthCheck)

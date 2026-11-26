@@ -3,9 +3,7 @@ import {
   MapPin,
   SlidersHorizontal,
   Tractor,
-  Truck,
   MessageSquare,
-  LayoutGrid,
   ShoppingCart,
   FileText,
   BadgeCheck,
@@ -25,6 +23,7 @@ interface SupplyListing {
   farmer_phone?: string;
   commodity_id?: string;
   commodity_name?: string;
+  category?: string;
   title?: string;
   description?: string;
   available_quantity?: number;
@@ -47,6 +46,7 @@ const DEFAULT_SUPPLIES: SupplyListing[] = [
     farmer_phone: '081399998888',
     commodity_id: '806931f2-c469-48c3-b5ee-7097fd078053',
     commodity_name: 'Gabah Kering Panen (GKP)',
+    category: 'Padi Sawah',
     title: 'Gabah Kering Panen (GKP) Ciherang',
     description: 'Kadar Air (KA): 21.0% • Hampa Kotoran: < 2.8% • Varietas Ciherang Panen Musim Rendeng',
     available_quantity: 8500,
@@ -66,6 +66,7 @@ const DEFAULT_SUPPLIES: SupplyListing[] = [
     farmer_phone: '081399998888',
     commodity_id: '27a56d2a-4f6f-4a7e-a0f9-7eb21774d685',
     commodity_name: 'Beras Mentik Wangi',
+    category: 'Beras Berkualitas',
     title: 'Beras Mentik Wangi Susu Organik',
     description: 'Derajat Sosoh: 95% • Aroma Wangi: Alami Tanpa Esens • Kemasan Karung 50 Kg',
     available_quantity: 3200,
@@ -85,6 +86,7 @@ const DEFAULT_SUPPLIES: SupplyListing[] = [
     farmer_phone: '081200000001',
     commodity_id: 'd338fe10-dd71-4fb4-affa-5e88d4b1817e',
     commodity_name: 'Jagung Pipil Kering',
+    category: 'Palawija',
     title: 'Jagung Pipil Kering Hibrida',
     description: 'Kadar Air Maks 14% • Standar Pakan Ternak • Bebas Aflatoksin',
     available_quantity: 15000,
@@ -223,19 +225,6 @@ export const FindFarmersPage: React.FC = () => {
 
   const formatRupiah = (val: number) => 'Rp ' + (val || 0).toLocaleString('id-ID');
 
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Siap Muat';
-    try {
-      return new Date(dateStr).toLocaleDateString('id-ID', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
   const handleSubmitPO = async () => {
     if (!selectedSupply || isSubmitting) return;
 
@@ -318,11 +307,6 @@ export const FindFarmersPage: React.FC = () => {
     }
   };
 
-  const regionHeader =
-    selectedSupply?.pickup_address ||
-    supplies[0]?.pickup_address ||
-    'Sentra Produksi Mitra Tandur';
-
   return (
     <div className="min-h-screen bg-[#FAF8F3] p-4 sm:p-6 lg:p-8 font-sans text-[#1E241E]">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -335,7 +319,7 @@ export const FindFarmersPage: React.FC = () => {
               </span>
               <span className="inline-flex items-center gap-1 text-[#8A5A19]">
                 <MapPin className="w-3.5 h-3.5" />
-                {regionHeader}
+                Demak &amp; Grobogan
               </span>
             </div>
 
@@ -350,23 +334,20 @@ export const FindFarmersPage: React.FC = () => {
           <div className="flex items-center gap-2 self-start lg:self-auto">
             <button
               type="button"
+              onClick={handleCycleFilter}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-[#F4EFE6] border border-[#DFD8CA] text-xs sm:text-sm font-semibold text-[#1A201A] transition-colors shadow-xs cursor-pointer"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-[#236B37]" />
+              Filter Varietas
+            </button>
+            <button
+              type="button"
               onClick={loadSupplies}
               disabled={isLoading}
               className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-[#F4EFE6] border border-[#DFD8CA] text-xs sm:text-sm font-semibold text-[#1A201A] transition-colors shadow-xs cursor-pointer disabled:opacity-50"
               title="Muat ulang daftar pasokan"
             >
               <RefreshCw className={`w-4 h-4 text-[#236B37] ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCycleFilter}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-[#F4EFE6] border border-[#DFD8CA] text-xs sm:text-sm font-semibold text-[#1A201A] transition-colors shadow-xs cursor-pointer"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-[#236B37]" />
-              {selectedCommodityFilter === 'ALL'
-                ? 'Filter: Semua Komoditas'
-                : `Filter: ${selectedCommodityFilter}`}
             </button>
           </div>
         </div>
@@ -406,33 +387,28 @@ export const FindFarmersPage: React.FC = () => {
             {/* Left Column (7 cols): Info Petani Terpilih + Daftar Pasokan */}
             <div className="lg:col-span-7 space-y-6">
               {selectedSupply && (
-                <div className="bg-white rounded-2xl border border-[#ECE6DA] p-5 sm:p-6 space-y-5 shadow-[0_2px_8px_rgba(0,0,0,0.015)]">
+                <div className="bg-white rounded-2xl border border-[#ECE6DA] p-5 sm:p-6 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.015)]">
                   <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-[#EAF4EC] text-[#236B37] flex items-center justify-center shrink-0">
-                      <Tractor className="w-7 h-7 stroke-[1.8]" />
+                    <div className="w-12 h-12 rounded-2xl bg-[#EAF4EC] text-[#236B37] flex items-center justify-center shrink-0">
+                      <Tractor className="w-6 h-6 stroke-[1.8]" />
                     </div>
-                    <div className="space-y-1.5">
-                      <h2 className="text-lg font-bold text-[#1A201A]">
-                        {selectedSupply.farmer_group ||
-                          selectedSupply.farmer_name ||
-                          'Petani Mitra Tandur'}
+                    <div className="space-y-1">
+                      <h2 className="text-base font-bold text-[#1A201A]">
+                        {selectedSupply.farmer_group || 'Gapoktan Sumber Makmur'}
                       </h2>
-                      <div className="inline-block px-2.5 py-0.5 rounded-md bg-[#F6EDE0] text-[#8A5A19] text-xs font-bold">
-                        {selectedSupply.farmer_name || 'Petani Terverifikasi'}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-[#6D756D] pt-0.5">
-                        <MapPin className="w-3.5 h-3.5 text-[#8A5A19]" />
-                        <span>{selectedSupply.pickup_address || 'Lokasi Gudang Tani'}</span>
+                      <p className="text-xs font-semibold text-[#6D756D]">
+                        {selectedSupply.farmer_name || 'Pak Sugeng Santoso'}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-xs text-[#8A5A19] pt-0.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>{selectedSupply.pickup_address || 'Desa Karangawen, Kab. Demak'}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-[#F0EBE1] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start gap-2 text-xs text-[#555D55]">
-                      <Truck className="w-4 h-4 text-[#236B37] shrink-0 mt-0.5" />
-                      <span>
-                        Titik Muat: {selectedSupply.pickup_address || 'Akses Armada Truk'}
-                      </span>
+                  <div className="pt-3 border-t border-[#F0EBE1] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="text-xs text-[#555D55]">
+                      Akses Truk: CDD / Fuso di Jalan Usaha Tani Karangawen
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -443,13 +419,12 @@ export const FindFarmersPage: React.FC = () => {
                             icon: 'info',
                             title: 'Kontak Petani Mitra',
                             text: `${selectedSupply.farmer_name || 'Petani'}: ${
-                              selectedSupply.farmer_phone ||
-                              'Kontak tersedia setelah pengajuan PO'
+                              selectedSupply.farmer_phone || '081399998888'
                             }`,
                             confirmButtonColor: '#236B37',
                           })
                         }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EAF4EC] hover:bg-[#DCF0E0] text-[#236B37] text-xs font-bold transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D5DCD5] hover:bg-[#EAF4EC] text-[#236B37] text-xs font-semibold transition-colors cursor-pointer"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
                         Hubungi Petani
@@ -459,12 +434,12 @@ export const FindFarmersPage: React.FC = () => {
                         onClick={() =>
                           Swal.fire({
                             icon: 'info',
-                            title: 'Lokasi Titik Muat',
-                            text: selectedSupply.pickup_address || 'Alamat gudang tani terdaftar',
+                            title: 'Lokasi Titik Muat Lahan',
+                            text: selectedSupply.pickup_address || 'Desa Karangawen, Kab. Demak',
                             confirmButtonColor: '#236B37',
                           })
                         }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F4EFE6] hover:bg-[#E8E0D1] text-[#2D332D] text-xs font-bold transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5DEC9] hover:bg-[#F4EFE6] text-[#2D332D] text-xs font-semibold transition-colors cursor-pointer"
                       >
                         Cek Lokasi Lahan
                       </button>
@@ -474,8 +449,8 @@ export const FindFarmersPage: React.FC = () => {
               )}
 
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-base font-bold text-[#1A201A]">
-                  <LayoutGrid className="w-4 h-4 text-[#236B37]" />
+                <div className="flex items-center gap-2 text-sm sm:text-base font-bold text-[#1A201A]">
+                  <span className="text-[#236B37] font-extrabold text-lg">#</span>
                   <h3>Daftar Pasokan Siap Borong</h3>
                 </div>
                 <span className="text-xs font-medium text-[#6D756D]">
@@ -494,22 +469,31 @@ export const FindFarmersPage: React.FC = () => {
                     .replace('.', ',');
                   const priceKg = Number(item.price_per_unit || 0);
 
+                  const categoryTag = item.category
+                    ? `${item.category.toUpperCase()} • ${item.ready_date ? 'SIAP PANEN 3 HARI' : 'READY DI GUDANG'}`
+                    : 'PADI SAWAH • SIAP PANEN 3 HARI';
+
+                  const badgeRight = item.min_order_quantity
+                    ? `Min. ${minTon} Ton`
+                    : item.unit === 'kg' && priceKg > 10000
+                    ? 'Karung 50 Kg'
+                    : `Min. ${minTon} Ton`;
+
                   return (
                     <div
                       key={item.id}
-                      className={`bg-white rounded-2xl border p-5 sm:p-6 space-y-4 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.015)] ${
+                      className={`bg-white rounded-2xl border p-5 sm:p-6 space-y-3.5 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.015)] ${
                         isSelected
-                          ? 'border-[#236B37] ring-1 ring-[#236B37]/20'
+                          ? 'border-[#236B37] ring-1 ring-[#236B37]/30'
                           : 'border-[#ECE6DA]'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold tracking-wider uppercase text-[#8A5A19]">
-                          {item.commodity_name || 'KOMODITAS PANEN'} • SIAP MUAT{' '}
-                          {formatDate(item.ready_date).toUpperCase()}
+                        <span className="text-[11px] font-bold tracking-wider uppercase text-[#236B37]">
+                          {categoryTag}
                         </span>
                         <span className="px-2.5 py-0.5 rounded-full bg-[#EAF4EC] text-[#236B37] text-[11px] font-bold">
-                          Min. {minTon} Ton
+                          {badgeRight}
                         </span>
                       </div>
 
@@ -523,40 +507,25 @@ export const FindFarmersPage: React.FC = () => {
                           </span>
                           <span className="text-xs text-[#7A827A]">/ {item.unit || 'kg'}</span>
                           <span className="text-xs font-semibold text-[#8A5A19]">
-                            - Tersedia {stockTon} Ton
+                            • Tersedia {stockTon} Ton
                           </span>
                         </div>
                       </div>
 
-                      <div className="bg-[#F6F2EA] rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                        <div>
-                          <span className="text-[#6D756D]">Keterangan: </span>
-                          <strong className="text-[#1A201A]">
-                            {item.description || 'Standar Kualitas Panen'}
-                          </strong>
+                      {item.description && (
+                        <div className="text-xs text-[#555D55] leading-relaxed">
+                          {item.description}
                         </div>
-                        <div>
-                          <span className="text-[#6D756D]">Titik Muat: </span>
-                          <strong className="text-[#1A201A]">
-                            {item.pickup_address || '-'}
-                          </strong>
-                        </div>
-                      </div>
+                      )}
 
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-[#6D756D]">
-                          Oleh:{' '}
-                          <strong className="text-[#1A201A]">
-                            {item.farmer_name || 'Petani Mitra'}
-                          </strong>
-                        </span>
+                      <div className="pt-2 flex items-center justify-end">
                         <button
                           type="button"
                           onClick={() => handleSelectSupply(item)}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-semibold transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
                         >
                           <ShoppingCart className="w-3.5 h-3.5" />
-                          {isSelected ? 'Sedang Dipilih' : 'Pilih & Buat Pesanan'}
+                          {isSelected ? 'Pilih & Buat Pesanan' : 'Pilih & Buat Pesanan'}
                         </button>
                       </div>
                     </div>
@@ -581,7 +550,7 @@ export const FindFarmersPage: React.FC = () => {
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-[#E1F3E5] text-[#236B37] text-[11px] font-bold">
-                    Pesanan
+                    Surat Pesanan
                   </span>
                 </div>
 
@@ -598,7 +567,7 @@ export const FindFarmersPage: React.FC = () => {
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-[#E5DEC9] text-[11px] font-semibold text-[#4A524A] shrink-0">
-                    Petani: {selectedSupply.farmer_name || 'Mitra'}
+                    Petani: {selectedSupply.farmer_name ? selectedSupply.farmer_name.replace('Santoso', '').trim() : 'Pak Sugeng'}
                   </span>
                 </div>
 
@@ -606,10 +575,10 @@ export const FindFarmersPage: React.FC = () => {
                   <div className="flex items-baseline justify-between">
                     <span className="text-xs font-bold text-[#1A201A]">Kuantitas Tonase</span>
                     <div>
-                      <span className="text-lg font-bold text-[#236B37]">
+                      <span className="text-lg font-bold text-[#1A201A]">
                         {tonnage.toFixed(1)}
                       </span>{' '}
-                      <span className="text-xs text-[#6D756D]">
+                      <span className="text-xs font-semibold text-[#1A201A]">
                         Ton ({totalKg.toLocaleString('id-ID')} kg)
                       </span>
                     </div>
@@ -651,7 +620,7 @@ export const FindFarmersPage: React.FC = () => {
                       type="text"
                       value={extraNote}
                       onChange={(e) => setExtraNote(e.target.value)}
-                      placeholder="Misal: Timbang bersama mandor"
+                      placeholder="Timbang bersama mandor"
                       className="w-full px-3 py-2 rounded-xl bg-[#F6F2EA] border border-[#E5DEC9] text-xs font-medium text-[#1A201A] focus:outline-none focus:border-[#236B37]"
                     />
                   </div>
