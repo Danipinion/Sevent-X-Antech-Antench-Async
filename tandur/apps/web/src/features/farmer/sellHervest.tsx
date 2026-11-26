@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Store,
   Grip,
@@ -13,10 +14,14 @@ import {
   ShieldCheck,
   CheckCircle2,
   ChevronDown,
+  Loader2,
 } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { FarmerApi } from '@/services/api';
 
 interface CommodityOption {
   id: string;
+  code: string;
   name: string;
   subtitle: string;
   defaultPrice: number;
@@ -24,9 +29,22 @@ interface CommodityOption {
 }
 
 export default function SellHarvestPage() {
+  const navigate = useNavigate();
+  const sampleInputRef = useRef<HTMLInputElement | null>(null);
+
+  const storedUser = (() => {
+    try {
+      const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
   const commodities: CommodityOption[] = [
     {
       id: 'gkp',
+      code: 'GKP',
       name: 'Gabah GKP',
       subtitle: 'Kadar air 20-25%',
       defaultPrice: 7300,
@@ -34,6 +52,7 @@ export default function SellHarvestPage() {
     },
     {
       id: 'gkg',
+      code: 'GKG',
       name: 'Gabah GKG',
       subtitle: 'Kadar air 13-14%',
       defaultPrice: 8100,
@@ -41,6 +60,7 @@ export default function SellHarvestPage() {
     },
     {
       id: 'jagung',
+      code: 'JAGUNG',
       name: 'Jagung Pipil',
       subtitle: 'KA 14-16%',
       defaultPrice: 5600,
@@ -48,6 +68,7 @@ export default function SellHarvestPage() {
     },
     {
       id: 'kedelai',
+      code: 'KEDELAI',
       name: 'Kedelai Lokal',
       subtitle: 'Grade A Bersih',
       defaultPrice: 11200,
@@ -55,6 +76,7 @@ export default function SellHarvestPage() {
     },
     {
       id: 'cabai',
+      code: 'CABAI',
       name: 'Cabai Rawit',
       subtitle: 'Petik Segar',
       defaultPrice: 32000,
@@ -62,6 +84,7 @@ export default function SellHarvestPage() {
     },
     {
       id: 'bawang',
+      code: 'BAWANG',
       name: 'Bawang Merah',
       subtitle: 'Askip Kering',
       defaultPrice: 24500,
@@ -69,19 +92,141 @@ export default function SellHarvestPage() {
     },
   ];
 
+  const defaultLocation =
+    storedUser?.district && storedUser?.city
+      ? `${storedUser.district}, ${storedUser.city}`
+      : storedUser?.address || 'Sukamaju, Ngawi';
+
   const [selectedCommodity, setSelectedCommodity] = useState<string>('gkp');
   const [variety, setVariety] = useState<string>('Inpari 32 (Standar Bulir Sedang)');
   const [weightKg, setWeightKg] = useState<number>(8500);
-  const [readyDate, setReadyDate] = useState<string>('2025-02-03');
-  const [pickupLocation, setPickupLocation] = useState<string>('Sukamaju, Ngawi');
+  const [readyDate, setReadyDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [pickupLocation, setPickupLocation] = useState<string>(defaultLocation);
   const [expectedPrice, setExpectedPrice] = useState<number>(7300);
   const [notes, setNotes] = useState<string>('');
+
+  const [sampleFile, setSampleFile] = useState<File | null>(null);
+  const [samplePreviewUrl, setSamplePreviewUrl] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const activeCommodity =
+    commodities.find((c) => c.id === selectedCommodity) || commodities[0];
 
   const grossRevenue = weightKg * expectedPrice;
   const tonEquivalent = (weightKg / 1000).toFixed(1).replace('.', ',');
 
   const formatRupiah = (amount: number) => {
     return new Intl.NumberFormat('id-ID').format(amount);
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleSamplePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Ukuran File Terlalu Besar',
+        text: 'Maksimal ukuran foto sampel adalah 5MB.',
+        confirmButtonColor: '#156E33',
+      });
+      return;
+    }
+
+    if (samplePreviewUrl) {
+      URL.revokeObjectURL(samplePreviewUrl);
+    }
+
+    setSampleFile(file);
+    setSamplePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handlePublishHarvest = async () => {
+    if (isSubmitting) return;
+
+    if (weightKg < 500) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Bobot Minimal 500 Kg',
+        text: 'Estimasi berat hasil panen minimal 500 Kg untuk penjemputan armada.',
+        confirmButtonColor: '#156E33',
+      });
+      return;
+    }
+
+    if (!pickupLocation.trim() || expectedPrice <= 0) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Data Belum Lengkap',
+        text: 'Pastikan lokasi titik muat dan harga harapan per kg sudah terisi dengan benar.',
+        confirmButtonColor: '#156E33',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const cleanWeight = Number(weightKg);
+      const cleanPrice = Number(expectedPrice);
+      const cleanNotes =
+        notes.trim() ||
+        `Varietas ${variety}, siap timbang & muat mulai ${readyDate}.`;
+
+      let mediaUrls: string[] = [];
+      if (sampleFile) {
+        const base64Image = await fileToBase64(sampleFile);
+        mediaUrls = [base64Image];
+      }
+
+      await FarmerApi.createListing({
+        commodity_id: activeCommodity.id,
+        commodity_name: activeCommodity.name,
+        title: `${activeCommodity.name} - ${variety}`,
+        description: cleanNotes,
+        estimated_quantity: cleanWeight,
+        min_order_quantity: 500,
+        unit: 'kg',
+        price_per_unit: cleanPrice,
+        ready_date: readyDate,
+        estimated_harvest_date: readyDate,
+        pickup_address: pickupLocation.trim(),
+        media_urls: mediaUrls,
+        latitude: 0,
+        longitude: 0,
+      });
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Hasil Panen Dipublikasikan',
+        text: `${activeCommodity.name} (${tonEquivalent} Ton) berhasil diterbitkan ke jaringan tengkulak Tandur.`,
+        confirmButtonText: 'Lihat Daftar Pesanan',
+        confirmButtonColor: '#156E33',
+      });
+
+      navigate('/farmer/pesanan');
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Gagal Mempublikasikan Panen',
+        text:
+          err?.message ||
+          'Tidak dapat mengirim data penawaran panen ke server. Pastikan Anda sudah login.',
+        confirmButtonColor: '#156E33',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -102,6 +247,15 @@ export default function SellHarvestPage() {
             langsung ke gudang tani.
           </p>
         </div>
+
+        {/* Hidden Sample Photo Input */}
+        <input
+          ref={sampleInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={handleSamplePhotoChange}
+          className="hidden"
+        />
 
         {/* Main 2-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -142,16 +296,10 @@ export default function SellHarvestPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span
-                          className={
-                            isSelected ? 'text-white' : 'text-[#8C5828]'
-                          }
-                        >
+                        <span className={isSelected ? 'text-white' : 'text-[#8C5828]'}>
                           {item.icon}
                         </span>
-                        {isSelected && (
-                          <CheckCircle2 className="w-4 h-4 text-white" />
-                        )}
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
                       </div>
                       <div>
                         <p className="text-sm font-bold leading-tight">{item.name}</p>
@@ -305,8 +453,11 @@ export default function SellHarvestPage() {
                 </div>
                 <p className="flex items-center gap-1.5 text-xs text-[#5C635E] pt-1">
                   <TrendingUp className="w-3.5 h-3.5 text-[#156E33]" />
-                  Rekomendasi pasar Ngawi hari ini:{' '}
-                  <strong className="text-[#156E33]">Rp 7.200 – Rp 7.450 / kg</strong>
+                  Rekomendasi pasar hari ini:{' '}
+                  <strong className="text-[#156E33]">
+                    Rp {formatRupiah(Math.max(1000, activeCommodity.defaultPrice - 150))} – Rp{' '}
+                    {formatRupiah(activeCommodity.defaultPrice + 200)} / kg
+                  </strong>
                 </p>
               </div>
 
@@ -318,15 +469,28 @@ export default function SellHarvestPage() {
                   </label>
                   <div className="flex items-center gap-3 p-3 rounded-xl border border-[#ECE8DF] bg-[#FAF8F4]">
                     <div className="w-14 h-14 rounded-lg bg-[#D8C39E] overflow-hidden shrink-0 flex items-center justify-center text-[#6B532C]">
-                      <ImageIcon className="w-6 h-6" />
+                      {samplePreviewUrl ? (
+                        <img
+                          src={samplePreviewUrl}
+                          alt="Sampel panen"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="w-6 h-6" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-[#1C241E] truncate">
-                        sampel_gabah_blokA.jpg
+                        {sampleFile ? sampleFile.name : 'sampel_gabah_blokA.jpg'}
                       </p>
-                      <p className="text-[11px] text-[#7A827C]">1.4 MB • Siap diunggah</p>
+                      <p className="text-[11px] text-[#7A827C]">
+                        {sampleFile
+                          ? `${(sampleFile.size / (1024 * 1024)).toFixed(2)} MB • Siap diunggah`
+                          : '1.4 MB • Siap diunggah'}
+                      </p>
                       <button
                         type="button"
+                        onClick={() => sampleInputRef.current?.click()}
                         className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-[#156E33] hover:underline cursor-pointer"
                       >
                         <ImageIcon className="w-3 h-3" />
@@ -356,10 +520,16 @@ export default function SellHarvestPage() {
             <div className="space-y-3">
               <button
                 type="button"
-                className="w-full py-3.5 px-6 rounded-xl bg-[#156E33] hover:bg-[#105728] active:scale-[0.995] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                onClick={handlePublishHarvest}
+                disabled={isSubmitting}
+                className="w-full py-3.5 px-6 rounded-xl bg-[#156E33] hover:bg-[#105728] active:scale-[0.995] disabled:opacity-60 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
               >
-                <Send className="w-4 h-4" />
-                Publikasikan Penjualan Panen
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {isSubmitting ? 'Mempublikasikan...' : 'Publikasikan Penjualan Panen'}
               </button>
 
               <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-[#F4F1EA] text-xs text-[#5C635E]">
@@ -405,15 +575,21 @@ export default function SellHarvestPage() {
               <div className="grid grid-cols-3 gap-2 pt-1">
                 <div>
                   <p className="text-[11px] text-[#7A827C]">Terendah</p>
-                  <p className="text-xs font-bold text-[#1C241E] mt-0.5">Rp 6.950</p>
+                  <p className="text-xs font-bold text-[#1C241E] mt-0.5">
+                    Rp {formatRupiah(Math.max(1000, activeCommodity.defaultPrice - 350))}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[11px] text-[#7A827C]">Rata-rata</p>
-                  <p className="text-xs font-bold text-[#156E33] mt-0.5">Rp 7.320</p>
+                  <p className="text-xs font-bold text-[#156E33] mt-0.5">
+                    Rp {formatRupiah(activeCommodity.defaultPrice)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[11px] text-[#7A827C]">Tertinggi</p>
-                  <p className="text-xs font-bold text-[#1C241E] mt-0.5">Rp 7.550</p>
+                  <p className="text-xs font-bold text-[#1C241E] mt-0.5">
+                    Rp {formatRupiah(activeCommodity.defaultPrice + 250)}
+                  </p>
                 </div>
               </div>
 
@@ -424,7 +600,9 @@ export default function SellHarvestPage() {
               </div>
 
               <p className="text-xs text-[#5C635E] leading-relaxed">
-                Harga penawaran Anda (<strong className="text-[#1C241E]">Rp {formatRupiah(expectedPrice)}</strong>) tergolong sangat kompetitif.
+                Harga penawaran Anda (
+                <strong className="text-[#1C241E]">Rp {formatRupiah(expectedPrice)}</strong>)
+                tergolong sangat kompetitif.
               </p>
             </div>
           </div>

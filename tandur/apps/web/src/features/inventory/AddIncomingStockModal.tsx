@@ -8,12 +8,27 @@ import {
   Banknote,
   TrendingUp,
   Save,
+  Loader2,
 } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { MiddlemanApi } from '@/services/api';
+
+export interface IncomingStockPayload {
+  commodity: string;
+  supplier: string;
+  batchCode: string;
+  receivedTime: string;
+  siloLocation: string;
+  tonnage: number;
+  yieldPercent: number;
+  buyPrice: number;
+  marketRefPrice: number;
+}
 
 interface AddIncomingStockModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave?: (data: any) => void;
+  onSave?: (data: IncomingStockPayload) => void | Promise<void>;
 }
 
 export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
@@ -30,6 +45,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
   const [yieldPercent, setYieldPercent] = useState<number>(66.5);
   const [buyPrice, setBuyPrice] = useState<number>(6800);
   const [marketRefPrice, setMarketRefPrice] = useState<number>(7200);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
@@ -41,9 +57,18 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
 
   const formatRupiah = (val: number) => 'Rp ' + val.toLocaleString('id-ID');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const inferCategory = (name: string): 'Gabah' | 'Beras' | 'Palawija' => {
+    const lower = name.toLowerCase();
+    if (lower.includes('beras')) return 'Beras';
+    if (lower.includes('jagung') || lower.includes('kedelai')) return 'Palawija';
+    return 'Gabah';
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave?.({
+    if (isSaving) return;
+
+    const formData: IncomingStockPayload = {
       commodity,
       supplier,
       batchCode,
@@ -53,8 +78,47 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
       yieldPercent,
       buyPrice,
       marketRefPrice,
-    });
-    onClose();
+    };
+
+    setIsSaving(true);
+    try {
+      if (onSave) {
+        await onSave(formData);
+      } else {
+        const cleanLocation = siloLocation.split(' (')[0].trim();
+        await MiddlemanApi.addIncomingStock({
+          batch_code: batchCode,
+          commodity_name: commodity,
+          variety: supplier,
+          category: inferCategory(commodity),
+          supplier_name: supplier,
+          location: cleanLocation,
+          stock_kg: totalKg,
+          avg_buy_price: buyPrice,
+          market_ref_price: marketRefPrice,
+          yield_percent: yieldPercent,
+          received_at: receivedTime,
+        });
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Stok Gudang Ditambahkan',
+          text: `${tonnage} Ton (${totalKg.toLocaleString('id-ID')} kg) berhasil dicatat ke ${cleanLocation}.`,
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      }
+      onClose();
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Gagal Menyimpan Stok',
+        text: err?.message || 'Terjadi kesalahan saat mengirim data stok ke server.',
+        confirmButtonColor: '#236B37',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -89,8 +153,10 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#6D756D] hover:text-[#1A201A] hover:bg-[#F4EFE6] transition-colors cursor-pointer"
+            disabled={isSaving}
+            className="p-1.5 rounded-lg text-[#6D756D] hover:text-[#1A201A] hover:bg-[#F4EFE6] transition-colors cursor-pointer disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -102,13 +168,13 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
               <LayoutGrid className="w-3.5 h-3.5" />
-              1. KOMODITAS, VARIETAS & ASAL PASOKAN
+              1. KOMODITAS, VARIETAS &amp; ASAL PASOKAN
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
                 <label className="block text-xs font-semibold text-[#2D332D]">
-                  Komoditas & Varietas
+                  Komoditas &amp; Varietas
                 </label>
                 <select
                   value={commodity}
@@ -142,21 +208,23 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  required
                   value={batchCode}
                   onChange={(e) => setBatchCode(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F2EA] border border-[#E5DEC9] text-xs font-mono font-bold text-[#1A201A] focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F2EA] border border-[#E5DEC9] text-xs font-mono font-bold text-[#1A201A] focus:outline-none focus:border-[#236B37]"
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="block text-xs font-semibold text-[#2D332D]">
-                  Waktu Penerimaan & Masuk Gudang
+                  Waktu Penerimaan &amp; Masuk Gudang
                 </label>
                 <input
                   type="text"
+                  required
                   value={receivedTime}
                   onChange={(e) => setReceivedTime(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F2EA] border border-[#E5DEC9] text-xs font-medium text-[#1A201A] focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F2EA] border border-[#E5DEC9] text-xs font-medium text-[#1A201A] focus:outline-none focus:border-[#236B37]"
                 />
               </div>
             </div>
@@ -166,7 +234,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
               <Warehouse className="w-3.5 h-3.5" />
-              2. LOKASI PENYIMPANAN & ALOKASI SILO
+              2. LOKASI PENYIMPANAN &amp; ALOKASI SILO
             </div>
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-[#2D332D]">
@@ -188,7 +256,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
               <Scale className="w-3.5 h-3.5" />
-              3. STOK FISIK, BOBOT TIMBANG & UJI KADAR AIR
+              3. STOK FISIK, BOBOT TIMBANG &amp; UJI KADAR AIR
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
@@ -199,6 +267,8 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
                   <input
                     type="number"
                     step="0.1"
+                    min="0.1"
+                    required
                     value={tonnage}
                     onChange={(e) => setTonnage(parseFloat(e.target.value) || 0)}
                     className="w-full pl-3.5 pr-12 py-2.5 rounded-xl bg-white border border-[#E2DACB] text-xs font-bold text-[#1A201A] focus:outline-none focus:border-[#236B37]"
@@ -220,6 +290,9 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
                   <input
                     type="number"
                     step="0.1"
+                    min="1"
+                    max="100"
+                    required
                     value={yieldPercent}
                     onChange={(e) => setYieldPercent(parseFloat(e.target.value) || 0)}
                     className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-white border border-[#E2DACB] text-xs font-bold text-[#1A201A] focus:outline-none focus:border-[#236B37]"
@@ -237,7 +310,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#236B37]">
               <Banknote className="w-3.5 h-3.5" />
-              4. HARGA BELI TEBAS, ACUAN PASAR & ESTIMASI MARGIN
+              4. HARGA BELI TEBAS, ACUAN PASAR &amp; ESTIMASI MARGIN
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
@@ -250,6 +323,8 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
                   </span>
                   <input
                     type="number"
+                    min="1"
+                    required
                     value={buyPrice}
                     onChange={(e) => setBuyPrice(Number(e.target.value) || 0)}
                     className="w-full pl-9 pr-12 py-2.5 rounded-xl bg-white border border-[#E2DACB] text-xs font-bold text-[#1A201A] focus:outline-none focus:border-[#236B37]"
@@ -271,6 +346,8 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
                   </span>
                   <input
                     type="number"
+                    min="1"
+                    required
                     value={marketRefPrice}
                     onChange={(e) => setMarketRefPrice(Number(e.target.value) || 0)}
                     className="w-full pl-9 pr-12 py-2.5 rounded-xl bg-white border border-[#E2DACB] text-xs font-bold text-[#1A201A] focus:outline-none focus:border-[#236B37]"
@@ -301,7 +378,7 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
               </div>
 
               <div className="bg-[#F6F2EA] rounded-xl p-3.5 border border-[#EDE6D8]">
-                <div className="text-[11px] text-[#6D756D]">Status & Estimasi Potensi Margin Bersih</div>
+                <div className="text-[11px] text-[#6D756D]">Status &amp; Estimasi Potensi Margin Bersih</div>
                 <div className="mt-1 text-base font-extrabold text-[#8A5A19]">
                   +{formatRupiah(netMarginTotal)}
                 </div>
@@ -314,17 +391,23 @@ export const AddIncomingStockModal: React.FC<AddIncomingStockModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-[#F4EFE6] hover:bg-[#EAE2D3] text-[#2D332D] text-xs font-semibold transition-colors cursor-pointer"
+              disabled={isSaving}
+              className="px-5 py-2.5 rounded-xl bg-[#F4EFE6] hover:bg-[#EAE2D3] text-[#2D332D] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
             >
               Batal
             </button>
 
             <button
               type="submit"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-bold transition-colors shadow-sm cursor-pointer disabled:opacity-60"
             >
-              <Save className="w-3.5 h-3.5" />
-              + Simpan Data Stok
+              {isSaving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              {isSaving ? 'Menyimpan...' : '+ Simpan Data Stok'}
             </button>
           </div>
         </form>

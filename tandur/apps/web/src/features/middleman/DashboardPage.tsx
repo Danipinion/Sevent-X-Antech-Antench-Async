@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   FileText,
@@ -10,46 +11,34 @@ import {
   RefreshCw,
   ArrowUp,
   TrendingUp,
+  CheckCircle2,
+  Loader2,
+  PackageOpen,
 } from 'lucide-react';
-import { fetchApi, type Commodity } from '@/services/api';
+import Swal from 'sweetalert2';
+import { fetchApi, MiddlemanApi, type Commodity } from '@/services/api';
 
 interface DashboardPageProps {
   onNavigate?: (route: string) => void;
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
-  const initialHarvestPrices = [
-    {
-      name: 'GKP Ciherang',
-      desc: 'Gabah Kering Panen sawah',
-      price: 'Rp 6.800',
-      trend: 'stabil',
-      trendLabel: '— Stabil',
-    },
-    {
-      name: 'GKG Inpari 32',
-      desc: 'Gabah Kering Giling siap slip',
-      price: 'Rp 7.900',
-      trend: 'up',
-      trendLabel: '+Rp 100',
-    },
-    {
-      name: 'Beras Putih Medium',
-      desc: 'Kemasan karung 50kg',
-      price: 'Rp 12.800',
-      trend: 'stabil',
-      trendLabel: '— Stabil',
-    },
-    {
-      name: 'Jagung Pipil Kering',
-      desc: 'Kadar Air 15% (Pakan Ternak)',
-      price: 'Rp 5.200',
-      trend: 'stabil',
-      trendLabel: '— Stabil',
-    },
-  ];
+interface HarvestPriceItem {
+  id: string;
+  name: string;
+  desc: string;
+  price: string;
+  trend: 'up' | 'stabil';
+  trendLabel: string;
+}
 
-  const [harvestPrices, setHarvestPrices] = useState(initialHarvestPrices);
+export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
+  const navigate = useNavigate();
+
+  const [harvestPrices, setHarvestPrices] = useState<HarvestPriceItem[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
 
   const storedUser = (() => {
     try {
@@ -59,41 +48,172 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       return null;
     }
   })();
-  const displayName = storedUser?.name || 'Haji Supardi';
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadPrices() {
-      try {
-        const res = await fetchApi<{ data?: Commodity[] } | Commodity[]>('/commodities');
-        const list = Array.isArray((res as any)?.data)
-          ? (res as any).data
-          : Array.isArray(res)
-          ? res
+  const displayName = storedUser?.name || 'Mitra Pengepul';
+  const regionLabel = storedUser?.city || storedUser?.district || 'Wilayah Operasional';
+
+  const loadDashboardData = async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    try {
+      const [commoditiesRes, ordersRes] = await Promise.allSettled([
+        fetchApi<{ data?: Commodity[] } | Commodity[]>('/commodities'),
+        MiddlemanApi.getPurchaseOrders(),
+      ]);
+
+      // 1. Proses Data Harga Acuan Panen dari API /commodities
+      if (commoditiesRes.status === 'fulfilled') {
+        const raw = commoditiesRes.value;
+        const list = Array.isArray((raw as any)?.data)
+          ? (raw as any).data
+          : Array.isArray(raw)
+          ? raw
           : [];
 
-        if (isMounted && list.length > 0) {
-          const mapped = list.slice(0, 4).map((c: any) => ({
-            name: c.name,
-            desc: `Standar ${c.category || 'Komoditas Pasar'}`,
-            price: `Rp ${(c.current_market_price || c.base_price || 0).toLocaleString('id-ID')}`,
-            trend: (c.current_market_price > c.base_price ? 'up' : 'stabil') as 'up' | 'stabil',
-            trendLabel:
-              c.current_market_price > c.base_price
-                ? `+Rp ${(c.current_market_price - c.base_price).toLocaleString('id-ID')}`
-                : '— Stabil',
-          }));
-          setHarvestPrices(mapped);
-        }
-      } catch {
-        // Fallback aman tetap menggunakan default
+        const mapped: HarvestPriceItem[] = list.map((c: any) => {
+          const currentPrice = Number(c.current_market_price ?? c.base_price ?? c.price ?? 0);
+          const basePrice = Number(c.base_price ?? currentPrice);
+          const diff = currentPrice - basePrice;
+
+          return {
+            id: String(c.id || c.name),
+            name: c.name || 'Komoditas',
+            desc: c.description || c.category || 'Standar Kualitas Pasar',
+            price: `Rp ${currentPrice.toLocaleString('id-ID')}`,
+            trend: diff > 0 ? 'up' : 'stabil',
+            trendLabel: diff > 0 ? `+Rp ${diff.toLocaleString('id-ID')}` : '— Stabil',
+          };
+        });
+
+        setHarvestPrices(mapped);
+      } else {
+        setHarvestPrices([]);
       }
+
+      // 2. Proses Data Purchase Orders (PO) & Jadwal Armada dari API
+      if (ordersRes.status === 'fulfilled') {
+        const rawOrders = ordersRes.value;
+        const orderList = Array.isArray((rawOrders as any)?.data)
+          ? (rawOrders as any).data
+          : Array.isArray(rawOrders)
+          ? rawOrders
+          : [];
+        setPurchaseOrders(orderList);
+      } else {
+        setPurchaseOrders([]);
+      }
+    } catch {
+      setHarvestPrices([]);
+      setPurchaseOrders([]);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-    loadPrices();
-    return () => {
-      isMounted = false;
-    };
+  };
+
+  useEffect(() => {
+    loadDashboardData(false);
   }, []);
+
+  // Kalkulasi dinamis untuk 4 Summary Cards
+  const activeOrders = useMemo(() => {
+    return purchaseOrders.filter(
+      (o) => !['completed', 'cancelled', 'Selesai', 'Dibatalkan'].includes(o.status)
+    );
+  }, [purchaseOrders]);
+
+  const readyToWeighCount = useMemo(() => {
+    return activeOrders.filter((o) =>
+      ['scheduled', 'Surat Jalan Terbit', 'Siap Timbang'].includes(o.status)
+    ).length;
+  }, [activeOrders]);
+
+  const inTransitCount = useMemo(() => {
+    return activeOrders.filter((o) =>
+      ['in_transit', 'Menuju Gudang'].includes(o.status)
+    ).length;
+  }, [activeOrders]);
+
+  const totalTonase = useMemo(() => {
+    const sumKg = activeOrders.reduce((acc, o) => {
+      const kg = Number(o.weight_kg ?? o.quantity ?? o.estimated_quantity ?? 0);
+      return acc + kg;
+    }, 0);
+    return (sumKg / 1000).toFixed(1);
+  }, [activeOrders]);
+
+  const uniqueCommoditiesSummary = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        activeOrders
+          .map((o) => o.commodity_name || o.commodity)
+          .filter(Boolean)
+      )
+    );
+    if (names.length === 0) return 'Belum ada komoditas';
+    return names.slice(0, 2).join(' & ');
+  }, [activeOrders]);
+
+  const nearestScheduleOrder = useMemo(() => {
+    return activeOrders[0] || null;
+  }, [activeOrders]);
+
+  const uniqueFarmersCount = useMemo(() => {
+    const farmers = new Set(
+      purchaseOrders
+        .map((o) => o.farmer_id || o.farmer_name)
+        .filter(Boolean)
+    );
+    return farmers.size;
+  }, [purchaseOrders]);
+
+  const handleGoToFindFarmers = () => {
+    if (onNavigate) {
+      onNavigate('/middleman/cari-pasokan');
+    } else {
+      navigate('/middleman/cari-pasokan');
+    }
+  };
+
+  const handleConfirmSlot = async (order: any) => {
+    if (!order?.id) return;
+    setConfirmingOrderId(order.id);
+    try {
+      await MiddlemanApi.updatePurchaseOrder(order.id, {
+        status: 'Surat Jalan Terbit',
+        schedule_info: order.schedule_info || 'Jadwal Muat Terkonfirmasi',
+      });
+
+      setPurchaseOrders((prev) =>
+        prev.map((item) =>
+          item.id === order.id
+            ? { ...item, status: 'Surat Jalan Terbit' }
+            : item
+        )
+      );
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Slot Armada Dikonfirmasi',
+        text: `Jadwal muat untuk ${order.farmer_name || 'Petani Mitra'} telah dikunci dan surat jalan diterbitkan.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Gagal Mengonfirmasi Jadwal',
+        text: err?.message || 'Tidak dapat memperbarui status jadwal ke server.',
+        confirmButtonColor: '#236B37',
+      });
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#FAF8F3] p-4 sm:p-6 lg:p-8 font-sans text-[#1E241E]">
@@ -107,18 +227,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             <div className="space-y-2.5 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F3EFE6] text-[#7D5318] text-xs font-semibold">
                 <span className="w-2 h-2 rounded-full bg-[#2B7A3E]" />
-                Musim Panen Gadu • Pantauan Aktif
+                Pantauan Pengadaan Aktif • {regionLabel}
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-[#1A201A] tracking-tight">
                 Selamat Pagi, {displayName}
               </h1>
               <p className="text-sm text-[#5C645C] leading-relaxed">
-                Ringkasan pengadaan komoditas dan jadwal timbang gabah wilayah Demak & sekitarnya terkelola secara real-time.
+                Ringkasan pengadaan komoditas dan jadwal timbang gabah wilayah {regionLabel} terkelola secara real-time.
               </p>
             </div>
 
             <button
-              onClick={() => onNavigate?.('/cari-pasokan')}
+              type="button"
+              onClick={handleGoToFindFarmers}
               className="inline-flex items-center justify-center gap-2.5 bg-[#236B37] hover:bg-[#1B552B] active:scale-[0.99] text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all shadow-sm shrink-0 cursor-pointer"
             >
               <Search className="w-4 h-4 stroke-[2.2]" />
@@ -140,11 +261,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">3 Kontrak</div>
+              <div className="text-2xl font-extrabold text-[#1A201A]">
+                {isLoading ? '...' : `${activeOrders.length} Kontrak`}
+              </div>
               <div className="mt-1.5 flex items-center gap-2 text-xs font-medium">
-                <span className="text-[#236B37] font-semibold">2 Siap Timbang</span>
+                <span className="text-[#236B37] font-semibold">
+                  {readyToWeighCount} Siap Timbang
+                </span>
                 <span className="text-[#9AA19A]">•</span>
-                <span className="text-[#6D756D]">1 Menuju Gudang</span>
+                <span className="text-[#6D756D]">{inTransitCount} Menuju Gudang</span>
               </div>
             </div>
           </div>
@@ -160,10 +285,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">18.5 Ton</div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium">
-                <span className="text-[#8A5A19] font-semibold">GKP Ciherang</span>
-                <span className="text-[#6D756D]">& Beras Organik</span>
+              <div className="text-2xl font-extrabold text-[#1A201A]">
+                {isLoading ? '...' : `${totalTonase} Ton`}
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium truncate">
+                <span className="text-[#8A5A19] font-semibold truncate">
+                  {uniqueCommoditiesSummary}
+                </span>
               </div>
             </div>
           </div>
@@ -179,11 +307,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">Besok, 08:30</div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium">
-                <span className="text-[#8A5A19] font-semibold">Karangawen</span>
-                <span className="text-[#9AA19A]">•</span>
-                <span className="text-[#6D756D]">5.0 Ton GKP</span>
+              <div className="text-2xl font-extrabold text-[#1A201A] truncate">
+                {isLoading
+                  ? '...'
+                  : nearestScheduleOrder?.schedule_info ||
+                    nearestScheduleOrder?.pickup_date ||
+                    'Belum Ada'}
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium truncate">
+                {nearestScheduleOrder ? (
+                  <>
+                    <span className="text-[#8A5A19] font-semibold truncate">
+                      {nearestScheduleOrder.pickup_location ||
+                        nearestScheduleOrder.pickup_address ||
+                        'Lokasi Petani'}
+                    </span>
+                    <span className="text-[#9AA19A]">•</span>
+                    <span className="text-[#6D756D] shrink-0">
+                      {(
+                        Number(
+                          nearestScheduleOrder.weight_kg ??
+                            nearestScheduleOrder.quantity ??
+                            0
+                        ) / 1000
+                      ).toFixed(1)}{' '}
+                      Ton
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[#6D756D]">Tidak ada jadwal armada aktif</span>
+                )}
               </div>
             </div>
           </div>
@@ -199,9 +352,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-[#1A201A]">14 Poktan</div>
-              <div className="mt-1.5 text-xs text-[#6D756D]">
-                Wilayah <span className="font-semibold text-[#1A201A]">Demak & Grobogan</span>
+              <div className="text-2xl font-extrabold text-[#1A201A]">
+                {isLoading ? '...' : `${uniqueFarmersCount} Mitra`}
+              </div>
+              <div className="mt-1.5 text-xs text-[#6D756D] truncate">
+                Wilayah <span className="font-semibold text-[#1A201A]">{regionLabel}</span>
               </div>
             </div>
           </div>
@@ -214,98 +369,134 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-[#1A201A]">
-                  Jadwal Muat & Timbang Lapangan
+                  Jadwal Muat &amp; Timbang Lapangan
                 </h2>
                 <p className="text-xs sm:text-sm text-[#6D756D] mt-0.5">
-                  Logistik armada dan alokasi petani tani minggu ini
+                  Logistik armada dan alokasi petani aktif
                 </p>
               </div>
               <span className="self-start px-3 py-1 rounded-full bg-[#F3EFE6] text-[#6E5636] text-xs font-semibold">
-                2 Armada Terjadwal
+                {activeOrders.length} Armada Terjadwal
               </span>
             </div>
 
-            {/* Schedule Item 1 */}
-            <div className="bg-[#F6F2EA] rounded-xl p-4 sm:p-5 border border-[#EDE6D8] space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="px-2.5 py-1 rounded-md bg-white border border-[#E5DEC9] text-[11px] font-bold text-[#2D332D]">
-                  CDD • H 8421 BE
-                </span>
-                <span className="px-3 py-1 rounded-full bg-[#DCF1E1] text-[#1E6632] text-xs font-semibold">
-                  Surat Jalan Terbit
-                </span>
+            {isLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center text-xs text-[#6D756D] space-y-2">
+                <Loader2 className="w-6 h-6 text-[#236B37] animate-spin" />
+                <span>Memuat jadwal armada &amp; penimbangan...</span>
               </div>
+            ) : activeOrders.length === 0 ? (
+              <div className="bg-[#F6F2EA] rounded-xl p-8 border border-[#EDE6D8] text-center space-y-2.5">
+                <PackageOpen className="w-8 h-8 text-[#8A5A19] mx-auto" />
+                <p className="text-sm font-bold text-[#1A201A]">
+                  Belum Ada Jadwal Muat Aktif
+                </p>
+                <p className="text-xs text-[#6D756D] max-w-md mx-auto">
+                  Cari pasokan panen dari petani mitra untuk membuat kontrak pengadaan dan jadwal penjemputan armada.
+                </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleGoToFindFarmers}
+                    className="inline-flex items-center gap-1.5 bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    Cari Pasokan Sekarang
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activeOrders.map((order: any) => {
+                  const isConfirmed = [
+                    'Surat Jalan Terbit',
+                    'scheduled',
+                    'in_transit',
+                  ].includes(order.status);
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
-                <div>
-                  <div className="font-bold text-sm sm:text-base text-[#1A201A]">
-                    Sugeng Santoso
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7A827A]">
-                    KOMODITAS & ESTIMASI
-                  </div>
-                  <div className="text-xs sm:text-sm font-bold text-[#236B37] mt-0.5">
-                    5.0 Ton GKP
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7A827A]">
-                    WAKTU & TITIK MUAT
-                  </div>
-                  <div className="text-xs sm:text-sm font-bold text-[#1A201A] mt-0.5">
-                    Besok, 08:30 WIB
-                  </div>
-                  <div className="text-xs text-[#6D756D]">Sawah Karangawen Blok B</div>
-                </div>
-              </div>
-            </div>
+                  const tonVal = (
+                    Number(order.weight_kg ?? order.quantity ?? order.estimated_quantity ?? 0) /
+                    1000
+                  ).toFixed(1);
 
-            {/* Schedule Item 2 */}
-            <div className="bg-[#F6F2EA] rounded-xl p-4 sm:p-5 border border-[#EDE6D8] space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="px-2.5 py-1 rounded-md bg-white border border-[#E5DEC9] text-[11px] font-bold text-[#2D332D]">
-                  Engkel • H 9102 CF
-                </span>
-                <span className="px-3 py-1 rounded-full bg-[#F5E6CD] text-[#8A5A19] text-xs font-semibold">
-                  Konfirmasi Jadwal
-                </span>
-              </div>
+                  return (
+                    <div
+                      key={order.id}
+                      className="bg-[#F6F2EA] rounded-xl p-4 sm:p-5 border border-[#EDE6D8] space-y-4"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2.5 py-1 rounded-md bg-white border border-[#E5DEC9] text-[11px] font-bold text-[#2D332D]">
+                          {order.vehicle_plate || order.fleet_info || `PO #${order.id}`}
+                        </span>
+                        {isConfirmed ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#DCF1E1] text-[#1E6632] text-xs font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {order.status === 'scheduled'
+                              ? 'Surat Jalan Terbit'
+                              : order.status}
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full bg-[#F5E6CD] text-[#8A5A19] text-xs font-semibold">
+                            {order.status || 'Konfirmasi Jadwal'}
+                          </span>
+                        )}
+                      </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
-                <div>
-                  <div className="font-bold text-sm sm:text-base text-[#1A201A]">
-                    Ibu Suparni
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7A827A]">
-                    KOMODITAS & ESTIMASI
-                  </div>
-                  <div className="text-xs sm:text-sm font-bold text-[#236B37] mt-0.5">
-                    3.5 Ton Beras
-                  </div>
-                  <div className="text-xs text-[#6D756D]">Kemasan Karung 50kg</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7A827A]">
-                    WAKTU & TITIK MUAT
-                  </div>
-                  <div className="text-xs sm:text-sm font-bold text-[#1A201A] mt-0.5">
-                    Lusa, 10:00 WIB
-                  </div>
-                  <div className="text-xs text-[#6D756D]">Gudang Rice Mill Guntur</div>
-                </div>
-              </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                        <div>
+                          <div className="font-bold text-sm sm:text-base text-[#1A201A]">
+                            {order.farmer_name || 'Petani Mitra'}
+                          </div>
+                          <div className="text-xs text-[#6D756D] mt-0.5">
+                            {order.farmer_group || order.farmer_region || 'Mitra Tandur'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-[#7A827A]">
+                            KOMODITAS &amp; ESTIMASI
+                          </div>
+                          <div className="text-xs sm:text-sm font-bold text-[#236B37] mt-0.5">
+                            {tonVal} Ton {order.commodity_name || order.commodity || ''}
+                          </div>
+                          {order.packaging && (
+                            <div className="text-xs text-[#6D756D]">{order.packaging}</div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-[#7A827A]">
+                            WAKTU &amp; TITIK MUAT
+                          </div>
+                          <div className="text-xs sm:text-sm font-bold text-[#1A201A] mt-0.5">
+                            {order.schedule_info || order.pickup_date || 'Menunggu Jadwal'}
+                          </div>
+                          <div className="text-xs text-[#6D756D]">
+                            {order.pickup_location || order.pickup_address || '-'}
+                          </div>
+                        </div>
+                      </div>
 
-              <div className="flex justify-end pt-1">
-                <button className="inline-flex items-center gap-2 bg-[#8A5A19] hover:bg-[#734A13] text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Konfirmasi Slot
-                </button>
+                      {!isConfirmed && (
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            disabled={confirmingOrderId === order.id}
+                            onClick={() => handleConfirmSlot(order)}
+                            className="inline-flex items-center gap-2 bg-[#8A5A19] hover:bg-[#734A13] disabled:opacity-60 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                          >
+                            {confirmingOrderId === order.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Calendar className="w-3.5 h-3.5" />
+                            )}
+                            Konfirmasi Slot
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
 
             {/* Info Banner Bottom */}
             <div className="flex items-start gap-3 bg-[#F4EFE6] rounded-xl p-3.5 border border-[#E8E0D1] text-xs text-[#555D55]">
@@ -324,52 +515,73 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   Harga Acuan Panen
                 </h2>
                 <p className="text-xs sm:text-sm text-[#6D756D] mt-0.5">
-                  Rujukan Pasar Tingkat Penggilingan Demak
+                  Rujukan Pasar Tingkat Penggilingan {regionLabel}
                 </p>
               </div>
-              <div className="inline-flex items-center gap-1 text-xs font-semibold text-[#8A5A19] shrink-0">
-                <RefreshCw className="w-3.5 h-3.5" />
+              <button
+                type="button"
+                onClick={() => loadDashboardData(true)}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#8A5A19] hover:underline shrink-0 cursor-pointer disabled:opacity-50"
+                title="Muat ulang harga acuan"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                 <span>Hari ini</span>
-              </div>
+              </button>
             </div>
 
             {/* Price Items */}
-            <div className="space-y-3">
-              {harvestPrices.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="bg-[#F6F2EA] rounded-xl px-4 py-3.5 border border-[#EDE6D8] flex items-center justify-between gap-3"
-                >
-                  <div>
-                    <div className="text-sm font-bold text-[#1A201A]">{item.name}</div>
-                    <div className="text-xs text-[#6D756D] mt-0.5">{item.desc}</div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-extrabold">
-                      <span className={item.trend === 'up' ? 'text-[#236B37]' : 'text-[#1A201A]'}>
-                        {item.price}
-                      </span>{' '}
-                      <span className="text-xs font-normal text-[#7A827A]">/kg</span>
+            {isLoading ? (
+              <div className="py-10 flex flex-col items-center justify-center text-center text-xs text-[#6D756D] space-y-2">
+                <Loader2 className="w-5 h-5 text-[#8A5A19] animate-spin" />
+                <span>Memuat harga acuan komoditas...</span>
+              </div>
+            ) : harvestPrices.length === 0 ? (
+              <div className="bg-[#F6F2EA] rounded-xl p-6 border border-[#EDE6D8] text-center text-xs text-[#6D756D]">
+                Data harga acuan pasar belum tersedia dari server.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {harvestPrices.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-[#F6F2EA] rounded-xl px-4 py-3.5 border border-[#EDE6D8] flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-[#1A201A]">{item.name}</div>
+                      <div className="text-xs text-[#6D756D] mt-0.5">{item.desc}</div>
                     </div>
-                    <div className="mt-0.5 flex items-center justify-end gap-0.5 text-[11px] font-semibold">
-                      {item.trend === 'up' ? (
-                        <span className="inline-flex items-center text-[#236B37]">
-                          <ArrowUp className="w-3 h-3 mr-0.5" />
-                          {item.trendLabel}
-                        </span>
-                      ) : (
-                        <span className="text-[#8A5A19]">{item.trendLabel}</span>
-                      )}
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-extrabold">
+                        <span className={item.trend === 'up' ? 'text-[#236B37]' : 'text-[#1A201A]'}>
+                          {item.price}
+                        </span>{' '}
+                        <span className="text-xs font-normal text-[#7A827A]">/kg</span>
+                      </div>
+                      <div className="mt-0.5 flex items-center justify-end gap-0.5 text-[11px] font-semibold">
+                        {item.trend === 'up' ? (
+                          <span className="inline-flex items-center text-[#236B37]">
+                            <ArrowUp className="w-3 h-3 mr-0.5" />
+                            {item.trendLabel}
+                          </span>
+                        ) : (
+                          <span className="text-[#8A5A19]">{item.trendLabel}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             {/* Trend Footer Banner */}
             <div className="bg-[#F4EFE6] rounded-xl px-4 py-3 border border-[#E8E0D1] flex items-center gap-2.5 text-xs text-[#4C544C]">
               <TrendingUp className="w-4 h-4 text-[#8A5A19] shrink-0" />
-              <span>Tren pasokan panen Demak minggu ini meningkat +12%</span>
+              <span>
+                {harvestPrices.length > 0
+                  ? `Menampilkan ${harvestPrices.length} harga komoditas aktif terbaru dari pasar`
+                  : 'Pantauan tren harga komoditas terhubung secara real-time'}
+              </span>
             </div>
           </div>
         </div>
