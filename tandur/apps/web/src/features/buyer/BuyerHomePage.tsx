@@ -17,6 +17,7 @@ import {
 import Swal from 'sweetalert2';
 import {
   BuyerApi,
+  resolveMediaUrl,
   type BuyerProduct,
   type ProductCategory,
 } from '@/services/api';
@@ -418,9 +419,9 @@ export const BuyerHomePage: React.FC = () => {
                     className="bg-white rounded-xl border border-[#ECE6DA] p-4 flex items-center gap-3.5 shadow-sm hover:border-[#236B37] transition-all"
                   >
                     <div className="w-14 h-14 rounded-lg bg-[#F4EFE6] flex items-center justify-center shrink-0 overflow-hidden">
-                      {pop.primary_image_url || pop.image_url ? (
+                      {pop.primary_image_url || pop.image_url || (Array.isArray(pop.media_urls) && pop.media_urls.length > 0) ? (
                         <img
-                          src={pop.primary_image_url || pop.image_url}
+                          src={resolveMediaUrl(pop.primary_image_url || pop.image_url || pop.media_urls?.[0])}
                           alt={popName}
                           className="w-full h-full object-cover"
                         />
@@ -486,6 +487,11 @@ export const BuyerHomePage: React.FC = () => {
                 product.source_label ||
                 (product.source === 'farmer' ? 'Petani Mitra' : 'Mitra Tengkulak');
               const pCategory = product.category_name || product.category || 'Komoditas';
+              const pImage =
+                product.primary_image_url ||
+                product.image_url ||
+                (Array.isArray(product.media_urls) && product.media_urls[0]) ||
+                '';
 
               return (
                 <div
@@ -494,12 +500,12 @@ export const BuyerHomePage: React.FC = () => {
                 >
                   <div>
                     {/* Card Visual Banner */}
-                    <div className="h-32 bg-gradient-to-br from-[#EAF4EC] via-[#F4EFE6] to-[#F8EFE2] p-4 flex flex-col justify-between relative overflow-hidden">
-                      {product.primary_image_url || product.image_url ? (
+                    <div className="h-36 bg-gradient-to-br from-[#EAF4EC] via-[#F4EFE6] to-[#F8EFE2] p-4 flex flex-col justify-between relative overflow-hidden">
+                      {pImage ? (
                         <img
-                          src={product.primary_image_url || product.image_url}
+                          src={resolveMediaUrl(pImage)}
                           alt={pTitle}
-                          className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
+                          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                         />
                       ) : null}
 
@@ -513,26 +519,26 @@ export const BuyerHomePage: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="relative z-10 text-[11px] font-bold text-[#7D5318] truncate">
+                      <div className="relative z-10 text-[11px] font-bold text-[#7D5318] truncate bg-white/80 px-2 py-0.5 rounded-md w-fit">
                         {product.grade || 'Mutu Terverifikasi'}
                       </div>
                     </div>
 
-                  {/* Card Body */}
-                  <div className="p-4 space-y-2.5">
-                    <Link
-                      to={`/produk/${product.id}`}
-                      className="block text-sm font-extrabold text-[#1A201A] hover:text-[#236B37] leading-snug line-clamp-2"
-                    >
-                      {product.title}
-                    </Link>
+                    {/* Card Body */}
+                    <div className="p-4 space-y-2.5">
+                      <Link
+                        to={`/produk/${product.id}`}
+                        className="block text-sm font-extrabold text-[#1A201A] hover:text-[#236B37] leading-snug line-clamp-2"
+                      >
+                        {pTitle}
+                      </Link>
 
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-extrabold text-[#236B37]">
-                        Rp {(product.price_per_kg || 0).toLocaleString('id-ID')}
-                      </span>
-                      <span className="text-xs text-[#7A827A]">/ kg</span>
-                    </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-lg font-extrabold text-[#236B37]">
+                          Rp {pPrice.toLocaleString('id-ID')}
+                        </span>
+                        <span className="text-xs text-[#7A827A]">/ {pUnit}</span>
+                      </div>
 
                       <div className="pt-1 border-t border-[#F0EBE1] space-y-1 text-xs text-[#6D756D]">
                         <div className="font-semibold text-[#1A201A] truncate">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 interface TandurSplashScreenProps {
   /** Durasi total splash screen dalam milidetik (default: 3000ms) */

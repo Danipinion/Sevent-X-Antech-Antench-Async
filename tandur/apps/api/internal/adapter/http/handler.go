@@ -2,11 +2,16 @@ package http
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -323,6 +328,9 @@ func (h *Handler) CreateFarmerListing(c fiber.Ctx) error {
 		return RespondError(c, fiber.StatusBadRequest, "INVALID_INPUT", "Format payload tidak valid")
 	}
 
+	// Pastikan media_urls yang berupa data base64 diunggah ke Garage storage dan diganti dengan link URL
+	input.MediaURLs = h.sanitizeAndPersistMediaURLs(c.Context(), userID, input.MediaURLs)
+
 	listing, err := h.farmerService.CreateHarvestListing(c.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, domain.ErrFarmerNotVerified) {
@@ -517,7 +525,7 @@ func (h *Handler) UploadFarmerListingMedia(c fiber.Ctx) error {
 		}
 		publicURL = url
 	} else {
-		publicURL = fmt.Sprintf("http://localhost:3900/tandur/%s", key)
+		publicURL = fmt.Sprintf("%s/%s/%s", h.cfg.S3Endpoint, h.cfg.S3Bucket, key)
 	}
 
 	return RespondSuccess(c, fiber.StatusCreated, "Berkas media panen berhasil diunggah dan diverifikasi", fiber.Map{
@@ -527,6 +535,80 @@ func (h *Handler) UploadFarmerListingMedia(c fiber.Ctx) error {
 		"mime_type":  validated.MimeType,
 		"size_bytes": validated.SizeBytes,
 	})
+}
+
+// ServeStorage melayani pengunduhan atau penampilan berkas yang tersimpan di Garage storage
+func (h *Handler) ServeStorage(c fiber.Ctx) error {
+	bucket := c.Params("bucket", "tandur")
+	key := c.Params("*")
+	if key == "" {
+		key = c.Params("+")
+	}
+	if key == "" {
+		return RespondError(c, fiber.StatusBadRequest, "INVALID_KEY", "Key berkas storage tidak valid")
+	}
+
+	cleanKey := filepath.Clean(key)
+	storageDir := "uploads/garage"
+
+	// Cek berkas langsung berdasarkan path relatif key
+	filePath := filepath.Join(storageDir, cleanKey)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		// Coba path alternatif jika key menyertakan nama bucket
+		altPath := filepath.Join(storageDir, bucket, cleanKey)
+		data, err = os.ReadFile(altPath)
+	}
+	if err != nil {
+		return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Berkas tidak ditemukan di storage Garage")
+	}
+
+	c.Set("Access-Control-Allow-Origin", "*")
+	c.Set("Cache-Control", "public, max-age=86400")
+	c.Set("Content-Type", http.DetectContentType(data))
+	return c.Send(data)
+}
+
+// sanitizeAndPersistMediaURLs mendeteksi string base64 pada daftar media, mengunggahnya ke Garage storage,
+// dan mengembalikan daftar URL tautan bersih agar database tidak pernah menyimpan data mentah gambar.
+func (h *Handler) sanitizeAndPersistMediaURLs(ctx context.Context, userID string, mediaURLs []string) []string {
+	cleanURLs := make([]string, 0, len(mediaURLs))
+	for _, raw := range mediaURLs {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "data:") && strings.Contains(trimmed, ";base64,") {
+			parts := strings.SplitN(trimmed, ";base64,", 2)
+			if len(parts) == 2 {
+				header := parts[0]
+				b64Data := parts[1]
+				decoded, err := base64.StdEncoding.DecodeString(b64Data)
+				if err == nil && len(decoded) > 0 {
+					ext := ".jpg"
+					mimeType := "image/jpeg"
+					if strings.Contains(header, "png") {
+						ext = ".png"
+						mimeType = "image/png"
+					} else if strings.Contains(header, "webp") {
+						ext = ".webp"
+						mimeType = "image/webp"
+					}
+					key := fmt.Sprintf("listings/%s/%s%s", userID, uuid.New().String(), ext)
+					if h.storage != nil {
+						if uploadedURL, errUpload := h.storage.Upload(ctx, key, bytes.NewReader(decoded), mimeType); errUpload == nil {
+							cleanURLs = append(cleanURLs, uploadedURL)
+							continue
+						}
+					}
+					cleanURLs = append(cleanURLs, fmt.Sprintf("%s/%s/%s", h.cfg.S3Endpoint, h.cfg.S3Bucket, key))
+					continue
+				}
+			}
+		}
+		cleanURLs = append(cleanURLs, trimmed)
+	}
+	return cleanURLs
 }
 
 // --- TENGKULAK: CARI PETANI & BUAT PENAWARAN ---

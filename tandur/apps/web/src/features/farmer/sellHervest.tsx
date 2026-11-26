@@ -121,15 +121,6 @@ export default function SellHarvestPage() {
     return new Intl.NumberFormat('id-ID').format(amount);
   };
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const handleSamplePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -185,8 +176,21 @@ export default function SellHarvestPage() {
 
       let mediaUrls: string[] = [];
       if (sampleFile) {
-        const base64Image = await fileToBase64(sampleFile);
-        mediaUrls = [base64Image];
+        try {
+          const uploadRes = await FarmerApi.uploadMedia(sampleFile);
+          if (uploadRes?.url) {
+            mediaUrls = [uploadRes.url];
+          }
+        } catch (uploadErr: any) {
+          await Swal.fire({
+            icon: 'error',
+            title: 'Gagal Mengunggah Foto',
+            text: uploadErr?.message || 'Gagal menyimpan foto panen ke storage Garage.',
+            confirmButtonColor: '#156E33',
+          });
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       await FarmerApi.createListing({

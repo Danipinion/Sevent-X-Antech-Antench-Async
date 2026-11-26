@@ -15,7 +15,7 @@ import {
   PackageOpen,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { BuyerApi, type BuyerProduct } from '@/services/api';
+import { BuyerApi, resolveMediaUrl, type BuyerProduct } from '@/services/api';
 
 const LOCAL_SELL_OFFERS_KEY = 'tandur_local_sell_offers';
 const CART_STORAGE_KEY = 'tandur_buyer_cart';
@@ -238,9 +238,9 @@ export const ProductDetailPage: React.FC = () => {
             <div className="h-56 sm:h-64 bg-gradient-to-br from-[#DFF2E3] via-[#F4EFE6] to-[#F8EFE2] p-6 flex flex-col justify-between relative overflow-hidden">
               {pImage ? (
                 <img
-                  src={pImage}
+                  src={resolveMediaUrl(pImage)}
                   alt={pName}
-                  className="absolute inset-0 w-full h-full object-cover opacity-25 pointer-events-none"
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                 />
               ) : null}
 
@@ -253,7 +253,7 @@ export const ProductDetailPage: React.FC = () => {
                 </span>
               </div>
 
-              <div className="relative z-10 inline-flex items-center gap-2 text-xs font-bold text-[#7D5318]">
+              <div className="relative z-10 inline-flex items-center gap-2 text-xs font-bold text-[#7D5318] bg-white/80 px-3 py-1 rounded-md w-fit">
                 <Sprout className="w-4 h-4" />
                 Panen Segar Langsung dari Lumbung Mitra Tandur
               </div>
@@ -262,11 +262,11 @@ export const ProductDetailPage: React.FC = () => {
             <div className="p-6 space-y-5">
               <div>
                 <h1 className="text-xl sm:text-2xl font-extrabold text-[#1A201A] leading-snug">
-                  {product.title}
+                  {pName}
                 </h1>
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-extrabold text-[#236B37]">
-                    Rp {(product.price_per_kg || 0).toLocaleString('id-ID')}
+                    Rp {pPrice.toLocaleString('id-ID')}
                   </span>
                   <span className="text-xs sm:text-sm text-[#7A827A]">/ {pUnit}</span>
                   <span className="text-xs font-semibold text-[#8A5A19]">

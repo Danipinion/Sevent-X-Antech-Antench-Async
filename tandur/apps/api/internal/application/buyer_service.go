@@ -28,7 +28,7 @@ func NewBuyerService(buyerRepo domain.BuyerRepository, userRepo domain.UserRepos
 // CanAccessFarmerSource memeriksa apakah pengguna diizinkan melihat/membeli pasokan langsung dari petani
 func CanAccessFarmerSource(claims *JWTClaims) bool {
 	if claims == nil {
-		return false
+		return true // Pengunjung publik dapat menjelajahi seluruh etalase pasar
 	}
 	if claims.BuyerType == domain.BuyerTypeBusiness {
 		return true

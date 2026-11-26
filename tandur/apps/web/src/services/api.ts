@@ -2,6 +2,22 @@ const RAW_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v
 const BASE_HOST = RAW_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 const API_BASE_URL = `${BASE_HOST}/api/v1`;
 
+export function resolveMediaUrl(url?: string): string {
+  if (!url) return '';
+  if (url.startsWith('data:')) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (url.includes(':3900/tandur/')) {
+      const path = url.split(':3900/tandur/')[1];
+      return `${BASE_HOST}/api/v1/storage/tandur/${path}`;
+    }
+    return url;
+  }
+  if (url.startsWith('/')) {
+    return `${BASE_HOST}${url}`;
+  }
+  return `${BASE_HOST}/api/v1/storage/tandur/${url}`;
+}
+
 export function getAuthToken(): string | null {
   const keys = ['token', 'access_token', 'auth_token', 'jwt'];
   for (const k of keys) {
@@ -391,6 +407,27 @@ export const FarmerApi = {
       return FarmerApi.rejectOrder(orderId, notes);
     }
     return FarmerApi.acceptOrder(orderId);
+  },
+  uploadMedia: async (file: File): Promise<{ url: string; key: string }> => {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append('media', file);
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/farmer/listings/upload-media`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error(
+        errJson?.message ||
+          errJson?.error?.message ||
+          `Gagal mengunggah foto ke storage (${res.status})`
+      );
+    }
+    const json = await res.json();
+    return json.data || json;
   },
   createListing: async (payload: Record<string, unknown>) => {
     try {

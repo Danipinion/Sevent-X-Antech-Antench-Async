@@ -21,6 +21,10 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	// Root Healthcheck
 	app.Get("/health", handler.HealthCheck)
 
+	// Media & Object Storage Routes (Garage S3 Static Delivery)
+	app.Get("/tandur/*", handler.ServeStorage)
+	app.Get("/uploads/*", handler.ServeStorage)
+
 	// Interactive API Documentation (Swagger UI & Scalar)
 	docsHandler := NewDocsHandler()
 	app.Get("/swagger", docsHandler.SwaggerUI)
@@ -36,6 +40,8 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	v1.Get("/health", handler.HealthCheck)
 	v1.Get("/swagger", docsHandler.SwaggerUI)
 	v1.Get("/docs", docsHandler.SwaggerUI)
+	v1.Get("/storage/:bucket/*", handler.ServeStorage)
+	v1.Get("/storage/*", handler.ServeStorage)
 	v1.Get("/commodities", handler.ListCommodities)
 	v1.Get("/commodities/realtime-prices", handler.GetRealtimeDashboardPrices)
 	v1.Get("/commodities/price-guide", handler.GetPriceGuide)

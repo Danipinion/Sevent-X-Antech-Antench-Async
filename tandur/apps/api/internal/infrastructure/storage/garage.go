@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"tandur/api/internal/infrastructure/config"
@@ -118,7 +119,8 @@ func (s *GarageStorage) DownloadDecrypted(ctx context.Context, key string, secre
 
 // GetURL menghasilkan URL referensi berkas di Garage S3
 func (s *GarageStorage) GetURL(key string) string {
-	return s.endpoint + "/" + s.bucket + "/" + key
+	cleanKey := strings.TrimPrefix(key, "/")
+	return s.endpoint + "/" + s.bucket + "/" + cleanKey
 }
 
 // EncryptAES256GCM mengenkripsi data menggunakan algoritma AES-256-GCM berstandar BSSN & UU PDP

@@ -36,7 +36,13 @@ func (r *PostgresBuyerRepository) ListCategories(ctx context.Context) ([]domain.
 		return defaults, nil
 	}
 
-	rows, err := r.pool.Query(ctx, `SELECT DISTINCT category FROM commodities WHERE category IS NOT NULL AND category <> '' ORDER BY category ASC`)
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT category FROM (
+			SELECT category FROM farmer_listings WHERE category IS NOT NULL AND category <> ''
+			UNION
+			SELECT category FROM middleman_sales_listings WHERE category IS NOT NULL AND category <> ''
+		) cats ORDER BY category ASC
+	`)
 	if err != nil {
 		return defaults, nil
 	}
@@ -209,7 +215,15 @@ func (r *PostgresBuyerRepository) queryMiddlemanProducts(ctx context.Context, fi
 		p.Name = strings.TrimSpace(p.CommodityName + " " + variety)
 		p.Unit = "kg"
 		p.IsPreorder = false
-		p.MediaURLs = []string{}
+		defaultImg := "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"
+		catLower := strings.ToLower(p.CategoryName + " " + p.CommodityName)
+		if strings.Contains(catLower, "jagung") || strings.Contains(catLower, "palawija") {
+			defaultImg = "https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=600&q=80"
+		} else if strings.Contains(catLower, "gabah") || strings.Contains(catLower, "padi") {
+			defaultImg = "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?auto=format&fit=crop&w=600&q=80"
+		}
+		p.PrimaryImageURL = defaultImg
+		p.MediaURLs = []string{defaultImg}
 		p.Seller.Role = "middleman"
 		p.Seller.RoleLabel = "Tengkulak / Distributor"
 		p.DistanceKm = math.Round(p.DistanceKm*100) / 100
@@ -230,8 +244,8 @@ func (r *PostgresBuyerRepository) queryFarmerProducts(ctx context.Context, filte
 		SELECT
 			fl.id::text,
 			COALESCE(fl.commodity_id::text, ''),
-			COALESCE(c.name, fl.title),
-			COALESCE(c.category, 'lainnya'),
+			COALESCE(fl.commodity_name, c.name, fl.title),
+			COALESCE(fl.category, 'lainnya'),
 			fl.title,
 			COALESCE(fl.description, ''),
 			COALESCE(fl.price_per_unit, 0),
@@ -257,13 +271,13 @@ func (r *PostgresBuyerRepository) queryFarmerProducts(ctx context.Context, filte
 			COALESCE((SELECT SUM(boi.quantity)::bigint FROM buyer_order_items boi WHERE boi.product_id = fl.id), 0) AS sold_count
 		FROM farmer_listings fl
 		JOIN users u ON u.id = fl.farmer_id
-		LEFT JOIN commodities c ON c.id = fl.commodity_id
+		LEFT JOIN commodities c ON c.id::text = fl.commodity_id::text
 		LEFT JOIN user_locations ul ON ul.user_id = u.id AND ul.is_primary = TRUE
 		WHERE fl.status = 'published'
 		  AND fl.deleted_at IS NULL
 		  AND fl.available_quantity > 0
-		  AND ($4 = '' OR LOWER(COALESCE(c.category, '')) = LOWER($4) OR LOWER('cat-' || REPLACE(COALESCE(c.category, ''), ' ', '-')) = LOWER($4))
-		  AND ($5 = '' OR LOWER(fl.title) LIKE '%' || LOWER($5) || '%' OR LOWER(COALESCE(c.name, '')) LIKE '%' || LOWER($5) || '%')
+		  AND ($4 = '' OR LOWER(COALESCE(fl.category, '')) = LOWER($4) OR LOWER('cat-' || REPLACE(COALESCE(fl.category, ''), ' ', '-')) = LOWER($4))
+		  AND ($5 = '' OR LOWER(fl.title) LIKE '%' || LOWER($5) || '%' OR LOWER(COALESCE(fl.commodity_name, c.name, '')) LIKE '%' || LOWER($5) || '%')
 		  AND (
 			NOT $1::boolean
 			OR fl.location IS NULL
@@ -389,7 +403,15 @@ func (r *PostgresBuyerRepository) getMiddlemanProductByID(ctx context.Context, i
 	p.CategoryID = "cat-" + strings.ReplaceAll(strings.ToLower(p.CategoryName), " ", "-")
 	p.Name = strings.TrimSpace(p.CommodityName + " " + variety)
 	p.Unit = "kg"
-	p.MediaURLs = []string{}
+	defaultImg := "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"
+	catLower := strings.ToLower(p.CategoryName + " " + p.CommodityName)
+	if strings.Contains(catLower, "jagung") || strings.Contains(catLower, "palawija") {
+		defaultImg = "https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=600&q=80"
+	} else if strings.Contains(catLower, "gabah") || strings.Contains(catLower, "padi") {
+		defaultImg = "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?auto=format&fit=crop&w=600&q=80"
+	}
+	p.PrimaryImageURL = defaultImg
+	p.MediaURLs = []string{defaultImg}
 	p.Seller.Role = "middleman"
 	p.Seller.RoleLabel = "Tengkulak / Distributor"
 	return &p, nil
@@ -399,8 +421,8 @@ func (r *PostgresBuyerRepository) getFarmerProductByID(ctx context.Context, id s
 	var p domain.BuyerProduct
 	err := r.pool.QueryRow(ctx, `
 		SELECT
-			fl.id::text, COALESCE(fl.commodity_id::text, ''), COALESCE(c.name, fl.title),
-			COALESCE(c.category, 'lainnya'), fl.title, COALESCE(fl.description, ''),
+			fl.id::text, COALESCE(fl.commodity_id::text, ''), COALESCE(fl.commodity_name, c.name, fl.title),
+			COALESCE(fl.category, 'lainnya'), fl.title, COALESCE(fl.description, ''),
 			COALESCE(fl.price_per_unit, 0), fl.unit, fl.available_quantity,
 			COALESCE(fl.min_order_quantity, 1),
 			COALESCE(TO_CHAR(fl.estimated_harvest_date, 'YYYY-MM-DD'), ''),
@@ -410,7 +432,7 @@ func (r *PostgresBuyerRepository) getFarmerProductByID(ctx context.Context, id s
 			COALESCE(ST_Y(fl.location::geometry), 0), COALESCE(ST_X(fl.location::geometry), 0)
 		FROM farmer_listings fl
 		JOIN users u ON u.id = fl.farmer_id
-		LEFT JOIN commodities c ON c.id = fl.commodity_id
+		LEFT JOIN commodities c ON c.id::text = fl.commodity_id::text
 		LEFT JOIN user_locations ul ON ul.user_id = u.id AND ul.is_primary = TRUE
 		WHERE fl.id = $1::uuid AND fl.status = 'published' AND fl.deleted_at IS NULL
 	`, id).Scan(
