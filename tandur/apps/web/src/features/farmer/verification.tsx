@@ -162,7 +162,7 @@ export default function FarmerVerificationPage() {
           workerPath: '/tesseract/worker.min.js',
           corePath: '/tesseract/tesseract-core.wasm.js',
           langPath: '/tesseract',
-          logger: (m) => {
+          logger: (m: any) => {
             if (m.status === 'recognizing text') {
               const pct = Math.min(95, Math.max(30, Math.round(m.progress * 100)));
               setOcrProgress(pct);
@@ -179,7 +179,7 @@ export default function FarmerVerificationPage() {
         setOcrProgress(40);
         setOcrMessage('Mengekstrak teks dengan engine OCR fallback...');
         const fallbackWorker = await createWorker('ind', 1, {
-          logger: (m) => {
+          logger: (m: any) => {
             if (m.status === 'recognizing text') {
               const pct = Math.min(95, Math.max(40, Math.round(m.progress * 100)));
               setOcrProgress(pct);
