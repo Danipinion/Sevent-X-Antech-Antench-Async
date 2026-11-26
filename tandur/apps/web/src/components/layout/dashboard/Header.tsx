@@ -1,26 +1,23 @@
 import { Link } from "react-router-dom";
-import { Bell, CircleUserRound, Menu, Search } from "lucide-react";
+import { CircleUserRound, Menu, Search } from "lucide-react";
+import { NotificationBell } from "@/features/notifications";
 
 export type DashboardUser = {
   name: string;
-  /** Teks kecil di bawah nama, contoh: "Mitra Pembeli Demak" */
   subtitle: string;
 };
 
 type DashboardHeaderProps = {
   user: DashboardUser;
-  /** Membuka sidebar (hanya tombol di layar kecil) */
   onMenuClick: () => void;
-  /** Titik hijau di ikon lonceng */
   hasUnread?: boolean;
-  /** Link tujuan ketika profil diklik (default: "profil") */
   profileTo?: string;
 };
 
 export const DashboardHeader = ({
   user,
   onMenuClick,
-  hasUnread = true,
+  hasUnread = false,
   profileTo = "profil",
 }: DashboardHeaderProps) => (
   <header
@@ -62,20 +59,9 @@ export const DashboardHeader = ({
       />
     </div>
 
-    {/* Notifikasi + Profil.
-        xl:mr-[16%] meniru jarak kanan di desain; hapus jika ingin rata ke tepi. */}
+    {/* Notifikasi + Profil */}
     <div className="ml-auto flex shrink-0 items-center xl:mr-[16%]">
-      <button
-        type="button"
-        aria-label="Notifikasi"
-        className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#4b534a] transition-colors hover:bg-[#f3ede5]"
-      >
-        <Bell size={19} strokeWidth={1.8} />
-
-        {hasUnread && (
-          <span className="absolute right-[7px] top-[6px] h-2 w-2 rounded-full bg-[#2a7f3e] ring-2 ring-[#fef8f0]" />
-        )}
-      </button>
+      <NotificationBell hasUnread={hasUnread} />
 
       {/* Pemisah */}
       <span aria-hidden="true" className="mx-3 hidden h-7 w-px bg-[#eadfd2] sm:mx-5 sm:block" />
