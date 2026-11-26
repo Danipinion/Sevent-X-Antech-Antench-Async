@@ -124,12 +124,13 @@ type LoginResult struct {
 }
 
 type JWTClaims struct {
-	UserID   string          `json:"user_id"`
-	Name     string          `json:"name"`
-	Phone    string          `json:"phone"`
-	NIK      *string         `json:"nik,omitempty"`
-	Role     domain.UserRole `json:"role"`
-	IsBisnis bool            `json:"is_bisnis"`
+	UserID    string          `json:"user_id"`
+	Name      string          `json:"name"`
+	Phone     string          `json:"phone"`
+	NIK       *string         `json:"nik,omitempty"`
+	Role      domain.UserRole `json:"role"`
+	IsBisnis  bool            `json:"is_bisnis"`
+	BuyerType string          `json:"buyer_type,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -191,8 +192,20 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*domai
 		}
 	}
 
-	// 4. Validasi Role (farmer, middleman, buyer)
-	role := domain.UserRole(strings.ToLower(strings.TrimSpace(input.Role)))
+	// 4. Validasi Role (farmer, middleman, buyer, retail_buyer, business_buyer)
+	rawRole := strings.ToLower(strings.TrimSpace(input.Role))
+	isBisnis := input.IsBisnis
+	var role domain.UserRole
+	switch rawRole {
+	case domain.BuyerTypeRetail:
+		role = domain.RoleBuyer
+		isBisnis = false
+	case domain.BuyerTypeBusiness:
+		role = domain.RoleBuyer
+		isBisnis = true
+	default:
+		role = domain.UserRole(rawRole)
+	}
 	if !role.IsValid() {
 		return nil, domain.ErrInvalidRole
 	}
@@ -215,12 +228,13 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*domai
 		Phone:              phone,
 		PasswordHash:       string(passwordHash),
 		Role:               role,
-		IsBisnis:           input.IsBisnis,
+		IsBisnis:           isBisnis,
 		IsActive:           true,
 		IsVerified:         false,
 		VerificationStatus: domain.VerificationStatusUnverified,
 		CanSellHarvest:     false,
 	}
+	user.BuyerType = user.ResolveBuyerType()
 
 	// 8. Validasi & Siapkan Lokasi jika disertakan
 	var location *domain.UserLocation
@@ -318,16 +332,22 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*LoginResult
 	// 3. Jika identifier adalah 16 digit angka, coba cari berdasarkan NIK
 	if len(cleanID) == 16 && isDigitsOnly(cleanID) {
 		user, err = s.userRepo.GetByNIK(ctx, cleanID)
+		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+			return nil, err
+		}
 	}
 
 	// 4. Jika belum ditemukan (atau bukan 16 digit), coba cari berdasarkan nomor Handphone (dinormalisasi)
 	if user == nil {
 		normalizedPhone := normalizePhone(identifier)
 		user, err = s.userRepo.GetByPhone(ctx, normalizedPhone)
+		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+			return nil, err
+		}
 	}
 
 	// 5. Jika akun tidak ditemukan
-	if err != nil || user == nil {
+	if user == nil {
 		return nil, domain.ErrInvalidCredentials
 	}
 
@@ -342,15 +362,17 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*LoginResult
 	}
 
 	// 8. Terbitkan JWT Token
+	user.BuyerType = user.ResolveBuyerType()
 	now := time.Now()
 	expiresAt := now.Add(s.jwtDuration)
 	claims := JWTClaims{
-		UserID:   user.ID,
-		Name:     user.Name,
-		Phone:    user.Phone,
-		NIK:      user.NIK,
-		Role:     user.Role,
-		IsBisnis: user.IsBisnis,
+		UserID:    user.ID,
+		Name:      user.Name,
+		Phone:     user.Phone,
+		NIK:       user.NIK,
+		Role:      user.Role,
+		IsBisnis:  user.IsBisnis,
+		BuyerType: user.BuyerType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			Issuer:    "tandur-api",
@@ -436,6 +458,7 @@ func (s *AuthService) GetProfile(ctx context.Context, userID string) (*domain.Us
 		return nil, err
 	}
 	user.CanSellHarvest = user.CheckCanSellHarvest()
+	user.BuyerType = user.ResolveBuyerType()
 	return user, nil
 }
 
@@ -616,6 +639,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID string, input Up
 
 	user.Location = locToSave
 	user.CanSellHarvest = user.CheckCanSellHarvest()
+	user.BuyerType = user.ResolveBuyerType()
 	return user, nil
 }
 

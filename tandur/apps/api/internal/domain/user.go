@@ -11,6 +11,9 @@ const (
 	RoleFarmer    UserRole = "farmer"
 	RoleMiddleman UserRole = "middleman"
 	RoleBuyer     UserRole = "buyer"
+
+	BuyerTypeRetail   = "retail_buyer"
+	BuyerTypeBusiness = "business_buyer"
 )
 
 type VerificationStatus string
@@ -39,6 +42,7 @@ type User struct {
 	PasswordHash       string             `json:"-"`
 	Role               UserRole           `json:"role"`
 	IsBisnis           bool               `json:"is_bisnis"`
+	BuyerType          string             `json:"buyer_type,omitempty"`
 	AvatarURL          *string            `json:"avatar_url,omitempty"`
 	IsActive           bool               `json:"is_active"`
 	IsVerified         bool               `json:"is_verified"`
@@ -60,6 +64,20 @@ func (u *User) CheckCanSellHarvest() bool {
 		return false
 	}
 	return u.IsVerified && u.VerificationStatus == VerificationStatusVerified
+}
+
+func (u *User) ResolveBuyerType() string {
+	if u.Role != RoleBuyer {
+		return ""
+	}
+	if u.IsBisnis {
+		return BuyerTypeBusiness
+	}
+	return BuyerTypeRetail
+}
+
+func (u *User) IsBusinessBuyer() bool {
+	return u.Role == RoleBuyer && u.IsBisnis
 }
 
 type FarmerVerificationInput struct {

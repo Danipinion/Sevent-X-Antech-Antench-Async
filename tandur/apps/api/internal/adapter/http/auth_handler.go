@@ -10,6 +10,7 @@ import (
 
 	"tandur/api/internal/application"
 	"tandur/api/internal/domain"
+	"tandur/api/internal/infrastructure/logger"
 	"tandur/api/internal/infrastructure/storage"
 
 	"github.com/gofiber/fiber/v3"
@@ -115,6 +116,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 			return RespondError(c, fiber.StatusConflict, "NIK_ALREADY_EXISTS", err.Error())
 
 		default:
+			logger.Log.Error("Terjadi kesalahan internal saat registrasi pengguna", "error", err)
 			return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Terjadi kesalahan internal pada server")
 		}
 	}
@@ -158,6 +160,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 			return RespondError(c, fiber.StatusForbidden, "ACCOUNT_INACTIVE", err.Error())
 
 		default:
+			logger.Log.Error("Terjadi kesalahan internal saat login", "error", err)
 			return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Terjadi kesalahan internal pada server")
 		}
 	}
