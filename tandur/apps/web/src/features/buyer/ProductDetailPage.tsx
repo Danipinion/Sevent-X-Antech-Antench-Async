@@ -201,6 +201,9 @@ export const ProductDetailPage: React.FC = () => {
       }
     } finally {
       setIsSubmitting(false);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
     }
 
     if (redirectToCart) {

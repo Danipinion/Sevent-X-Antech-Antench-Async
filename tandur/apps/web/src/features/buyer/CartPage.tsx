@@ -121,6 +121,7 @@ export const CartPage: React.FC = () => {
     setItems(updated);
     try {
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event('cartUpdated'));
     } catch {
       // Abaikan jika gagal menulis ke localStorage
     }

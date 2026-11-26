@@ -38,11 +38,7 @@ import {
   ProductDetailPage,
   CartPage,
 } from "../features/buyer";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://localhost:8000/api";
+import { getEffectiveCartCount } from "@/services/api";
 
 // Helper untuk mengambil nama kotanya saja dari string address (tanpa jalan, provinsi, maupun awalan Kota/Kab)
 function extractCityOnly(address?: string): string | null {
@@ -292,55 +288,23 @@ export default function App() {
   const [showSplash, setShowSplash] = useState<boolean>(true);
   const [cartCount, setCartCount] = useState<number>(0);
 
-  // Ambil jumlah item keranjang dari backend berdasarkan akun yang sedang login
+  // Ambil jumlah item keranjang terpadu
   const fetchUserCartCount = useCallback(async () => {
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
-
-    if (!token) {
-      setCartCount(0);
-      return;
-    }
-
     try {
-      const cleanBase = API_BASE_URL.replace(/\/+$/, "");
-      const endpoint = cleanBase.endsWith("/api")
-        ? `${cleanBase}/cart`
-        : `${cleanBase}/api/cart`;
-
-      const res = await fetch(endpoint, {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        setCartCount(0);
-        return;
-      }
-
-      const json = await res.json();
-      const items =
-        json?.data?.items ||
-        json?.items ||
-        (Array.isArray(json?.data)
-          ? json.data
-          : Array.isArray(json)
-          ? json
-          : []);
-
-      if (typeof json?.total_items === "number") {
-        setCartCount(json.total_items);
-      } else if (typeof json?.data?.total_items === "number") {
-        setCartCount(json.data.total_items);
-      } else if (Array.isArray(items)) {
-        setCartCount(items.length);
-      } else {
-        setCartCount(0);
-      }
+      const count = await getEffectiveCartCount();
+      setCartCount(count);
     } catch {
-      setCartCount(0);
+      try {
+        const rawLocal = localStorage.getItem("tandur_buyer_cart");
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal);
+          if (Array.isArray(parsed)) {
+            setCartCount(parsed.length);
+          }
+        }
+      } catch {
+        setCartCount(0);
+      }
     }
   }, []);
 

@@ -18,6 +18,7 @@ import Swal from 'sweetalert2';
 import {
   BuyerApi,
   resolveMediaUrl,
+  getEffectiveCartCount,
   type BuyerProduct,
   type ProductCategory,
 } from '@/services/api';
@@ -30,6 +31,7 @@ export const BuyerHomePage: React.FC = () => {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [cartCount, setCartCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [searchParams] = useSearchParams();
@@ -62,6 +64,29 @@ export const BuyerHomePage: React.FC = () => {
       setSearchQuery(qParam);
     }
   }, [searchParams, params]);
+
+  // Sinkronisasi jumlah item keranjang
+  useEffect(() => {
+    let isMounted = true;
+    const syncCount = async () => {
+      try {
+        const count = await getEffectiveCartCount();
+        if (isMounted) setCartCount(count);
+      } catch {
+        // abaikan
+      }
+    };
+
+    syncCount();
+    window.addEventListener('cartUpdated', syncCount);
+    window.addEventListener('storage', syncCount);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('cartUpdated', syncCount);
+      window.removeEventListener('storage', syncCount);
+    };
+  }, []);
 
   // 1. Fetch Daftar Kategori dari API (GET /api/v1/categories)
   useEffect(() => {
@@ -288,6 +313,10 @@ export const BuyerHomePage: React.FC = () => {
       }
     }
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('cartUpdated'));
+    }
+
     await Swal.fire({
       icon: 'success',
       title: 'Masuk Keranjang',
@@ -298,7 +327,7 @@ export const BuyerHomePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F3] text-[#1E241E] font-sans">
+    <div className="min-h-screen bg-[#FAF8F3] text-[#1E241E] font-sans relative">
       {/* Hero Section */}
       <section className="bg-white border-b border-[#ECE6DA]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
@@ -328,7 +357,7 @@ export const BuyerHomePage: React.FC = () => {
                 to="/keranjang"
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8A5A19] hover:underline pt-1"
               >
-                Lihat Keranjang &amp; Jadwal Ambil
+                Lihat Keranjang {cartCount > 0 ? `(${cartCount} item) ` : ''}&amp; Jadwal Ambil
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -579,6 +608,23 @@ export const BuyerHomePage: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Floating Cart Pill */}
+      {cartCount > 0 && (
+        <Link
+          to="/keranjang"
+          className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-[#156E33] hover:bg-[#105728] text-white shadow-xl hover:shadow-2xl transition-all cursor-pointer font-bold text-sm transform hover:-translate-y-0.5 active:translate-y-0"
+        >
+          <div className="relative">
+            <ShoppingCart className="w-5 h-5" />
+            <span className="absolute -top-2.5 -right-2.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-extrabold text-white border-2 border-white shadow-xs">
+              {cartCount}
+            </span>
+          </div>
+          <span>Keranjang Belanja ({cartCount} komoditas)</span>
+          <ArrowRight className="w-4 h-4 ml-1" />
+        </Link>
+      )}
     </div>
   );
 };

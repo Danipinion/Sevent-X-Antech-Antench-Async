@@ -57,6 +57,7 @@ type FarmerOrder = FarmerPurchaseOrder & {
   vehicle_type?: string;
   vehicle_plate?: string;
   driver_name?: string;
+  pickup_address?: string;
   is_ready_for_pickup?: boolean;
   counter_price?: number;
   counter_quantity?: number;
@@ -371,6 +372,34 @@ export default function FarmerOrdersPage() {
     }
   };
 
+  const handleShareLocation = async (order: FarmerOrder) => {
+    const address = order.pickup_address || 'Lokasi lumbung sesuai profil petani';
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(address);
+      }
+    } catch {
+      // Abaikan jika clipboard API tidak diizinkan
+    }
+
+    await Swal.fire({
+      icon: 'info',
+      title: 'Titik Jemput Muatan Panen',
+      html: `
+        <div style="text-align: left; font-size: 13px; font-family: inherit;">
+          <p style="margin-bottom: 6px; color: #5C635E;">Alamat penjemputan armada:</p>
+          <div style="padding: 10px; background: #F5F2EB; border-radius: 8px; font-weight: 600; color: #1C241E; word-break: break-word; line-height: 1.5;">
+            ${address}
+          </div>
+          <p style="margin-top: 10px; font-size: 11px; color: #156E33; font-weight: 600;">
+            ✓ Alamat penjemputan berhasil disalin ke clipboard untuk diteruskan ke sopir armada.
+          </p>
+        </div>
+      `,
+      confirmButtonColor: '#156E33',
+    });
+  };
+
 
   // Hitung statistik dinamis dari data nyata
   const completedOrders = useMemo(
@@ -505,7 +534,7 @@ export default function FarmerOrdersPage() {
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 type="button"
-                onClick={() => handleConfirmReady(upcomingPickup.id)}
+                onClick={() => handleShareLocation(upcomingPickup)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
               >
                 <MapPin className="w-3.5 h-3.5 text-[#156E33]" />
@@ -514,10 +543,14 @@ export default function FarmerOrdersPage() {
               <button
                 type="button"
                 onClick={() => handleConfirmReady(upcomingPickup.id)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer"
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  upcomingPickup.is_ready_for_pickup
+                    ? 'bg-[#E8F5EC] text-[#156E33] border border-[#CDEBD4]'
+                    : 'bg-[#156E33] hover:bg-[#105728] text-white'
+                }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                {upcomingPickup.is_ready_for_pickup ? 'Sudah Dikonfirmasi' : 'Siap Muat'}
+                {upcomingPickup.is_ready_for_pickup ? 'Lumbung Siap Muat' : 'Konfirmasi Siap Muat'}
               </button>
             </div>
           </div>
@@ -767,7 +800,7 @@ export default function FarmerOrdersPage() {
                 {filteredOrders.map((order: any) => {
                   const status = order.status || 'pending';
                   const isPending = isWaitingConfirmation(status);
-                  const isScheduled = status === 'scheduled' || status === 'in_transit';
+                  const isScheduled = isScheduledOrder(status);
                   const isCompleted = status === 'completed';
 
                   const borderColor = isCompleted
@@ -786,15 +819,19 @@ export default function FarmerOrdersPage() {
                     ? 'bg-[#FEF3C7] text-[#92400E]'
                     : 'bg-[#F2EFE9] text-[#5C635E]';
 
-                  const statusLabel = order.status_label || (isCompleted
-                    ? 'Transaksi Selesai & Lunas'
-                    : status === 'in_transit'
-                    ? 'Armada Menuju Lokasi'
-                    : status === 'scheduled'
-                    ? 'Dijadwalkan Dijemput'
-                    : isPending
-                    ? 'Menunggu Persetujuan Anda'
-                    : 'Dibatalkan');
+                  const statusLabel =
+                    order.status_label ||
+                    (isCompleted
+                      ? 'Transaksi Selesai & Lunas'
+                      : status === 'in_transit'
+                      ? 'Armada Menuju Lokasi'
+                      : isScheduled
+                      ? 'Dijadwalkan Dijemput'
+                      : status === 'in_negotiation'
+                      ? 'Dalam Negosiasi'
+                      : isPending
+                      ? 'Menunggu Persetujuan Anda'
+                      : 'Dibatalkan');
 
                   const qty = Number(order.offered_quantity ?? order.quantity ?? order.estimated_quantity ?? 0);
                   const unitPrice = Number(order.offered_price ?? order.agreed_price ?? order.price_per_unit ?? 0);
@@ -929,14 +966,21 @@ export default function FarmerOrdersPage() {
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               Terima Penawaran &amp; Jadwalkan
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleNegotiateOffer(order)}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
-                            >
-                              <ArrowUpDown className="w-3.5 h-3.5 text-[#8A5A19]" />
-                              Negosiasi Harga
-                            </button>
+                            {status === 'in_negotiation' ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FEF3C7] text-[#92400E] text-xs font-semibold border border-[#FDE68A]">
+                                <Clock className="w-3.5 h-3.5 text-[#B45309]" />
+                                Negosiasi Terkirim (Rp {formatRupiah(order.counter_price || 0)})
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleNegotiateOffer(order)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
+                              >
+                                <ArrowUpDown className="w-3.5 h-3.5 text-[#8A5A19]" />
+                                Negosiasi Harga
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleRejectOffer(order.id)}
@@ -965,6 +1009,14 @@ export default function FarmerOrdersPage() {
                                 Konfirmasi Siap Muat
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => handleShareLocation(order)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F5F2EB] hover:bg-[#EAE6DC] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-[#156E33]" />
+                              Titik Jemput
+                            </button>
                           </>
                         )}
                       </div>

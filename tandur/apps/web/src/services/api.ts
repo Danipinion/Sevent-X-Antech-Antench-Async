@@ -1,4 +1,7 @@
-const RAW_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const RAW_API_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:8080/api/v1';
 const BASE_HOST = RAW_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 const API_BASE_URL = `${BASE_HOST}/api/v1`;
 
@@ -446,24 +449,46 @@ export const BuyerApi = {
   getCart: () =>
     fetchApi<{ status: string; data: BuyerCartResponse }>('/cart'),
 
-  addToCart: (productId: string, quantity: number, source?: string) =>
-    fetchApi('/cart/items', {
-      method: 'POST',
-      body: JSON.stringify({
-        product_id: productId,
-        quantity: quantity,
-        source: source || 'middleman',
-      }),
-    }),
+  addToCart: async (productId: string, quantity: number, source?: string) => {
+    try {
+      const res = await fetchApi('/cart/items', {
+        method: 'POST',
+        body: JSON.stringify({
+          product_id: productId,
+          quantity: quantity,
+          source: source || 'middleman',
+        }),
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
+      return res;
+    } catch (err) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
+      throw err;
+    }
+  },
 
-  updateCartItem: (itemId: string, quantity: number) =>
-    fetchApi(`/cart/items/${itemId}`, {
+  updateCartItem: async (itemId: string, quantity: number) => {
+    const res = await fetchApi(`/cart/items/${itemId}`, {
       method: 'PATCH',
       body: JSON.stringify({ quantity }),
-    }),
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('cartUpdated'));
+    }
+    return res;
+  },
 
-  removeCartItem: (itemId: string) =>
-    fetchApi(`/cart/items/${itemId}`, { method: 'DELETE' }),
+  removeCartItem: async (itemId: string) => {
+    const res = await fetchApi(`/cart/items/${itemId}`, { method: 'DELETE' });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('cartUpdated'));
+    }
+    return res;
+  },
 
   getPrimaryAddress: () =>
     fetchApi<{ status: string; data: any }>('/addresses/primary'),
@@ -495,6 +520,47 @@ export const BuyerApi = {
       }),
     }),
 };
+
+export async function getEffectiveCartCount(): Promise<number> {
+  let count = 0;
+
+  // 1. Coba hitung dari backend jika ada token login
+  try {
+    const token = getAuthToken();
+    if (token) {
+      const res = await fetchApi<any>('/cart');
+      const cartData = (res as any)?.data;
+      if (typeof cartData?.total_items === 'number' && cartData.total_items > 0) {
+        count = cartData.total_items;
+      } else if (Array.isArray(cartData?.seller_groups)) {
+        let itemsCount = 0;
+        for (const sg of cartData.seller_groups) {
+          if (Array.isArray(sg.items)) {
+            itemsCount += sg.items.length;
+          }
+        }
+        if (itemsCount > 0) count = itemsCount;
+      }
+    }
+  } catch {
+    // fallback ke local storage
+  }
+
+  // 2. Jika 0 atau fallback, hitung dari local storage cart
+  try {
+    const rawLocal = localStorage.getItem('tandur_buyer_cart');
+    if (rawLocal) {
+      const parsed = JSON.parse(rawLocal);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        count = Math.max(count, parsed.length);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return count;
+}
 
 export const FarmerApi = {
   getOrders: () => fetchApi<{ data: FarmerPurchaseOrder[] }>('/farmer/orders'),

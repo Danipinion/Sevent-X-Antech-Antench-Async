@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import Swal from "sweetalert2";
+import { getEffectiveCartCount } from "@/services/api";
 
 const categories = [
   { label: "Beras & Gabah", slug: "beras-gabah", href: "/produk?kategori=beras-gabah" },
@@ -67,11 +68,6 @@ function extractCityOnly(address?: string): string | null {
   return null;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://localhost:8000/api";
-
 export default function Header({ cartCount = 0 }: { cartCount?: number }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -99,53 +95,31 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
     }
   }, []);
 
-  // Ambil jumlah item keranjang langsung dari backend
+  // Ambil jumlah item keranjang terpadu (backend + offline fallback)
   const fetchCartCount = useCallback(async () => {
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
-
-    if (!token) {
-      setLiveCartCount(0);
-      return;
-    }
-
     try {
-      const cleanBase = API_BASE_URL.replace(/\/+$/, "");
-      const endpoint = cleanBase.endsWith("/api")
-        ? `${cleanBase}/cart`
-        : `${cleanBase}/api/cart`;
-
-      const response = await fetch(endpoint, {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) return;
-
-      const json = await response.json();
-      const items =
-        json?.data?.items ||
-        json?.items ||
-        (Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []);
-
-      // Hitung total jenis produk atau total kuantitas dari respons backend
-      if (typeof json?.total_items === "number") {
-        setLiveCartCount(json.total_items);
-      } else if (typeof json?.data?.total_items === "number") {
-        setLiveCartCount(json.data.total_items);
-      } else if (Array.isArray(items)) {
-        const totalQty = items.reduce(
-          (sum: number, item: any) => sum + (Number(item.quantity ?? item.qty) || 1),
-          0
-        );
-        setLiveCartCount(totalQty);
-      }
+      const count = await getEffectiveCartCount();
+      setLiveCartCount(count);
     } catch {
-      // Pertahankan state terakhir jika jaringan gagal
+      try {
+        const rawLocal = localStorage.getItem("tandur_buyer_cart");
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal);
+          if (Array.isArray(parsed)) {
+            setLiveCartCount(parsed.length);
+          }
+        }
+      } catch {
+        // abaikan
+      }
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof cartCount === "number" && cartCount > 0) {
+      setLiveCartCount(cartCount);
+    }
+  }, [cartCount]);
 
   useEffect(() => {
     fetchCartCount();
