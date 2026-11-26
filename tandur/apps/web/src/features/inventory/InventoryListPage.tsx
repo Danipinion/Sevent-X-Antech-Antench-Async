@@ -11,7 +11,6 @@ import {
   LayoutGrid,
   Home,
   Package,
-  Truck,
   FileSpreadsheet,
   ArrowUpDown,
   ShieldCheck,

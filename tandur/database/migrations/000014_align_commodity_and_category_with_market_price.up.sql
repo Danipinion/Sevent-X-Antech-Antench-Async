@@ -5,7 +5,7 @@
 ALTER TABLE farmer_listings DROP CONSTRAINT IF EXISTS farmer_listings_commodity_id_fkey;
 
 -- 2. Ubah kolom commodity_id menjadi VARCHAR(100)
-ALTER TABLE farmer_listings ALTER COLUMN commodity_id TYPE VARCHAR(100);
+ALTER TABLE farmer_listings ALTER COLUMN commodity_id TYPE VARCHAR(100) USING commodity_id::text;
 
 -- 3. Tambahkan kolom commodity_name dan category
 ALTER TABLE farmer_listings ADD COLUMN IF NOT EXISTS commodity_name VARCHAR(150);

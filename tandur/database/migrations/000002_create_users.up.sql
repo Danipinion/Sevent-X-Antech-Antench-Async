@@ -1,8 +1,8 @@
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nik VARCHAR(16) UNIQUE,
     name VARCHAR(150) NOT NULL,
-    phone VARCHAR(13) NOT NULL UNIQUE,
+    phone VARCHAR(20) NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role VARCHAR(11) NOT NULL,
     is_bisnis BOOLEAN NOT NULL DEFAULT FALSE,
@@ -14,7 +14,7 @@ CREATE TABLE users (
         CHECK (role IN ('farmer', 'middleman', 'buyer'))
 );
 
-CREATE TABLE user_locations (
+CREATE TABLE IF NOT EXISTS user_locations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     label VARCHAR(100),

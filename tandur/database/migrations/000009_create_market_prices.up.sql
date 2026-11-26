@@ -1,4 +1,4 @@
-CREATE TABLE market_prices (
+CREATE TABLE IF NOT EXISTS market_prices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     commodity_id UUID NOT NULL REFERENCES commodities(id),
     source VARCHAR(100) NOT NULL,

@@ -86,31 +86,133 @@ export interface Commodity {
   current_market_price: number;
 }
 
+export interface ProductCategory {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface ProductSellerInfo {
+  id: string;
+  name: string;
+  phone?: string;
+  role: 'farmer' | 'middleman';
+  role_label: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface BuyerProduct {
   id: string;
-  listing_id?: string;
-  title: string;
+  source: 'farmer' | 'middleman' | string;
+  source_label: string;
+  commodity_id?: string;
   commodity_name: string;
-  category: string;
-  grade?: string;
-  price_per_kg: number;
-  stock_kg: number;
-  min_order_kg: number;
-  seller_name: string;
-  seller_location: string;
-  image_url?: string;
+  category_id: string;
+  category_name: string;
+  name: string;
   description?: string;
+  price: number;
+  unit: string;
+  available_stock: number;
+  min_order_quantity: number;
+  is_preorder: boolean;
+  estimated_harvest_date?: string;
+  media_urls?: string[];
+  primary_image_url?: string;
+  sold_count?: number;
+  distance_km?: number;
+  seller: ProductSellerInfo;
+  created_at?: string;
+
+  // Backward compatibility alias
+  title?: string;
+  price_per_kg?: number;
+  stock_kg?: number;
+  min_order_kg?: number;
+  seller_name?: string;
+  seller_location?: string;
+  image_url?: string;
+  grade?: string;
+  category?: string;
 }
 
 export interface CartItem {
   id: string;
+  buyer_id?: string;
   product_id: string;
-  title: string;
-  seller_name: string;
-  price_per_kg: number;
-  quantity_kg: number;
+  product_source?: string;
+  seller_id?: string;
+  product_name: string;
+  commodity_name?: string;
+  category_name?: string;
+  unit: string;
+  unit_price: number;
+  quantity: number;
+  available_stock?: number;
   subtotal: number;
+  media_url?: string;
+  is_preorder?: boolean;
+  seller?: ProductSellerInfo;
+
+  // Backward compatibility alias
+  title?: string;
+  seller_name?: string;
+  price_per_kg?: number;
+  quantity_kg?: number;
   image_url?: string;
+}
+
+export interface CartSellerGroup {
+  seller: ProductSellerInfo;
+  source: string;
+  items: CartItem[];
+  subtotal: number;
+  total_quantity: number;
+  distance_km?: number;
+  within_range: boolean;
+}
+
+export interface BuyerCartResponse {
+  seller_groups: CartSellerGroup[];
+  total_sellers: number;
+  total_items: number;
+  total_quantity: number;
+  grand_subtotal: number;
+}
+
+export interface BuyerOrder {
+  id: string;
+  order_number: string;
+  buyer_id: string;
+  seller_id: string;
+  seller_name: string;
+  seller_phone?: string;
+  seller_role: string;
+  status: string;
+  status_label: string;
+  payment_method: string;
+  payment_label: string;
+  subtotal_amount: number;
+  handling_fee: number;
+  total_amount: number;
+  cash_to_prepare: number;
+  pickup_address: string;
+  notes?: string;
+  items: Array<{
+    id: string;
+    product_name: string;
+    quantity: number;
+    unit: string;
+    unit_price: number;
+    subtotal: number;
+    media_url?: string;
+  }>;
 }
 
 export interface FarmerPurchaseOrder {
@@ -165,37 +267,91 @@ export interface NegotiationOffer {
 // ==========================================
 
 export const BuyerApi = {
-  getProducts: (params?: { category?: string; search?: string }) => {
+  getCategories: () =>
+    fetchApi<{ status: string; data: ProductCategory[] }>('/categories'),
+
+  getProducts: (params?: {
+    category_id?: string;
+    category?: string;
+    search?: string;
+    source?: string;
+    lat?: number;
+    lng?: number;
+    radius?: number;
+    page?: number;
+    limit?: number;
+  }) => {
     const q = new URLSearchParams();
-    if (params?.category && params.category !== 'Semua') q.set('category', params.category);
+    if (params?.category_id) q.set('category_id', params.category_id);
+    if (params?.category && params.category !== 'Semua') q.set('category_id', params.category);
     if (params?.search) q.set('search', params.search);
+    if (params?.source) q.set('source', params.source);
+    if (params?.lat !== undefined) q.set('lat', String(params.lat));
+    if (params?.lng !== undefined) q.set('lng', String(params.lng));
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
     const qs = q.toString() ? `?${q.toString()}` : '';
-    return fetchApi<{ data: BuyerProduct[] }>(`/buyer/products${qs}`);
+    return fetchApi<{ status: string; data: BuyerProduct[] | { items: BuyerProduct[] } }>(`/products${qs}`);
   },
-  getProductDetail: (id: string) =>
-    fetchApi<{ data: BuyerProduct }>(`/buyer/products/${id}`),
+
+  getPopularProducts: () =>
+    fetchApi<{ status: string; data: BuyerProduct[] }>('/products/popular'),
+
+  getProductDetail: (id: string, source?: string) => {
+    const qs = source ? `?source=${source}` : '';
+    return fetchApi<{ status: string; data: BuyerProduct }>(`/products/${id}${qs}`);
+  },
+
   getCart: () =>
-    fetchApi<{ data: { items: CartItem[]; total: number } }>('/buyer/cart'),
-  addToCart: (productId: string, quantityKg: number) =>
-    fetchApi('/buyer/cart/items', {
+    fetchApi<{ status: string; data: BuyerCartResponse }>('/cart'),
+
+  addToCart: (productId: string, quantity: number, source?: string) =>
+    fetchApi('/cart/items', {
       method: 'POST',
-      body: JSON.stringify({ product_id: productId, quantity_kg: quantityKg }),
+      body: JSON.stringify({
+        product_id: productId,
+        quantity: quantity,
+        source: source || 'middleman',
+      }),
     }),
-  updateCartItem: (itemId: string, quantityKg: number) =>
-    fetchApi(`/buyer/cart/items/${itemId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ quantity_kg: quantityKg }),
+
+  updateCartItem: (itemId: string, quantity: number) =>
+    fetchApi(`/cart/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity }),
     }),
+
   removeCartItem: (itemId: string) =>
-    fetchApi(`/buyer/cart/items/${itemId}`, { method: 'DELETE' }),
-  checkoutCashOnPickup: (payload: {
-    pickup_schedule: string;
-    buyer_note?: string;
-    payment_method: 'cash_on_pickup';
+    fetchApi(`/cart/items/${itemId}`, { method: 'DELETE' }),
+
+  getPrimaryAddress: () =>
+    fetchApi<{ status: string; data: any }>('/addresses/primary'),
+
+  checkoutSummary: () =>
+    fetchApi<{ status: string; data: any }>('/orders/checkout-summary', {
+      method: 'POST',
+    }),
+
+  createOrder: (payload: {
+    item_ids?: string[];
+    delivery_address_id?: string;
+    notes?: string;
   }) =>
-    fetchApi('/buyer/checkout', {
+    fetchApi<{ status: string; data: BuyerOrder }>('/orders', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+
+  checkoutCashOnPickup: (payload: {
+    pickup_schedule?: string;
+    buyer_note?: string;
+    payment_method?: 'cash_on_pickup';
+  }) =>
+    fetchApi('/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        notes: [payload.pickup_schedule, payload.buyer_note].filter(Boolean).join(' • '),
+      }),
     }),
 };
 

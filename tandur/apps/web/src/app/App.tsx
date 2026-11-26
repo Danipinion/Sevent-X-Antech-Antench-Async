@@ -166,7 +166,23 @@ function RootRedirect() {
       // ignore JSON parse error
     }
   }
-  return <Navigate to="/login" replace />;
+  // Tamu umum / unauthenticated diarahkan ke etalase produk pembeli
+  return <Navigate to="/produk" replace />;
+}
+
+// Komponen pengarah link jual hasil panen
+function JualRedirect() {
+  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user.role === "farmer") return <Navigate to="/farmer/jual-panen" replace />;
+      if (user.role === "middleman") return <Navigate to="/middleman/jual-stok" replace />;
+    } catch {
+      // ignore JSON parse error
+    }
+  }
+  return <Navigate to="/register?role=farmer" replace />;
 }
 
 // Komponen pengarah rute profil global (/profil, /profile, /akun)
@@ -177,11 +193,12 @@ function ProfileRedirect() {
       const user = JSON.parse(userStr);
       if (user.role === "middleman") return <Navigate to="/middleman/profil" replace />;
       if (user.role === "farmer") return <Navigate to="/farmer/profil" replace />;
+      if (user.role === "buyer") return <Navigate to="/akun" replace />;
     } catch {
       // ignore JSON parse error
     }
   }
-  return <Navigate to="/farmer/profil" replace />;
+  return <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -191,21 +208,28 @@ export default function App() {
         {/* Rute Awal / Root */}
         <Route path="/" element={<RootRedirect />} />
 
-        {/* Rute Profil Global */}
-        <Route path="/profil" element={<ProfileRedirect />} />
-        <Route path="/profile" element={<ProfileRedirect />} />
-        <Route path="/akun" element={<ProfileRedirect />} />
-
         {/* Otentikasi */}
         <Route path="/login" element={<Login />} />
         <Route path="/auth/login" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<Register />} />
         <Route path="/auth/register" element={<Navigate to="/register" replace />} />
 
+        {/* Redirection link cepat dari header */}
+        <Route path="/jual" element={<JualRedirect />} />
+
         {/* Katalog / Pembeli / Storefront: header + footer */}
         <Route element={<Layout cartCount={3} />}>
           <Route path="/produk" element={<BuyerHomePage />} />
           <Route path="/katalog" element={<Navigate to="/produk" replace />} />
+          <Route path="/kategori/:category" element={<BuyerHomePage />} />
+          <Route path="/kategori" element={<BuyerHomePage />} />
+          <Route path="/promo" element={<BuyerHomePage />} />
+          <Route path="/mitra-tani" element={<BuyerHomePage />} />
+          <Route path="/aplikasi" element={<BuyerHomePage />} />
+          <Route path="/notifikasi" element={<BuyerHomePage />} />
+          <Route path="/akun" element={<FarmerProfilePage role="buyer" />} />
+          <Route path="/profil" element={<ProfileRedirect />} />
+          <Route path="/profile" element={<ProfileRedirect />} />
           <Route
             path="/produk/beras-pandan-wangi"
             element={<ProductDetailPage />}

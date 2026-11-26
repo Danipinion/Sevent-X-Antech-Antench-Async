@@ -32,19 +32,58 @@ export const CartPage: React.FC = () => {
       setIsLoading(true);
       try {
         const res = await BuyerApi.getCart();
-        const apiItems = Array.isArray((res as any)?.data?.items)
-          ? (res as any).data.items
-          : Array.isArray((res as any)?.data)
-          ? (res as any).data
-          : null;
+        const cartData = (res as any)?.data;
+        const apiItems: CartItem[] = [];
 
-        if (isMounted && apiItems) {
+        if (Array.isArray(cartData?.seller_groups)) {
+          for (const sg of cartData.seller_groups) {
+            if (Array.isArray(sg.items)) {
+              for (const it of sg.items) {
+                const qty = Number(it.quantity ?? it.quantity_kg ?? 1);
+                const price = Number(it.unit_price ?? it.price_per_kg ?? 0);
+                const sub = Number(it.subtotal ?? qty * price);
+
+                apiItems.push({
+                  id: it.id,
+                  product_id: it.product_id,
+                  product_name: it.product_name || it.title || 'Komoditas',
+                  title: it.product_name || it.title || 'Komoditas',
+                  seller: sg.seller,
+                  seller_name: sg.seller?.name || it.seller_name || 'Mitra Penjual',
+                  unit: it.unit || 'kg',
+                  unit_price: price,
+                  price_per_kg: price,
+                  quantity: qty,
+                  quantity_kg: qty,
+                  subtotal: sub,
+                  media_url: it.media_url || it.image_url,
+                  image_url: it.media_url || it.image_url,
+                });
+              }
+            }
+          }
+        } else if (Array.isArray(cartData?.items)) {
+          for (const it of cartData.items) {
+            const qty = Number(it.quantity ?? it.quantity_kg ?? 1);
+            const price = Number(it.unit_price ?? it.price_per_kg ?? 0);
+            apiItems.push({
+              ...it,
+              title: it.product_name || it.title || 'Komoditas',
+              seller_name: it.seller?.name || it.seller_name || 'Mitra Penjual',
+              quantity_kg: qty,
+              price_per_kg: price,
+              subtotal: it.subtotal ?? qty * price,
+            });
+          }
+        }
+
+        if (isMounted && apiItems.length > 0) {
           setItems(apiItems);
           setIsLoading(false);
           return;
         }
       } catch {
-        // Fallback ke localStorage jika offline atau endpoint belum mengembalikan data
+        // Fallback ke localStorage jika offline atau belum login
       }
 
       if (isMounted) {
@@ -52,7 +91,17 @@ export const CartPage: React.FC = () => {
           const raw = localStorage.getItem(CART_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw);
-            setItems(Array.isArray(parsed) ? parsed : []);
+            const mapped = Array.isArray(parsed)
+              ? parsed.map((it: any) => ({
+                  ...it,
+                  title: it.product_name || it.title || 'Komoditas',
+                  seller_name: it.seller?.name || it.seller_name || 'Mitra Penjual',
+                  quantity_kg: Number(it.quantity ?? it.quantity_kg ?? 1),
+                  price_per_kg: Number(it.unit_price ?? it.price_per_kg ?? 0),
+                  subtotal: Number(it.subtotal ?? (it.quantity_kg || 1) * (it.price_per_kg || 0)),
+                }))
+              : [];
+            setItems(mapped);
           } else {
             setItems([]);
           }
@@ -77,8 +126,11 @@ export const CartPage: React.FC = () => {
     }
   };
 
-  const handleUpdateQty = async (item: CartItem, deltaKg: number) => {
-    const nextQty = Math.max(25, item.quantity_kg + deltaKg);
+  const handleUpdateQty = async (item: CartItem, delta: number) => {
+    const currentQty = Number(item.quantity ?? item.quantity_kg ?? 1);
+    const unitPrice = Number(item.unit_price ?? item.price_per_kg ?? 0);
+    const nextQty = Math.max(1, currentQty + delta);
+
     try {
       await BuyerApi.updateCartItem(item.id, nextQty);
     } catch {
@@ -89,8 +141,9 @@ export const CartPage: React.FC = () => {
       c.id === item.id
         ? {
             ...c,
+            quantity: nextQty,
             quantity_kg: nextQty,
-            subtotal: nextQty * c.price_per_kg,
+            subtotal: nextQty * unitPrice,
           }
         : c
     );
@@ -107,8 +160,14 @@ export const CartPage: React.FC = () => {
     syncLocalCart(updated);
   };
 
-  const totalWeightKg = items.reduce((acc, item) => acc + item.quantity_kg, 0);
-  const totalAmount = items.reduce((acc, item) => acc + item.subtotal, 0);
+  const totalWeightKg = items.reduce(
+    (acc, item) => acc + Number(item.quantity ?? item.quantity_kg ?? 0),
+    0
+  );
+  const totalAmount = items.reduce(
+    (acc, item) => acc + Number(item.subtotal ?? 0),
+    0
+  );
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,13 +175,21 @@ export const CartPage: React.FC = () => {
 
     setIsCheckingOut(true);
     try {
-      await BuyerApi.checkoutCashOnPickup({
-        pickup_schedule: pickupSchedule,
-        buyer_note: buyerNote,
-        payment_method: 'cash_on_pickup',
+      const itemIDs = items.map((it) => it.id).filter(Boolean);
+      await BuyerApi.createOrder({
+        item_ids: itemIDs.length > 0 ? itemIDs : undefined,
+        notes: [pickupSchedule, buyerNote].filter(Boolean).join(' • '),
       });
     } catch {
-      // Tetap lanjutkan proses pesanan lokal bila server offline
+      try {
+        await BuyerApi.checkoutCashOnPickup({
+          pickup_schedule: pickupSchedule,
+          buyer_note: buyerNote,
+          payment_method: 'cash_on_pickup',
+        });
+      } catch {
+        // Tetap lanjutkan proses pesanan lokal bila server offline
+      }
     } finally {
       setIsCheckingOut(false);
     }
@@ -137,7 +204,7 @@ export const CartPage: React.FC = () => {
     await Swal.fire({
       icon: 'success',
       title: 'Pesanan Cash on Pickup Dibuat!',
-      text: `Jadwal pengambilan "${pickupSchedule}" telah dikirim ke petani/gudang. Silakan lakukan pembayaran tunai setelah penimbangan di lokasi.`,
+      text: `Jadwal pengambilan "${pickupSchedule}" telah diteruskan ke mitra petani/gudang. Silakan lakukan pembayaran tunai saat pengambilan di lokasi.`,
       confirmButtonColor: '#236B37',
     });
 
@@ -212,30 +279,30 @@ export const CartPage: React.FC = () => {
                       <span>{item.seller_name}</span>
                     </div>
                     <div className="text-xs font-bold text-[#236B37]">
-                      Rp {item.price_per_kg.toLocaleString('id-ID')} / kg
+                      Rp {(item.unit_price ?? item.price_per_kg ?? 0).toLocaleString('id-ID')} / {item.unit || 'kg'}
                     </div>
                   </div>
 
                   <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0">
                     <div className="text-base font-extrabold text-[#1A201A]">
-                      Rp {item.subtotal.toLocaleString('id-ID')}
+                      Rp {(item.subtotal || 0).toLocaleString('id-ID')}
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleUpdateQty(item, -25)}
-                        disabled={item.quantity_kg <= 25}
+                        onClick={() => handleUpdateQty(item, -1)}
+                        disabled={(item.quantity ?? item.quantity_kg ?? 1) <= 1}
                         className="w-7 h-7 rounded-lg bg-[#F6F2EA] border border-[#E2DACB] flex items-center justify-center text-[#1A201A] disabled:opacity-40 cursor-pointer"
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <span className="text-xs font-bold w-14 text-center">
-                        {item.quantity_kg} kg
+                      <span className="text-xs font-bold w-16 text-center">
+                        {item.quantity ?? item.quantity_kg ?? 1} {item.unit || 'kg'}
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleUpdateQty(item, 25)}
+                        onClick={() => handleUpdateQty(item, 1)}
                         className="w-7 h-7 rounded-lg bg-[#F6F2EA] border border-[#E2DACB] flex items-center justify-center text-[#1A201A] cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />

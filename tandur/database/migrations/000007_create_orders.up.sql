@@ -1,4 +1,4 @@
-CREATE TABLE buyer_orders (
+CREATE TABLE IF NOT EXISTS buyer_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     buyer_id UUID NOT NULL REFERENCES users(id),
     order_number VARCHAR(50) NOT NULL UNIQUE,
@@ -25,7 +25,7 @@ CREATE TABLE buyer_orders (
         )
 );
 
-CREATE TABLE buyer_order_items (
+CREATE TABLE IF NOT EXISTS buyer_order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL REFERENCES buyer_orders(id) ON DELETE CASCADE,
     inventory_id UUID NOT NULL REFERENCES inventory(id),
@@ -44,7 +44,7 @@ CREATE TABLE buyer_order_items (
         )
 );
 
-CREATE TABLE order_suborders (
+CREATE TABLE IF NOT EXISTS order_suborders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL REFERENCES buyer_orders(id) ON DELETE CASCADE,
     middleman_id UUID NOT NULL REFERENCES users(id),

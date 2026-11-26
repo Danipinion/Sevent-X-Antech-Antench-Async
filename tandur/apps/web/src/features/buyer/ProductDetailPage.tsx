@@ -42,8 +42,9 @@ export const ProductDetailPage: React.FC = () => {
         const res = await BuyerApi.getProductDetail(id);
         const detail = (res as any)?.data?.id ? (res as any).data : (res as any)?.id ? res : null;
         if (isMounted && detail) {
+          const step = detail.min_order_quantity || detail.min_order_kg || 1;
           setProduct(detail);
-          setQuantityKg(detail.min_order_kg || 25);
+          setQuantityKg(step);
           setIsLoading(false);
           return;
         }
@@ -61,18 +62,30 @@ export const ProductDetailPage: React.FC = () => {
               const stockKg = Math.round(offeredTons * 1000);
               const minOrderTons = Number(foundLocal.min_order_tons ?? foundLocal.min_order_ton ?? 0.05);
               const minOrderKg = Math.max(25, Math.round(minOrderTons * 1000));
+              const unitPrice = Number(foundLocal.selling_price_per_kg ?? foundLocal.price_per_kg ?? 0);
 
               const mappedProduct: BuyerProduct = {
                 id: String(foundLocal.id),
-                title: `${foundLocal.commodity_name || 'Komoditas Panen'} (${foundLocal.variety || 'Standar Gudang'})`,
+                source: 'middleman',
+                source_label: 'Mitra Gudang Tandur',
+                name: `${foundLocal.commodity_name || 'Komoditas Panen'} (${foundLocal.variety || 'Standar Gudang'})`,
                 commodity_name: foundLocal.commodity_name || 'Komoditas Panen',
-                category: foundLocal.category || 'Gabah',
-                grade: foundLocal.variety || 'Mutu Terverifikasi',
-                price_per_kg: Number(foundLocal.selling_price_per_kg ?? foundLocal.price_per_kg ?? 0),
-                stock_kg: stockKg,
-                min_order_kg: minOrderKg,
-                seller_name: foundLocal.source_partner || 'Mitra Gudang Tandur',
-                seller_location: foundLocal.location || 'Gudang Mitra Tandur',
+                category_id: 'cat-local',
+                category_name: foundLocal.category || 'Gabah',
+                price: unitPrice,
+                unit: 'kg',
+                available_stock: stockKg,
+                min_order_quantity: minOrderKg,
+                is_preorder: false,
+                seller: {
+                  id: 'local-seller',
+                  name: foundLocal.source_partner || 'Mitra Gudang Tandur',
+                  role: 'middleman',
+                  role_label: 'Mitra Gudang',
+                  city: foundLocal.location || 'Gudang Mitra Tandur',
+                  latitude: -6.89,
+                  longitude: 110.63,
+                },
                 description: `Penawaran komoditas langsung dari ${foundLocal.location || 'Gudang Mitra Tandur'}. Metode pengambilan: ${foundLocal.pickup_method || 'Jemput di Gudang'}.`,
               };
 
@@ -131,21 +144,31 @@ export const ProductDetailPage: React.FC = () => {
     );
   }
 
-  const stepKg = product.min_order_kg || 25;
-  const subtotal = quantityKg * product.price_per_kg;
+  const stepKg = product.min_order_quantity || product.min_order_kg || 1;
+  const pPrice = product.price || product.price_per_kg || 0;
+  const pStock = product.available_stock ?? product.stock_kg ?? 0;
+  const pName = product.name || product.title || 'Komoditas Panen';
+  const pUnit = product.unit || 'kg';
+  const pSellerName = product.seller?.name || product.seller_name || 'Mitra Penjual';
+  const pSellerLocation = product.seller?.city || product.seller?.address || product.seller_location || 'Demak';
+  const pCategory = product.category_name || product.category || 'Komoditas';
+  const pGrade = product.grade || product.source_label || 'Mutu Terverifikasi';
+  const pImage = product.primary_image_url || product.image_url || product.media_urls?.[0];
+
+  const subtotal = quantityKg * pPrice;
 
   const handleDecrease = () => {
     setQuantityKg((prev) => Math.max(stepKg, prev - stepKg));
   };
 
   const handleIncrease = () => {
-    setQuantityKg((prev) => Math.min(product.stock_kg, prev + stepKg));
+    setQuantityKg((prev) => Math.min(pStock, prev + stepKg));
   };
 
   const handleAddToCart = async (redirectToCart = false) => {
     setIsSubmitting(true);
     try {
-      await BuyerApi.addToCart(product.id, quantityKg);
+      await BuyerApi.addToCart(product.id, quantityKg, product.source);
     } catch {
       try {
         const rawCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -154,17 +177,21 @@ export const ProductDetailPage: React.FC = () => {
           (c: any) => String(c.product_id) === String(product.id)
         );
         if (existingIdx >= 0) {
-          currentCart[existingIdx].quantity_kg += quantityKg;
+          currentCart[existingIdx].quantity += quantityKg;
           currentCart[existingIdx].subtotal =
-            currentCart[existingIdx].quantity_kg * product.price_per_kg;
+            currentCart[existingIdx].quantity * pPrice;
         } else {
           currentCart.push({
             id: `cart-${Date.now()}`,
             product_id: product.id,
-            title: product.title,
-            seller_name: product.seller_name,
-            price_per_kg: product.price_per_kg,
+            product_name: pName,
+            title: pName,
+            seller_name: pSellerName,
+            price_per_kg: pPrice,
+            unit_price: pPrice,
+            quantity: quantityKg,
             quantity_kg: quantityKg,
+            unit: pUnit,
             subtotal,
           });
         }
@@ -184,7 +211,7 @@ export const ProductDetailPage: React.FC = () => {
     await Swal.fire({
       icon: 'success',
       title: 'Berhasil Masuk Keranjang',
-      text: `${quantityKg} kg ${product.commodity_name} telah ditambahkan.`,
+      text: `${quantityKg} ${pUnit} ${pName} telah ditambahkan.`,
       timer: 1600,
       showConfirmButton: false,
     });
@@ -208,17 +235,25 @@ export const ProductDetailPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column (7 cols): Product Info & Specs */}
           <div className="lg:col-span-7 bg-white rounded-2xl border border-[#ECE6DA] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.015)]">
-            <div className="h-56 sm:h-64 bg-gradient-to-br from-[#DFF2E3] via-[#F4EFE6] to-[#F8EFE2] p-6 flex flex-col justify-between">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="h-56 sm:h-64 bg-gradient-to-br from-[#DFF2E3] via-[#F4EFE6] to-[#F8EFE2] p-6 flex flex-col justify-between relative overflow-hidden">
+              {pImage ? (
+                <img
+                  src={pImage}
+                  alt={pName}
+                  className="absolute inset-0 w-full h-full object-cover opacity-25 pointer-events-none"
+                />
+              ) : null}
+
+              <div className="relative z-10 flex flex-wrap items-center gap-2">
                 <span className="px-3 py-1 rounded-full bg-white text-[#236B37] text-xs font-bold shadow-2xs">
-                  {product.category}
+                  {pCategory}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-[#236B37] text-white text-xs font-bold">
-                  {product.grade || 'Mutu Terverifikasi'}
+                  {pGrade}
                 </span>
               </div>
 
-              <div className="inline-flex items-center gap-2 text-xs font-bold text-[#7D5318]">
+              <div className="relative z-10 inline-flex items-center gap-2 text-xs font-bold text-[#7D5318]">
                 <Sprout className="w-4 h-4" />
                 Panen Segar Langsung dari Lumbung Mitra Tandur
               </div>
@@ -227,15 +262,15 @@ export const ProductDetailPage: React.FC = () => {
             <div className="p-6 space-y-5">
               <div>
                 <h1 className="text-xl sm:text-2xl font-extrabold text-[#1A201A] leading-snug">
-                  {product.title}
+                  {pName}
                 </h1>
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-extrabold text-[#236B37]">
-                    Rp {(product.price_per_kg || 0).toLocaleString('id-ID')}
+                    Rp {pPrice.toLocaleString('id-ID')}
                   </span>
-                  <span className="text-xs sm:text-sm text-[#7A827A]">/ kg</span>
+                  <span className="text-xs sm:text-sm text-[#7A827A]">/ {pUnit}</span>
                   <span className="text-xs font-semibold text-[#8A5A19]">
-                    • Tersedia {(product.stock_kg || 0).toLocaleString('id-ID')} kg
+                    • Tersedia {pStock.toLocaleString('id-ID')} {pUnit}
                   </span>
                 </div>
               </div>
@@ -244,7 +279,7 @@ export const ProductDetailPage: React.FC = () => {
                 <div>
                   <span className="text-[#7A827A] block">Minimal Pembelian</span>
                   <strong className="text-[#1A201A] text-sm">
-                    {product.min_order_kg} kg
+                    {stepKg} {pUnit}
                   </strong>
                 </div>
                 <div>
@@ -275,13 +310,13 @@ export const ProductDetailPage: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-bold text-[#1A201A]">
-                      {product.seller_name}
+                      {pSellerName}
                     </span>
                     <ShieldCheck className="w-4 h-4 text-[#236B37]" />
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-[#6D756D]">
                     <MapPin className="w-3.5 h-3.5 text-[#8A5A19]" />
-                    <span>{product.seller_location}</span>
+                    <span>{pSellerLocation}</span>
                   </div>
                 </div>
 
@@ -300,7 +335,7 @@ export const ProductDetailPage: React.FC = () => {
                 Atur Jumlah Pembelian
               </h2>
               <p className="text-xs text-[#6D756D] mt-0.5">
-                Kelipatan {stepKg} kg sesuai standar kemasan
+                Kelipatan {stepKg} {pUnit} sesuai standar kemasan
               </p>
             </div>
 
@@ -319,12 +354,12 @@ export const ProductDetailPage: React.FC = () => {
                   <span className="text-base font-extrabold text-[#1A201A]">
                     {quantityKg}
                   </span>{' '}
-                  <span className="text-xs text-[#6D756D]">kg</span>
+                  <span className="text-xs text-[#6D756D]">{pUnit}</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleIncrease}
-                  disabled={quantityKg >= product.stock_kg}
+                  disabled={quantityKg >= pStock}
                   className="w-9 h-9 rounded-lg bg-white border border-[#DFD8CA] flex items-center justify-center text-[#1A201A] disabled:opacity-40 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
@@ -340,7 +375,7 @@ export const ProductDetailPage: React.FC = () => {
             <div className="bg-[#FAF8F3] rounded-xl p-4 border border-[#EFEAE0] space-y-2">
               <div className="flex items-center justify-between text-xs text-[#6D756D]">
                 <span>Harga Satuan</span>
-                <span>Rp {(product.price_per_kg || 0).toLocaleString('id-ID')} / kg</span>
+                <span>Rp {pPrice.toLocaleString('id-ID')} / {pUnit}</span>
               </div>
               <div className="pt-2 border-t border-[#E6DFD2] flex items-center justify-between">
                 <span className="text-xs font-bold text-[#1A201A]">
@@ -364,7 +399,7 @@ export const ProductDetailPage: React.FC = () => {
             <div className="space-y-2.5">
               <button
                 type="button"
-                disabled={isSubmitting || product.stock_kg <= 0}
+                disabled={isSubmitting || pStock <= 0}
                 onClick={() => handleAddToCart(true)}
                 className="w-full py-3 px-5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] disabled:opacity-50 text-white text-xs sm:text-sm font-bold transition-colors shadow-sm cursor-pointer"
               >
@@ -373,7 +408,7 @@ export const ProductDetailPage: React.FC = () => {
 
               <button
                 type="button"
-                disabled={isSubmitting || product.stock_kg <= 0}
+                disabled={isSubmitting || pStock <= 0}
                 onClick={() => handleAddToCart(false)}
                 className="w-full inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-[#F4EFE6] hover:bg-[#EAE2D3] disabled:opacity-50 text-[#1A201A] text-xs sm:text-sm font-bold transition-colors cursor-pointer"
               >

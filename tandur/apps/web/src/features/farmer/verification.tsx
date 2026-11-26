@@ -13,13 +13,20 @@ import {
   Loader2,
   X,
   Aperture,
+  Info,
+  Sparkles,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { fetchApi, getAuthToken } from '@/services/api';
+import { parseKtpText, type KtpOcrResult } from '@/utils/ktpOcrParser';
 
 const RAW_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 const BASE_HOST = RAW_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 const API_BASE_URL = `${BASE_HOST}/api/v1`;
+
+type OcrStatus = 'idle' | 'scanning' | 'success' | 'partial' | 'error';
 
 export default function FarmerVerificationPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -36,25 +43,29 @@ export default function FarmerVerificationPage() {
     }
   })();
 
-  const [nik, setNik] = useState<string>(storedUser?.nik || '3321041405780002');
-  const [fullName, setFullName] = useState<string>(
-    storedUser?.name ? storedUser.name.toUpperCase() : 'SUGENG RIYADI'
-  );
-  const [birthInfo, setBirthInfo] = useState<string>('Demak, 14 Mei 1978');
-  const [ktpAddress, setKtpAddress] = useState<string>(
-    storedUser?.ktp_address ||
-      storedUser?.address ||
-      'RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566'
-  );
+  // 1. Data form kependudukan (HARUS KOSONG diawal sesuai instruksi pengguna)
+  const [nik, setNik] = useState<string>('');
+  const [fullName, setFullName] = useState<string>('');
+  const [birthInfo, setBirthInfo] = useState<string>('');
+  const [birthPlace, setBirthPlace] = useState<string>('');
+  const [birthDate, setBirthDate] = useState<string>('');
+  const [ktpAddress, setKtpAddress] = useState<string>('');
 
+  // 2. Berkas & status OCR
   const [ktpFile, setKtpFile] = useState<File | null>(null);
   const [ktpPreviewUrl, setKtpPreviewUrl] = useState<string | null>(null);
+  const [ocrStatus, setOcrStatus] = useState<OcrStatus>('idle');
+  const [ocrProgress, setOcrProgress] = useState<number>(0);
+  const [ocrMessage, setOcrMessage] = useState<string>('');
+
+  // 3. Status verifikasi & formulir
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [agreed, setAgreed] = useState<boolean>(true);
   const [copied, setCopied] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isVerified, setIsVerified] = useState<boolean>(Boolean(storedUser?.is_verified));
 
+  // Ambil profil user jika sudah pernah terverifikasi sebelumnya
   useEffect(() => {
     let isMounted = true;
     async function loadUserData() {
@@ -62,18 +73,21 @@ export default function FarmerVerificationPage() {
         const res = await fetchApi<{ data?: any }>('/auth/me');
         const profile = res?.data ?? res;
         if (isMounted && profile) {
-          if (profile.nik) setNik(profile.nik);
-          if (profile.name) setFullName(profile.name.toUpperCase());
-          if (profile.birth_info) setBirthInfo(profile.birth_info);
-          if (profile.ktp_address || profile.address) {
-            setKtpAddress(profile.ktp_address || profile.address);
-          }
           if (typeof profile.is_verified === 'boolean') {
             setIsVerified(profile.is_verified);
           }
+          // Jika akun memang sudah terverifikasi sebelumnya, tampilkan data yang sudah ada
+          if (profile.is_verified) {
+            if (profile.nik) setNik(profile.nik);
+            if (profile.name) setFullName(profile.name.toUpperCase());
+            if (profile.birth_info) setBirthInfo(profile.birth_info);
+            if (profile.ktp_address || profile.address) {
+              setKtpAddress(profile.ktp_address || profile.address);
+            }
+          }
         }
       } catch {
-        // Fallback menggunakan data storage lokal
+        // Fallback jika offline
       }
     }
     loadUserData();
@@ -128,6 +142,116 @@ export default function FarmerVerificationPage() {
     setIsCameraOpen(false);
   };
 
+  // Fungsi pemindaian teks KTP menggunakan OCR Tesseract
+  const runOcrOnKtpImage = async (file: File) => {
+    setOcrStatus('scanning');
+    setOcrProgress(10);
+    setOcrMessage('Mempersiapkan modul pemindai OCR e-KTP...');
+
+    try {
+      const { createWorker } = await import('tesseract.js');
+
+      let text = '';
+      let workerInstance: any = null;
+
+      try {
+        // 1. Coba inisialisasi worker lokal agar instan dan offline-ready
+        setOcrProgress(25);
+        setOcrMessage('Memuat mesin pembaca dokumen lokal...');
+        workerInstance = await createWorker('ind', 1, {
+          workerPath: '/tesseract/worker.min.js',
+          corePath: '/tesseract/tesseract-core.wasm.js',
+          langPath: '/tesseract',
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              const pct = Math.min(95, Math.max(30, Math.round(m.progress * 100)));
+              setOcrProgress(pct);
+              setOcrMessage(`Mengekstrak karakter dokumen e-KTP: ${pct}%`);
+            }
+          },
+        });
+        const res = await workerInstance.recognize(file);
+        text = res?.data?.text || '';
+        await workerInstance.terminate();
+      } catch (localErr) {
+        console.warn('Gagal memuat worker lokal, beralih ke engine fallback:', localErr);
+        // 2. Fallback ke worker standar Tesseract
+        setOcrProgress(40);
+        setOcrMessage('Mengekstrak teks dengan engine OCR fallback...');
+        const fallbackWorker = await createWorker('ind', 1, {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              const pct = Math.min(95, Math.max(40, Math.round(m.progress * 100)));
+              setOcrProgress(pct);
+              setOcrMessage(`Mengekstrak karakter e-KTP: ${pct}%`);
+            }
+          },
+        });
+        const res = await fallbackWorker.recognize(file);
+        text = res?.data?.text || '';
+        await fallbackWorker.terminate();
+      }
+
+      setOcrProgress(100);
+
+      // 3. Parsing hasil teks OCR e-KTP Indonesia
+      const parsed: KtpOcrResult = parseKtpText(text);
+
+      if (parsed.nik) setNik(parsed.nik);
+      if (parsed.name) setFullName(parsed.name);
+      if (parsed.birthInfo) {
+        setBirthInfo(parsed.birthInfo);
+        setBirthPlace(parsed.birthPlace);
+        setBirthDate(parsed.birthDate);
+      }
+      if (parsed.address) setKtpAddress(parsed.address);
+
+      // Evaluasi apakah seluruh field utama berhasil terbaca
+      const hasNik = Boolean(parsed.nik && parsed.nik.length === 16);
+      const hasName = Boolean(parsed.name && parsed.name.length >= 2);
+      const hasBirth = Boolean(parsed.birthInfo);
+      const hasAddress = Boolean(parsed.address);
+
+      if (hasNik && hasName && hasBirth && hasAddress) {
+        setOcrStatus('success');
+        setOcrMessage('Semua data kependudukan berhasil diekstraksi secara otomatis!');
+        Swal.fire({
+          icon: 'success',
+          title: 'OCR Berhasil!',
+          text: 'Seluruh data e-KTP berhasil dibaca dan dimasukkan ke dalam form.',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      } else if (hasNik || hasName || hasBirth || hasAddress) {
+        setOcrStatus('partial');
+        setOcrMessage(
+          'Sebagian data e-KTP berhasil terbaca otomatis. Silakan lengkapi atau perbaiki field yang masih kosong.'
+        );
+        Swal.fire({
+          icon: 'info',
+          title: 'OCR Terbaca Sebagian',
+          text: 'Sebagian data berhasil diekstraksi. Mohon periksa dan lengkapi sisa kolom yang masih kosong sebelum mengirim verifikasi.',
+          confirmButtonColor: '#156E33',
+        });
+      } else {
+        setOcrStatus('partial');
+        setOcrMessage(
+          'Foto terbaca namun teks kurang jelas. Silakan isi form di bawah sesuai dokumen fisik asli Anda.'
+        );
+      }
+    } catch (err: any) {
+      console.error('Error saat proses OCR:', err);
+      setOcrStatus('error');
+      setOcrMessage('Gagal memproses pemindaian otomatis. Anda dapat mengisi kolom data secara manual.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Pemindaian Terkendala',
+        text: 'Sistem tidak dapat membaca gambar dengan jelas. Anda tetap dapat memasukkan data secara manual.',
+        confirmButtonColor: '#156E33',
+      });
+    }
+  };
+
   const handleCapturePhoto = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -155,6 +279,9 @@ export default function FarmerVerificationPage() {
         setKtpFile(capturedFile);
         setKtpPreviewUrl(URL.createObjectURL(capturedFile));
         handleCloseCamera();
+
+        // Jalankan OCR segera setelah foto dijepret
+        runOcrOnKtpImage(capturedFile);
       },
       'image/jpeg',
       0.92
@@ -162,6 +289,7 @@ export default function FarmerVerificationPage() {
   };
 
   const handleCopyNik = () => {
+    if (!nik) return;
     navigator.clipboard.writeText(nik);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -187,28 +315,63 @@ export default function FarmerVerificationPage() {
 
     setKtpFile(file);
     setKtpPreviewUrl(URL.createObjectURL(file));
+
+    // Jalankan OCR segera setelah berkas dipilih
+    runOcrOnKtpImage(file);
   };
 
+  // Evaluasi kelengkapan form: hanya jika semua field terisi DAN dokumen ada
+  const isFormComplete =
+    Boolean(ktpFile || ktpPreviewUrl) &&
+    nik.trim().length === 16 &&
+    fullName.trim().length >= 2 &&
+    birthInfo.trim().length >= 3 &&
+    ktpAddress.trim().length >= 5;
+
+  const canSubmit = isFormComplete && agreed && !isSubmitting && ocrStatus !== 'scanning';
+
   const handleSubmitVerification = async () => {
-    if (!agreed || isSubmitting) return;
+    if (!canSubmit) {
+      if (!ktpFile && !ktpPreviewUrl) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Unggah Foto e-KTP',
+          text: 'Harap unggah atau jepret foto dokumen e-KTP asli terlebih dahulu untuk dipindai OCR.',
+          confirmButtonColor: '#156E33',
+        });
+        return;
+      }
 
-    if (nik.trim().length !== 16) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'NIK Tidak Valid',
-        text: 'Nomor Induk Kependudukan (NIK) wajib berjumlah 16 digit.',
-        confirmButtonColor: '#156E33',
-      });
-      return;
-    }
+      if (nik.trim().length !== 16) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'NIK Tidak Valid',
+          text: 'Nomor Induk Kependudukan (NIK) wajib 16 digit angka.',
+          confirmButtonColor: '#156E33',
+        });
+        return;
+      }
 
-    if (!fullName.trim() || !ktpAddress.trim()) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Data Belum Lengkap',
-        text: 'Harap lengkapi Nama Lengkap dan Alamat sesuai e-KTP.',
-        confirmButtonColor: '#156E33',
-      });
+      if (!fullName.trim() || !birthInfo.trim() || !ktpAddress.trim()) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Data Form Belum Lengkap',
+          text: 'Seluruh data kependudukan (Nama, Tempat/Tanggal Lahir, Alamat) wajib terisi sebelum verifikasi dapat dikirim.',
+          confirmButtonColor: '#156E33',
+        });
+        return;
+      }
+
+      if (!agreed) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Pernyataan Persetujuan',
+          text: 'Centang kotak persetujuan pemrosesan data verifikasi kemitraan resmi Tandur.',
+          confirmButtonColor: '#156E33',
+        });
+        return;
+      }
+
       return;
     }
 
@@ -216,13 +379,25 @@ export default function FarmerVerificationPage() {
     try {
       const token = getAuthToken();
 
+      // Ekstraksi tempat dan tanggal lahir jika belum terpisah
+      let derivedPlace = birthPlace;
+      let derivedDate = birthDate;
+      if (!derivedPlace || !derivedDate) {
+        const parts = birthInfo.split(/[,/]/);
+        derivedPlace = parts[0]?.trim() || 'Demak';
+        derivedDate = parts.slice(1).join(',').trim() || '1980-01-01';
+      }
+
       if (ktpFile) {
         const formData = new FormData();
-        formData.append('ktp_image', ktpFile);
+        // Backend Go Fiber memeriksa form file "ktp_photo"
+        formData.append('ktp_photo', ktpFile);
         formData.append('nik', nik.trim());
         formData.append('name', fullName.trim());
-        formData.append('birth_info', birthInfo.trim());
+        formData.append('birth_place', derivedPlace);
+        formData.append('birth_date', derivedDate);
         formData.append('ktp_address', ktpAddress.trim());
+        formData.append('declaration_accepted', 'true');
 
         const uploadRes = await fetch(`${API_BASE_URL}/farmer/verification`, {
           method: 'POST',
@@ -242,8 +417,10 @@ export default function FarmerVerificationPage() {
           body: JSON.stringify({
             nik: nik.trim(),
             name: fullName.trim(),
-            birth_info: birthInfo.trim(),
+            birth_place: derivedPlace,
+            birth_date: derivedDate,
             ktp_address: ktpAddress.trim(),
+            declaration_accepted: true,
           }),
         });
       }
@@ -265,28 +442,23 @@ export default function FarmerVerificationPage() {
 
       await Swal.fire({
         icon: 'success',
-        title: 'Dokumen Verifikasi Terkirim',
-        text: 'Data identitas e-KTP Anda berhasil terverifikasi di sistem Tandur.',
+        title: 'e-KTP Berhasil Terverifikasi!',
+        text: 'Dokumen dan seluruh data kependudukan Anda telah diverifikasi oleh sistem Tandur.',
         confirmButtonColor: '#156E33',
       });
     } catch (err: any) {
       await Swal.fire({
         icon: 'error',
-        title: 'Verifikasi Gagal',
+        title: 'Verifikasi Belum Dapat Diproses',
         text:
           err?.message ||
-          'Endpoint verifikasi belum tersedia di server atau permintaan ditolak.',
+          'Terjadi kendala saat mengirim dokumen verifikasi ke server.',
         confirmButtonColor: '#156E33',
       });
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const maskedNik =
-    nik.length === 16
-      ? `${nik.slice(0, 4)} ${nik.slice(4, 8)} **** ${nik.slice(12, 16)}`
-      : '3321 0414 **** 0002';
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] p-4 sm:p-6 lg:p-8 text-[#1C241E] font-sans">
@@ -304,7 +476,7 @@ export default function FarmerVerificationPage() {
           </div>
 
           {isVerified && (
-            <span className="self-start inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#E8F5EC] text-[#156E33] text-xs font-bold shrink-0">
+            <span className="self-start inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#E8F5EC] text-[#156E33] text-xs font-bold shrink-0 shadow-2xs">
               <CheckCircle2 className="w-4 h-4" />
               Mitra Terverifikasi
             </span>
@@ -342,7 +514,7 @@ export default function FarmerVerificationPage() {
                   <div>
                     <h2 className="text-base font-bold text-[#1C241E]">Foto Dokumen e-KTP Asli</h2>
                     <p className="text-xs text-[#7A827C]">
-                      Dokumen fisik e-KTP terbaru yang masih aktif dan sah.
+                      Unggah foto fisik e-KTP untuk dipindai secara otomatis oleh sistem OCR.
                     </p>
                   </div>
                 </div>
@@ -360,68 +532,107 @@ export default function FarmerVerificationPage() {
                       alt="Pratinjau e-KTP"
                       className="w-full h-full object-cover"
                     />
-                    <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#156E33] text-white text-[9px] font-bold">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Terfoto
-                    </span>
+
+                    {/* Overlay status pemindaian OCR */}
+                    {ocrStatus === 'scanning' ? (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center p-3 text-center text-white space-y-2">
+                        <Loader2 className="w-6 h-6 animate-spin text-green-400" />
+                        <span className="text-xs font-bold">Memindai OCR ({ocrProgress}%)</span>
+                        <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden max-w-[140px]">
+                          <div
+                            className="bg-green-400 h-full transition-all duration-300"
+                            style={{ width: `${ocrProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#156E33] text-white text-[9px] font-bold shadow-xs">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Terfoto
+                      </span>
+                    )}
                   </div>
                 ) : (
-                  <div className="sm:col-span-5 rounded-xl bg-gradient-to-br from-[#CBE5F6] via-[#E5F2FA] to-[#B7DCF4] border border-[#A5CDE8] p-3 shadow-xs relative overflow-hidden">
-                    <div className="flex items-center justify-between border-b border-[#8BB8D8] pb-1.5 mb-2">
-                      <span className="text-[9px] font-extrabold tracking-wider text-[#1B3B5A]">
-                        REPUBLIK INDONESIA
-                      </span>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#156E33]" />
+                  /* Placeholder e-KTP ketika belum ada foto */
+                  <div className="sm:col-span-5 rounded-xl bg-gradient-to-br from-[#E8F0F7] via-[#F0F5FA] to-[#DDE9F2] border-2 border-dashed border-[#A5CDE8] p-4 flex flex-col items-center justify-center text-center aspect-[1.6/1] space-y-2">
+                    <div className="w-10 h-10 rounded-full bg-white text-[#156E33] flex items-center justify-center shadow-xs">
+                      <CreditCard className="w-5 h-5" />
                     </div>
-
-                    <div className="space-y-1 text-[8px] text-[#1B3B5A] font-semibold">
-                      <p className="font-bold">NIK : {nik || '3321041405780002'}</p>
-                      <p className="truncate">Nama : {fullName || 'SUGENG RIYADI'}</p>
-                      <p className="truncate">Tempat/Tgl Lahir : {birthInfo.toUpperCase()}</p>
-                      <p className="truncate">Alamat : {ktpAddress.toUpperCase()}</p>
-                      <p>Pekerjaan : PETANI/PEKEBUN</p>
-                    </div>
-
-                    <div className="mt-3 rounded-md bg-[#3D352E] px-2.5 py-1.5 flex items-center justify-between text-[9px] font-mono text-white">
-                      <span>{maskedNik}</span>
-                      <span className="font-sans font-bold truncate max-w-[80px]">
-                        {fullName || 'SUGENG R.'}
-                      </span>
+                    <div>
+                      <p className="text-xs font-bold text-[#1B3B5A]">Belum Ada Foto e-KTP</p>
+                      <p className="text-[10px] text-[#5C635E]">
+                        Ambil foto atau unggah berkas untuk menjalankan OCR
+                      </p>
                     </div>
                   </div>
                 )}
 
                 {/* OCR Status & Upload Controls */}
                 <div className="sm:col-span-7 space-y-3">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#E4F2E7] text-[#156E33] text-xs font-bold w-full">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    {ktpFile
-                      ? `Berkas siap: ${ktpFile.name}`
-                      : 'Kualitas Foto Memenuhi Standar OCR'}
+                  <div
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold w-full transition-colors ${
+                      ocrStatus === 'scanning'
+                        ? 'bg-blue-50 text-blue-700'
+                        : ocrStatus === 'success'
+                        ? 'bg-[#E4F2E7] text-[#156E33]'
+                        : ocrStatus === 'partial'
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'bg-[#EBE6DC] text-[#5C635E]'
+                    }`}
+                  >
+                    {ocrStatus === 'scanning' ? (
+                      <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                    ) : ocrStatus === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    ) : ocrStatus === 'partial' ? (
+                      <Info className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {ocrStatus === 'scanning'
+                        ? `Memproses OCR: ${ocrProgress}%`
+                        : ktpFile
+                        ? `Berkas: ${ktpFile.name}`
+                        : 'Menunggu Unggahan Foto e-KTP'}
+                    </span>
                   </div>
 
                   <p className="text-xs text-[#5C635E] leading-relaxed">
                     Format didukung: JPG, PNG, atau HEIC (Maksimal 5MB). Pastikan e-KTP tidak
-                    terkena pantulan kilau lampu flash.
+                    terpotong dan tidak terkena pantulan kilau lampu flash.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2.5 pt-1">
                     <button
                       type="button"
                       onClick={handleOpenCamera}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#EBE6DC] hover:bg-[#DFD9CD] text-xs font-bold text-[#1C241E] transition-colors cursor-pointer"
+                      disabled={ocrStatus === 'scanning'}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#EBE6DC] hover:bg-[#DFD9CD] disabled:opacity-50 text-xs font-bold text-[#1C241E] transition-colors cursor-pointer"
                     >
                       <Camera className="w-3.5 h-3.5" />
-                      Ambil Ulang
+                      {ktpFile ? 'Ambil Ulang' : 'Buka Kamera'}
                     </button>
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] text-xs font-bold text-[#1C241E] transition-colors cursor-pointer"
+                      disabled={ocrStatus === 'scanning'}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] disabled:opacity-50 text-xs font-bold text-[#1C241E] transition-colors cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
-                      Ganti Berkas
+                      {ktpFile ? 'Ganti Berkas' : 'Unggah Berkas'}
                     </button>
+                    {ktpFile && ocrStatus !== 'scanning' && (
+                      <button
+                        type="button"
+                        onClick={() => runOcrOnKtpImage(ktpFile)}
+                        title="Pindai Ulang Dokumen"
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-green-50 text-green-700 hover:bg-green-100 text-xs font-semibold transition"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Scan Ulang
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -439,16 +650,54 @@ export default function FarmerVerificationPage() {
                       Data Kependudukan Hasil Pembacaan OCR
                     </h2>
                     <p className="text-xs text-[#7A827C]">
-                      Silakan periksa dan perbaiki teks di bawah apabila terdapat ketidaksesuaian karakter.
+                      Data di bawah terisi otomatis dari pemindaian OCR. Anda dapat memeriksa dan
+                      mengoreksi karakter teks apabila diperlukan.
                     </p>
                   </div>
                 </div>
 
-                <span className="inline-flex items-center gap-1.5 self-start sm:self-auto px-3 py-1 rounded-md bg-[#E8F5EC] text-[#156E33] text-[11px] font-bold shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#156E33]" />
-                  Terbaca Otomatis
-                </span>
+                {/* Badge Status Pembacaan */}
+                <div className="shrink-0 self-start sm:self-auto">
+                  {ocrStatus === 'scanning' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-blue-50 text-blue-700 text-[11px] font-bold">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Sedang Memindai...
+                    </span>
+                  ) : ocrStatus === 'success' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#E8F5EC] text-[#156E33] text-[11px] font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#156E33]" />
+                      Terbaca Otomatis (Lengkap)
+                    </span>
+                  ) : ocrStatus === 'partial' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-50 text-amber-800 text-[11px] font-bold">
+                      <Info className="w-3.5 h-3.5" />
+                      Terbaca Sebagian
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-stone-100 text-stone-600 text-[11px] font-medium">
+                      Menunggu Pemindaian e-KTP
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {/* Banner Info Status OCR */}
+              {ocrMessage && (
+                <div
+                  className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                    ocrStatus === 'success'
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : ocrStatus === 'partial'
+                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                      : ocrStatus === 'scanning'
+                      ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                      : 'bg-stone-50 text-stone-700 border border-stone-200'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                  <span>{ocrMessage}</span>
+                </div>
+              )}
 
               {/* NIK Field */}
               <div className="space-y-1.5">
@@ -470,20 +719,28 @@ export default function FarmerVerificationPage() {
                     inputMode="numeric"
                     maxLength={16}
                     value={nik}
+                    placeholder="Nomor NIK 16 digit (Otomatis dari hasil pemindaian OCR)"
                     onChange={(e) => setNik(e.target.value.replace(/\D/g, ''))}
-                    className="w-full bg-transparent px-3.5 py-2.5 text-sm font-semibold text-[#1C241E] outline-none"
+                    className="w-full bg-transparent px-3.5 py-2.5 text-sm font-semibold text-[#1C241E] outline-none placeholder:text-stone-400 placeholder:font-normal"
                   />
-                  <button
-                    type="button"
-                    onClick={handleCopyNik}
-                    title="Salin NIK"
-                    className="px-3.5 py-2.5 text-[#5C635E] hover:text-[#156E33] transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
+                  {nik && (
+                    <button
+                      type="button"
+                      onClick={handleCopyNik}
+                      title="Salin NIK"
+                      className="px-3.5 py-2.5 text-[#5C635E] hover:text-[#156E33] transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 {copied && (
                   <p className="text-[11px] text-[#156E33] font-medium">NIK berhasil disalin!</p>
+                )}
+                {nik && nik.length !== 16 && (
+                  <p className="text-[11px] text-amber-600 font-medium">
+                    NIK harus berjumlah 16 digit angka (saat ini: {nik.length} digit).
+                  </p>
                 )}
               </div>
 
@@ -496,8 +753,9 @@ export default function FarmerVerificationPage() {
                   <input
                     type="text"
                     value={fullName}
+                    placeholder="Nama lengkap sesuai KTP (Otomatis dari OCR)"
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full rounded-xl bg-[#F5F2EB] border border-transparent focus:border-[#156E33] focus:bg-white px-4 py-2.5 text-sm font-medium text-[#1C241E] outline-none transition-colors"
+                    className="w-full rounded-xl bg-[#F5F2EB] border border-transparent focus:border-[#156E33] focus:bg-white px-4 py-2.5 text-sm font-medium text-[#1C241E] outline-none transition-colors placeholder:text-stone-400"
                   />
                 </div>
 
@@ -508,8 +766,16 @@ export default function FarmerVerificationPage() {
                   <input
                     type="text"
                     value={birthInfo}
-                    onChange={(e) => setBirthInfo(e.target.value)}
-                    className="w-full rounded-xl bg-[#F5F2EB] border border-transparent focus:border-[#156E33] focus:bg-white px-4 py-2.5 text-sm font-medium text-[#1C241E] outline-none transition-colors"
+                    placeholder="Contoh: Demak, 14 Mei 1978 (Otomatis dari OCR)"
+                    onChange={(e) => {
+                      setBirthInfo(e.target.value);
+                      const parts = e.target.value.split(/[,/]/);
+                      if (parts.length >= 2) {
+                        setBirthPlace(parts[0].trim());
+                        setBirthDate(parts.slice(1).join(',').trim());
+                      }
+                    }}
+                    className="w-full rounded-xl bg-[#F5F2EB] border border-transparent focus:border-[#156E33] focus:bg-white px-4 py-2.5 text-sm font-medium text-[#1C241E] outline-none transition-colors placeholder:text-stone-400"
                   />
                 </div>
               </div>
@@ -522,8 +788,9 @@ export default function FarmerVerificationPage() {
                 <textarea
                   rows={2}
                   value={ktpAddress}
+                  placeholder="Alamat lengkap, RT/RW, Kelurahan, Kecamatan, Kota (Otomatis dari OCR)"
                   onChange={(e) => setKtpAddress(e.target.value)}
-                  className="w-full rounded-xl bg-[#F5F2EB] border border-transparent focus:border-[#156E33] focus:bg-white px-4 py-3 text-sm font-medium text-[#1C241E] leading-relaxed outline-none resize-none transition-colors"
+                  className="w-full rounded-xl bg-[#F5F2EB] border border-transparent focus:border-[#156E33] focus:bg-white px-4 py-3 text-sm font-medium text-[#1C241E] leading-relaxed outline-none resize-none transition-colors placeholder:text-stone-400"
                 />
               </div>
             </div>
@@ -543,21 +810,43 @@ export default function FarmerVerificationPage() {
                 </span>
               </label>
 
+              {/* Status Validasi Sebelum Kirim */}
+              {!canSubmit && (
+                <div className="p-3 rounded-xl bg-stone-100 text-stone-600 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>
+                    {!ktpFile && !ktpPreviewUrl
+                      ? 'Langkah 1: Unggah atau ambil foto e-KTP terlebih dahulu untuk memulai pemindaian OCR.'
+                      : ocrStatus === 'scanning'
+                      ? 'Langkah 2: Sedang memindai teks dokumen e-KTP dengan OCR, mohon tunggu...'
+                      : !isFormComplete
+                      ? 'Langkah 3: Pastikan seluruh kolom data (NIK 16 digit, Nama, TTL, Alamat) telah terisi lengkap.'
+                      : 'Centang persetujuan pemrosesan data untuk mengaktifkan tombol verifikasi.'}
+                  </span>
+                </div>
+              )}
+
               <div className="flex justify-center pt-1">
                 <button
                   type="button"
                   onClick={handleSubmitVerification}
-                  disabled={!agreed || isSubmitting}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-[#156E33] hover:bg-[#105728] disabled:opacity-50 text-white font-bold text-sm inline-flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                  disabled={!canSubmit}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-[#156E33] hover:bg-[#105728] disabled:bg-stone-300 disabled:cursor-not-allowed disabled:text-stone-500 text-white font-bold text-sm inline-flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
                 >
                   {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : ocrStatus === 'scanning' ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <Send className="w-4 h-4" />
                   )}
                   {isSubmitting
                     ? 'Mengirim Dokumen...'
-                    : 'Kirim Dokumen Verifikasi Sekarang'}
+                    : ocrStatus === 'scanning'
+                    ? 'Sedang Memindai OCR...'
+                    : isFormComplete
+                    ? 'Kirim Dokumen Verifikasi Sekarang'
+                    : 'Lengkapi Data OCR Terlebih Dahulu'}
                 </button>
               </div>
             </div>
