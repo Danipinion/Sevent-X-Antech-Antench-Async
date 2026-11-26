@@ -16,6 +16,7 @@ import {
   Plus,
   Loader2,
   Image as ImageIcon,
+  XCircle,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { fetchApi, FarmerApi, type FarmerPurchaseOrder } from '@/services/api';
@@ -42,13 +43,24 @@ type FarmerOrder = FarmerPurchaseOrder & {
   order_code?: string;
   listing_id?: string;
   status_label?: string;
+  quantity?: number;
+  agreed_price?: number;
   offered_quantity?: number;
   offered_price?: number;
   total_offered_price?: number;
+  total_price?: number;
+  total_amount?: number;
+  unit?: string;
+  pickup_date?: string;
+  ready_date?: string;
   pickup_time_slot?: string;
   vehicle_type?: string;
   vehicle_plate?: string;
   driver_name?: string;
+  is_ready_for_pickup?: boolean;
+  counter_price?: number;
+  counter_quantity?: number;
+  counter_notes?: string;
 };
 
 type FarmerOrdersResponse = {
@@ -59,7 +71,10 @@ type FarmerOrdersResponse = {
 };
 
 const isWaitingConfirmation = (status?: string) =>
-  status === 'waiting_confirmation' || status === 'pending';
+  status === 'waiting_confirmation' || status === 'pending' || status === 'in_negotiation';
+
+const isScheduledOrder = (status?: string) =>
+  status === 'scheduled_pickup' || status === 'scheduled' || status === 'in_transit';
 
 export default function FarmerOrdersPage() {
   const navigate = useNavigate();
@@ -156,33 +171,206 @@ export default function FarmerOrdersPage() {
     }
   };
 
-  const handleConfirmOrder = async (
-    orderId: string,
-    newStatus: 'scheduled' | 'in_transit',
-    title: string
-  ) => {
+  // 1. Terima Penawaran & Jadwalkan Penjemputan (POST /farmer/orders/{id}/accept)
+  const handleAcceptOffer = async (orderId: string) => {
     try {
-      await FarmerApi.updateOrderStatus(orderId, newStatus);
+      const res = await FarmerApi.acceptOrder(orderId);
+      const updatedOrder = (res as any)?.data || res;
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: 'scheduled_pickup',
+                status_label: 'Armada Menuju Lokasi',
+                ...(updatedOrder || {}),
+              }
+            : o
+        )
       );
 
       await Swal.fire({
         icon: 'success',
-        title,
-        text: 'Status pesanan dan jadwal armada telah diperbarui ke sistem.',
-        timer: 1800,
+        title: 'Penawaran Diterima & Dijadwalkan',
+        text: 'Penawaran pembeli berhasil diterima dan jadwal penjemputan armada dikonfirmasi.',
+        timer: 2000,
         showConfirmButton: false,
       });
     } catch (err: any) {
       await Swal.fire({
         icon: 'error',
-        title: 'Gagal Memperbarui Status',
-        text: err?.message || 'Terjadi kesalahan saat menghubungi server.',
+        title: 'Gagal Menerima Penawaran',
+        text: err?.message || 'Terjadi kesalahan saat memproses penerimaan pesanan.',
         confirmButtonColor: '#156E33',
       });
     }
   };
+
+  // 2. Negosiasi Harga Penawaran (POST /farmer/orders/{id}/negotiate)
+  const handleNegotiateOffer = async (order: FarmerOrder) => {
+    const currentPrice = Number(order.offered_price || order.agreed_price || 0);
+    const currentQty = Number(order.offered_quantity || order.quantity || 1000);
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Negosiasi Harga Penawaran',
+      html: `
+        <div style="text-align: left; font-size: 13px; font-family: inherit;">
+          <p style="margin-bottom: 8px; color: #5C635E;">Harga tawaran saat ini: <b>Rp ${currentPrice.toLocaleString('id-ID')} / ${order.unit || 'kg'}</b></p>
+          <label style="display:block; font-weight: 600; margin-bottom: 4px;">Harga Tandingan Petani (Rp / ${order.unit || 'kg'}):</label>
+          <input id="swal-counter-price" type="number" class="swal2-input" style="width: 100%; margin: 0 0 12px 0;" value="${currentPrice + 200}" min="100" step="50" required>
+          
+          <label style="display:block; font-weight: 600; margin-bottom: 4px;">Kuantitas yang Disetujui (kg):</label>
+          <input id="swal-counter-qty" type="number" class="swal2-input" style="width: 100%; margin: 0 0 12px 0;" value="${currentQty}" min="500" step="100">
+          
+          <label style="display:block; font-weight: 600; margin-bottom: 4px;">Catatan Tambahan untuk Pembeli (opsional):</label>
+          <input id="swal-counter-notes" type="text" class="swal2-input" style="width: 100%; margin: 0;" placeholder="Contoh: Kadar air rendah, mutu super">
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Kirim Negosiasi',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#156E33',
+      preConfirm: () => {
+        const price = Number((document.getElementById('swal-counter-price') as HTMLInputElement)?.value);
+        const qty = Number((document.getElementById('swal-counter-qty') as HTMLInputElement)?.value);
+        const notes = (document.getElementById('swal-counter-notes') as HTMLInputElement)?.value || '';
+
+        if (!price || price <= 0) {
+          Swal.showValidationMessage('Harga tandingan harus diisi dan lebih dari 0');
+          return false;
+        }
+        return { price, qty: qty > 0 ? qty : undefined, notes };
+      },
+    });
+
+    if (formValues) {
+      try {
+        const res = await FarmerApi.negotiateOrder(order.id, {
+          counter_price: formValues.price,
+          counter_quantity: formValues.qty,
+          counter_notes: formValues.notes,
+        });
+        const updatedOrder = (res as any)?.data || res;
+
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? {
+                  ...o,
+                  status: 'in_negotiation',
+                  status_label: 'Dalam Negosiasi',
+                  counter_price: formValues.price,
+                  ...(updatedOrder || {}),
+                }
+              : o
+          )
+        );
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Negosiasi Terkirim',
+          text: `Harga tandingan Rp ${formValues.price.toLocaleString('id-ID')} telah diajukan ke pembeli.`,
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      } catch (err: any) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Gagal Mengirim Negosiasi',
+          text: err?.message || 'Terjadi kesalahan saat mengirim harga negosiasi.',
+          confirmButtonColor: '#156E33',
+        });
+      }
+    }
+  };
+
+  // 3. Tolak Penawaran Tengkulak (POST /farmer/orders/{id}/reject)
+  const handleRejectOffer = async (orderId: string) => {
+    const { value: reason, isConfirmed } = await Swal.fire({
+      title: 'Tolak Penawaran Pembeli?',
+      text: 'Pesanan penawaran ini akan dibatalkan.',
+      input: 'text',
+      inputPlaceholder: 'Tulis alasan penolakan (opsional)...',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Tolak',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#DC2626',
+    });
+
+    if (isConfirmed) {
+      try {
+        const res = await FarmerApi.rejectOrder(orderId, reason || '');
+        const updatedOrder = (res as any)?.data || res;
+
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  status: 'cancelled',
+                  status_label: 'Dibatalkan',
+                  ...(updatedOrder || {}),
+                }
+              : o
+          )
+        );
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Penawaran Ditolak',
+          text: 'Penawaran telah dibatalkan dari antrean pesanan Anda.',
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      } catch (err: any) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Gagal Menolak Penawaran',
+          text: err?.message || 'Terjadi kesalahan saat menghubungi server.',
+          confirmButtonColor: '#156E33',
+        });
+      }
+    }
+  };
+
+  // 4. Konfirmasi Siap Muat (POST /farmer/orders/{id}/confirm-ready)
+  const handleConfirmReady = async (orderId: string) => {
+    try {
+      const res = await FarmerApi.confirmReady(orderId);
+      const updatedOrder = (res as any)?.data || res;
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                is_ready_for_pickup: true,
+                status: 'scheduled_pickup',
+                ...(updatedOrder || {}),
+              }
+            : o
+        )
+      );
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Lumbung Siap Muat Dikonfirmasi',
+        text: 'Armada pembeli telah diberitahu bahwa muatan hasil panen sudah siap ditimbang dan dimuat.',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Gagal Konfirmasi Siap Muat',
+        text: err?.message || 'Terjadi kesalahan saat konfirmasi muat ke server.',
+        confirmButtonColor: '#156E33',
+      });
+    }
+  };
+
 
   // Hitung statistik dinamis dari data nyata
   const completedOrders = useMemo(
@@ -196,7 +384,7 @@ export default function FarmerOrdersPage() {
   );
 
   const scheduledOrders = useMemo(
-    () => orders.filter((o) => o.status === 'scheduled' || o.status === 'in_transit'),
+    () => orders.filter((o) => isScheduledOrder(o.status)),
     [orders]
   );
 
@@ -223,8 +411,7 @@ export default function FarmerOrdersPage() {
         if (activeTab === 'pending' && !isWaitingConfirmation(order.status)) return false;
         if (
           activeTab === 'scheduled' &&
-          order.status !== 'scheduled' &&
-          order.status !== 'in_transit'
+          !isScheduledOrder(order.status)
         )
           return false;
         if (activeTab === 'completed' && order.status !== 'completed') return false;
@@ -318,17 +505,7 @@ export default function FarmerOrdersPage() {
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 type="button"
-                onClick={() =>
-                  Swal.fire({
-                    icon: 'success',
-                    title: 'Titik Jemput Dibagikan',
-                    text: `Koordinat titik muat (${
-                      upcomingPickup.pickup_address || 'Lokasi Gudang Tani'
-                    }) telah dikirim ke pembeli.`,
-                    timer: 1800,
-                    showConfirmButton: false,
-                  })
-                }
+                onClick={() => handleConfirmReady(upcomingPickup.id)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
               >
                 <MapPin className="w-3.5 h-3.5 text-[#156E33]" />
@@ -336,17 +513,11 @@ export default function FarmerOrdersPage() {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  handleConfirmOrder(
-                    upcomingPickup.id,
-                    'in_transit',
-                    'Lumbung Siap Muat Dikonfirmasi'
-                  )
-                }
+                onClick={() => handleConfirmReady(upcomingPickup.id)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                {upcomingPickup.status === 'in_transit' ? 'Sudah Dikonfirmasi' : 'Siap Muat'}
+                {upcomingPickup.is_ready_for_pickup ? 'Sudah Dikonfirmasi' : 'Siap Muat'}
               </button>
             </div>
           </div>
@@ -728,62 +899,75 @@ export default function FarmerOrdersPage() {
                         </div>
                       </div>
 
-                      {/* Action Buttons sesuai status */}
-                      {(isPending || isScheduled) && (
-                        <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                          {order.buyer_phone && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                Swal.fire({
-                                  icon: 'info',
-                                  title: 'Kontak Pembeli',
-                                  text: `${order.buyer_name || 'Pembeli'}: ${order.buyer_phone}`,
-                                  confirmButtonColor: '#156E33',
-                                })
-                              }
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F5F2EB] hover:bg-[#EAE6DC] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              Hubungi Pembeli
-                            </button>
-                          )}
+                      {/* Action Buttons sesuai status: Accept, Negotiate, Reject, Confirm Ready */}
+                      <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                        {order.buyer_phone && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              Swal.fire({
+                                icon: 'info',
+                                title: 'Kontak Pembeli',
+                                text: `${order.buyer_name || 'Pembeli'}: ${order.buyer_phone}`,
+                                confirmButtonColor: '#156E33',
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F5F2EB] hover:bg-[#EAE6DC] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            Hubungi Pembeli
+                          </button>
+                        )}
 
-                          {isPending && (
+                        {isPending && (
+                          <>
                             <button
                               type="button"
-                              onClick={() =>
-                                handleConfirmOrder(
-                                  order.id,
-                                  'scheduled',
-                                  'Penawaran Diterima & Dijadwalkan'
-                                )
-                              }
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer"
+                              onClick={() => handleAcceptOffer(order.id)}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               Terima Penawaran &amp; Jadwalkan
                             </button>
-                          )}
-
-                          {status === 'scheduled' && (
                             <button
                               type="button"
-                              onClick={() =>
-                                handleConfirmOrder(
-                                  order.id,
-                                  'in_transit',
-                                  'Konfirmasi Muat Berhasil'
-                                )
-                              }
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer"
+                              onClick={() => handleNegotiateOffer(order)}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#E5E2DA] hover:bg-[#FAF8F4] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              Konfirmasi Muat
+                              <ArrowUpDown className="w-3.5 h-3.5 text-[#8A5A19]" />
+                              Negosiasi Harga
                             </button>
-                          )}
-                        </div>
-                      )}
+                            <button
+                              type="button"
+                              onClick={() => handleRejectOffer(order.id)}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-xs font-semibold text-red-600 transition-colors cursor-pointer"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              Tolak Penawaran
+                            </button>
+                          </>
+                        )}
+
+                        {isScheduled && (
+                          <>
+                            {order.is_ready_for_pickup ? (
+                              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#E8F5EC] text-[#156E33] text-xs font-bold border border-[#CDEBD4]">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Lumbung Siap Muat (Terkonfirmasi)
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmReady(order.id)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Konfirmasi Siap Muat
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

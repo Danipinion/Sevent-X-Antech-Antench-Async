@@ -356,12 +356,42 @@ export const BuyerApi = {
 };
 
 export const FarmerApi = {
-  getOrders: () => fetchApi<{ data: FarmerPurchaseOrder[] }>('/orders'),
-  updateOrderStatus: (orderId: string, status: string, notes?: string) =>
-    fetchApi(`/orders/${orderId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status, notes }),
+  getOrders: () => fetchApi<{ data: FarmerPurchaseOrder[] }>('/farmer/orders'),
+  getOrderDetail: (orderId: string) =>
+    fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}`),
+  acceptOrder: (orderId: string) =>
+    fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}/accept`, {
+      method: 'POST',
     }),
+  negotiateOrder: (
+    orderId: string,
+    payload: { counter_price: number; counter_quantity?: number; counter_notes?: string }
+  ) =>
+    fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}/negotiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  rejectOrder: (orderId: string, reason?: string) =>
+    fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason || '' }),
+    }),
+  confirmReady: (orderId: string) =>
+    fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}/confirm-ready`, {
+      method: 'POST',
+    }),
+  updateOrderStatus: async (orderId: string, status: string, notes?: string) => {
+    if (status === 'scheduled' || status === 'scheduled_pickup' || status === 'accepted') {
+      return FarmerApi.acceptOrder(orderId);
+    }
+    if (status === 'in_transit' || status === 'ready') {
+      return FarmerApi.confirmReady(orderId);
+    }
+    if (status === 'rejected' || status === 'cancelled') {
+      return FarmerApi.rejectOrder(orderId, notes);
+    }
+    return FarmerApi.acceptOrder(orderId);
+  },
   createListing: async (payload: Record<string, unknown>) => {
     try {
       return await fetchApi('/farmer/offers', {
