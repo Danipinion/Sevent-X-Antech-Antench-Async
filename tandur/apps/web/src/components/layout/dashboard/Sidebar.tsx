@@ -96,9 +96,14 @@ export const DashboardSidebar = ({
                         <div className="flex items-center gap-2 rounded-xl bg-[#f3ede5] px-3 py-2.5">
                             <MapPin size={14} strokeWidth={1.9} className="shrink-0 text-[#835425]" />
 
-                            <span className="text-[12px] font-semibold text-[#373530]">Wilayah Kerja</span>
+                            <span className="shrink-0 text-[12px] font-semibold text-[#373530]">
+                                Wilayah Kerja
+                            </span>
 
-                            <span className="ml-auto rounded-lg bg-[#d6ffd4] px-2.5 py-0.5 text-[11px] font-semibold text-[#1c783d]">
+                            <span
+                                title={region}
+                                className="ml-auto max-w-[115px] truncate rounded-lg bg-[#d6ffd4] px-2.5 py-0.5 text-[11px] font-semibold text-[#1c783d]"
+                            >
                                 {region}
                             </span>
                         </div>

@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Bell,
-  ChevronDown,
   Menu,
   Search,
   ShieldCheck,
@@ -28,17 +27,61 @@ const topLinks = [
   { label: "Mulai Jual Hasil Panen", href: "/jual" },
 ];
 
-export default function Header({ cartCount = 3 }: { cartCount?: number }) {
+const NON_CITY_PREFIX =
+  /^(?:jl\.?|jalan|gg\.?|gang|dsn\.?|dusun|ds\.?|desa|kel\.?|kelurahan|kec\.?|kecamatan|rt|rw|no\.?|blok|perum|perumahan|prov\.?|provinsi|jawa|sumatera|kalimantan|sulawesi|bali|papua|nusa|maluku|banten|dki|diy)\b/i;
+
+function extractCityOnly(address?: string): string | null {
+  if (!address || typeof address !== "string" || !address.trim()) return null;
+
+  const explicitMatch = address.match(
+    /\b(?:Kota|Kabupaten|Kab\.?)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i
+  );
+  if (explicitMatch && explicitMatch[1]) {
+    return explicitMatch[1].trim();
+  }
+
+  const parts = address
+    .split(",")
+    .map((p) => p.replace(/\b\d{5}\b/g, "").trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const cleanPart = parts[i].replace(/^(?:Kota|Kabupaten|Kab\.?)\s+/i, "").trim();
+      if (cleanPart && !NON_CITY_PREFIX.test(cleanPart)) {
+        return cleanPart;
+      }
+    }
+  }
+
+  const withoutZip = address.replace(/\b\d{5}\b/g, "").trim();
+  const words = withoutZip.split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0];
+  if (words.length > 1) {
+    const lastWord = words[words.length - 1].replace(/[^A-Za-z]/g, "");
+    if (lastWord && !/^(?:no|rt|rw|timur|barat|tengah|utara|selatan)$/i.test(lastWord)) {
+      return lastWord;
+    }
+  }
+
+  return null;
+}
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://localhost:8000/api";
+
+export default function Header({ cartCount = 0 }: { cartCount?: number }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSearchCat, setSelectedSearchCat] = useState("Semua Produk");
-  const [searchCatOpen, setSearchCatOpen] = useState(false);
+  const [liveCartCount, setLiveCartCount] = useState<number>(cartCount);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const catRef = useRef<HTMLDivElement>(null);
+  const catNavRef = useRef<HTMLLIElement>(null);
 
   // Deteksi status user login
   const [user, setUser] = useState<any>(null);
@@ -56,15 +99,88 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
     }
   }, []);
 
+  // Ambil jumlah item keranjang langsung dari backend
+  const fetchCartCount = useCallback(async () => {
+    const token =
+      localStorage.getItem("token") || sessionStorage.getItem("token");
+
+    if (!token) {
+      setLiveCartCount(0);
+      return;
+    }
+
+    try {
+      const cleanBase = API_BASE_URL.replace(/\/+$/, "");
+      const endpoint = cleanBase.endsWith("/api")
+        ? `${cleanBase}/cart`
+        : `${cleanBase}/api/cart`;
+
+      const response = await fetch(endpoint, {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) return;
+
+      const json = await response.json();
+      const items =
+        json?.data?.items ||
+        json?.items ||
+        (Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []);
+
+      // Hitung total jenis produk atau total kuantitas dari respons backend
+      if (typeof json?.total_items === "number") {
+        setLiveCartCount(json.total_items);
+      } else if (typeof json?.data?.total_items === "number") {
+        setLiveCartCount(json.data.total_items);
+      } else if (Array.isArray(items)) {
+        const totalQty = items.reduce(
+          (sum: number, item: any) => sum + (Number(item.quantity ?? item.qty) || 1),
+          0
+        );
+        setLiveCartCount(totalQty);
+      }
+    } catch {
+      // Pertahankan state terakhir jika jaringan gagal
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCartCount();
+
+    // Sinkronisasi otomatis saat ada perubahan keranjang dari halaman produk/keranjang
+    const handleCartUpdated = () => fetchCartCount();
+    window.addEventListener("cartUpdated", handleCartUpdated);
+    window.addEventListener("storage", handleCartUpdated);
+
+    return () => {
+      window.removeEventListener("cartUpdated", handleCartUpdated);
+      window.removeEventListener("storage", handleCartUpdated);
+    };
+  }, [fetchCartCount, user]);
+
+  // Ekstrak nama kotanya saja dari data user yang login
+  const userCity =
+    extractCityOnly(
+      user?.address ||
+        user?.alamat ||
+        user?.ktp_address ||
+        user?.profile?.address ||
+        user?.city ||
+        user?.regency ||
+        user?.location
+    ) || "Madiun";
+
   // Tutup dropdown jika klik di luar
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setUserDropdownOpen(false);
       }
-      if (catRef.current && !catRef.current.contains(event.target as Node)) {
+      if (catNavRef.current && !catNavRef.current.contains(event.target as Node)) {
         setCategoryDropdownOpen(false);
-        setSearchCatOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -101,6 +217,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("user");
       setUser(null);
+      setLiveCartCount(0);
       setUserDropdownOpen(false);
       Swal.fire({
         icon: "success",
@@ -147,94 +264,44 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
 
-                    {/* Logo */}
-                    <a href="/" className="flex shrink-0 items-center gap-2">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-lg ">
-                            <img src="/favicon.svg" alt="logo" />
-                        </span>
-                        <span className="leading-none">
-                            <span className="block text-base font-extrabold tracking-tight text-green-800 sm:text-lg">
-                                TANDUR
-                            </span>
-                            <span className="block text-[9px] font-medium tracking-widest text-gray-500">
-                                AGRIBISNIS
-                            </span>
-                        </span>
-                    </a>
+          {/* Logo */}
+          <a href="/" className="flex shrink-0 items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg">
+              <img src="/favicon.svg" alt="logo" />
+            </span>
+            <span className="leading-none">
+              <span className="block text-base font-extrabold tracking-tight text-green-800 sm:text-lg">
+                TANDUR
+              </span>
+              <span className="block text-[9px] font-medium tracking-widest text-gray-500">
+                AGRIBISNIS
+              </span>
+            </span>
+          </a>
 
-          {/* Location */}
-          <button
-            type="button"
-            onClick={() => {
-              Swal.fire({
-                title: "Lokasi Pengiriman",
-                text: "Wilayah operasional pengiriman saat ini: Jakarta Selatan, Demak, Semarang, Kudus, dan sekitarnya.",
-                icon: "info",
-                confirmButtonColor: "#15803d",
-              });
-            }}
-            className="hidden shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-left hover:bg-gray-50 lg:flex"
-          >
+          {/* Location (statis, tanpa dropdown) */}
+          <div className="hidden shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-left lg:flex">
             <MapPin size={18} className="text-green-700" />
             <span className="leading-tight">
               <span className="block text-[10px] text-gray-500">Kirim ke: Lokasi Akurat</span>
-              <span className="flex items-center gap-1 text-xs font-semibold text-gray-800">
-                {user?.city || "Jakarta Selatan"} <ChevronDown size={12} />
+              <span className="block text-xs font-semibold text-gray-800">
+                {userCity}
               </span>
             </span>
-          </button>
+          </div>
 
-          {/* Search (desktop/tablet) */}
+          {/* Search (statis, tanpa dropdown) */}
           <form
             role="search"
             onSubmit={handleSearch}
             className="relative hidden h-10 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-gray-300 bg-white focus-within:border-green-700 focus-within:ring-2 focus-within:ring-green-700/20 md:flex"
           >
-            <div className="relative h-full" ref={catRef}>
-              <button
-                type="button"
-                onClick={() => setSearchCatOpen(!searchCatOpen)}
-                className="flex h-full shrink-0 items-center gap-1 border-r border-gray-200 bg-gray-50 px-3 text-xs font-medium text-gray-700 hover:bg-gray-100"
-              >
-                {selectedSearchCat} <ChevronDown size={14} />
-              </button>
-              {searchCatOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-44 rounded-md border border-gray-200 bg-white shadow-lg py-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSearchCat("Semua Produk");
-                      setSearchCatOpen(false);
-                      navigate("/produk");
-                    }}
-                    className="block w-full px-3 py-1.5 text-left text-gray-700 hover:bg-green-50 hover:text-green-800"
-                  >
-                    Semua Produk
-                  </button>
-                  {categories.map((c) => (
-                    <button
-                      key={c.slug}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSearchCat(c.label);
-                        setSearchCatOpen(false);
-                        navigate(c.href);
-                      }}
-                      className="block w-full px-3 py-1.5 text-left text-gray-700 hover:bg-green-50 hover:text-green-800"
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <input
               type="search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Cari beras organik, sayur hidroponik, pupuk kompos..."
-              className="h-full min-w-0 flex-1 px-3 text-sm outline-none placeholder:text-gray-400"
+              className="h-full min-w-0 flex-1 px-3.5 text-sm outline-none placeholder:text-gray-400"
             />
             <button
               type="submit"
@@ -247,16 +314,16 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
 
           {/* Actions */}
           <div className="ml-auto flex items-center gap-1 sm:gap-2 md:ml-0">
-            {/* Keranjang */}
+            {/* Keranjang dengan badge real-time dari backend */}
             <Link
               to="/keranjang"
               aria-label="Keranjang"
               className="relative rounded-lg p-2 text-gray-700 hover:bg-gray-100"
             >
               <ShoppingCart size={22} />
-              {cartCount > 0 && (
+              {liveCartCount > 0 && (
                 <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
-                  {cartCount}
+                  {liveCartCount}
                 </span>
               )}
             </Link>
@@ -311,8 +378,6 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                             <span className="inline-block rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 capitalize">
                               {user.role === "farmer"
                                 ? "Mitra Petani"
-                                : user.role === "middleman"
-                                ? "Mitra Tengkulak"
                                 : "Mitra Pembeli"}
                             </span>
                           </div>
@@ -335,7 +400,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                             onClick={() => setUserDropdownOpen(false)}
                             className="flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-green-50 hover:text-green-800"
                           >
-                            <LayoutDashboard size={16} /> Dashboard Tengkulak
+                            <LayoutDashboard size={16} /> Dashboard Mitra
                           </Link>
                         )}
                         <Link
@@ -356,7 +421,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                           onClick={() => setUserDropdownOpen(false)}
                           className="flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-green-50 hover:text-green-800"
                         >
-                          <ShoppingCart size={16} /> Keranjang Belanja ({cartCount})
+                          <ShoppingCart size={16} /> Keranjang Belanja ({liveCartCount})
                         </Link>
                       </div>
 
@@ -422,34 +487,43 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
         </form>
       </div>
 
-      {/* Category nav (desktop) */}
+      {/* Category nav (desktop - SATU dropdown saja dengan ikon garis tiga di "Semua Kategori") */}
       <nav aria-label="Kategori" className="hidden border-b border-stone-200/70 bg-[#f6f1e7] md:block">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4">
-          <ul className="flex min-w-0 items-center gap-5 overflow-x-auto whitespace-nowrap text-sm lg:gap-7">
-            {/* Dropdown Semua Kategori */}
-            <li className="relative">
+          <ul className="flex min-w-0 items-center gap-5 whitespace-nowrap text-sm lg:gap-7">
+            {/* Satu-satunya Dropdown di Header Bawah dengan ikon garis tiga */}
+            <li className="relative" ref={catNavRef}>
               <button
                 type="button"
                 onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
                 className="flex items-center gap-2 py-2.5 font-semibold text-gray-800 hover:text-green-700"
               >
-                <Menu size={16} /> Semua Kategori <ChevronDown size={14} />
+                <Menu size={16} /> Semua Kategori
               </button>
               {categoryDropdownOpen && (
                 <div className="absolute left-0 top-full z-50 mt-0.5 w-56 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
                   <Link
                     to="/produk"
                     onClick={() => setCategoryDropdownOpen(false)}
-                    className="flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-green-50 hover:text-green-800"
+                    className="block border-b border-gray-100 px-4 py-2 text-xs font-semibold text-green-800 hover:bg-green-50"
                   >
                     Semua Produk
                   </Link>
-                  
+                  {categories.map((c) => (
+                    <Link
+                      key={c.slug}
+                      to={c.href}
+                      onClick={() => setCategoryDropdownOpen(false)}
+                      className="block px-4 py-2 text-xs text-gray-700 hover:bg-green-50 hover:text-green-800"
+                    >
+                      {c.label}
+                    </Link>
+                  ))}
                 </div>
               )}
             </li>
 
-            {/* List Kategori Utama */}
+            {/* Link Kategori Utama (tanpa dropdown) */}
             {categories.map((c) => (
               <li key={c.slug}>
                 <Link to={c.href} className="block py-2.5 text-gray-600 hover:text-green-700">
@@ -472,7 +546,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
           <ul className="mx-auto max-w-7xl divide-y divide-gray-100 px-4 text-sm">
             <li className="flex items-center gap-2 py-3 text-gray-700">
               <MapPin size={16} className="text-green-700" />
-              Kirim ke: <b>{user?.city || "Jakarta Selatan"}</b>
+              Kirim ke: <b>{userCity}</b>
             </li>
             <li>
               <Link
@@ -494,7 +568,7 @@ export default function Header({ cartCount = 3 }: { cartCount?: number }) {
                 </Link>
               </li>
             ))}
-          
+
             {topLinks.map((l) => (
               <li key={l.href}>
                 <Link

@@ -5,6 +5,7 @@ import { NotificationBell } from "@/features/notifications";
 export type DashboardUser = {
   name: string;
   subtitle: string;
+  location?: string;
 };
 
 type DashboardHeaderProps = {
@@ -47,7 +48,11 @@ export const DashboardHeader = ({
 
       <input
         type="search"
-        placeholder="Cari lokasi atau komoditas"
+        placeholder={
+          user.location
+            ? `Cari lokasi atau komoditas di ${user.location}`
+            : "Cari lokasi atau komoditas"
+        }
         className="
           h-9 w-full rounded-xl border border-[#f0ece7] bg-white
           pl-10 pr-3 text-[13px] text-[#2b2925]

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -39,8 +39,57 @@ import {
   CartPage,
 } from "../features/buyer";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://localhost:8000/api";
+
+// Helper untuk mengambil nama kotanya saja dari string address (tanpa jalan, provinsi, maupun awalan Kota/Kab)
+function extractCityOnly(address?: string): string | null {
+  if (!address || !address.trim()) return null;
+
+  // 1. Jika ada pola eksplisit "Kota Madiun" atau "Kabupaten/Kab. Madiun", ambil nama kotanya saja ("Madiun")
+  const explicitMatch = address.match(
+    /\b(?:Kota|Kabupaten|Kab\.?)\s+([A-Za-z\s]+?)(?:,|$)/i
+  );
+  if (explicitMatch && explicitMatch[1]) {
+    return explicitMatch[1].trim();
+  }
+
+  // 2. Jika format dipisah koma (misal: "Jl. Pahlawan No. 12, Madiun, Jawa Timur" atau "Madiun, Jawa Timur")
+  const parts = address
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  let candidate = "";
+  if (parts.length >= 3) {
+    // Bagian sebelum provinsi biasanya adalah kota/kabupaten
+    candidate = parts[parts.length - 2];
+  } else if (parts.length === 2) {
+    // Jika 2 bagian ("Madiun, Jawa Timur" atau "Jl. Melati, Madiun")
+    const isFirstStreet =
+      /^(?:jl\.?|jalan|dsn\.?|dusun|ds\.?|desa|kec\.?|kecamatan|rt|rw)\b/i.test(
+        parts[0]
+      );
+    candidate = isFirstStreet ? parts[1] : parts[0];
+  } else {
+    candidate = parts[0];
+  }
+
+  // Bersihkan awalan "Kota", "Kabupaten", "Kab.", dan kode pos jika ada
+  const cleaned = candidate
+    .replace(/^(?:Kota|Kabupaten|Kab\.?)\s+/i, "")
+    .replace(/\b\d{5}\b/g, "")
+    .trim();
+
+  return cleaned || null;
+}
+
 // Helper untuk membaca user aktif yang sedang login dari storage
 function getActiveUser(defaultRole: "farmer" | "middleman") {
+  const defaultCity = "Madiun";
+
   try {
     const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
     if (raw) {
@@ -49,22 +98,39 @@ function getActiveUser(defaultRole: "farmer" | "middleman") {
         u.role === "farmer"
           ? "Mitra Petani"
           : u.role === "middleman"
-          ? "Mitra Tengkulak"
+          ? "Mitra Pembeli"
           : "Mitra";
-      const regionText = u.city || u.regency || "Demak";
+
+      // Ambil nama kotanya saja dari address
+      const cityText =
+        extractCityOnly(u.address) ||
+        extractCityOnly(u.ktp_address) ||
+        extractCityOnly(u.city) ||
+        extractCityOnly(u.regency) ||
+        extractCityOnly(u.location) ||
+        defaultCity;
+
       return {
-        name: u.name || (defaultRole === "farmer" ? "Sugeng Santoso" : "Haji Supardi"),
-        subtitle: `${roleText} • ${regionText}`,
-        region: regionText,
+        name:
+          u.name ||
+          (defaultRole === "farmer" ? "Sugeng Santoso" : "Haji Supardi"),
+        subtitle: `${roleText} • ${cityText}`,
+        location: cityText,
+        region: cityText,
       };
     }
   } catch {
     // fallback
   }
+
   return {
     name: defaultRole === "farmer" ? "Sugeng Santoso" : "Haji Supardi",
-    subtitle: defaultRole === "farmer" ? "Mitra Petani • Demak" : "Mitra Pembeli Demak",
-    region: "Demak",
+    subtitle:
+      defaultRole === "farmer"
+        ? `Mitra Petani • ${defaultCity}`
+        : `Mitra Pembeli • ${defaultCity}`,
+    location: defaultCity,
+    region: defaultCity,
   };
 }
 
@@ -75,8 +141,10 @@ interface ProtectedRouteProps {
 }
 
 function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+  const userStr =
+    localStorage.getItem("user") || sessionStorage.getItem("user");
 
   if (!token || !userStr) {
     return <Navigate to="/login" replace />;
@@ -86,7 +154,8 @@ function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
     const user = JSON.parse(userStr);
     if (!allowedRoles.includes(user.role)) {
       if (user.role === "farmer") return <Navigate to="/farmer" replace />;
-      if (user.role === "middleman") return <Navigate to="/middleman" replace />;
+      if (user.role === "middleman")
+        return <Navigate to="/middleman" replace />;
       if (user.role === "buyer") return <Navigate to="/produk" replace />;
       return <Navigate to="/login" replace />;
     }
@@ -105,7 +174,11 @@ function FarmerLayoutWrapper() {
       roleLabel="Mitra Petani"
       region={activeUser.region}
       footerNote="Terverifikasi"
-      user={{ name: activeUser.name, subtitle: activeUser.subtitle }}
+      user={{
+        name: activeUser.name,
+        subtitle: activeUser.subtitle,
+        location: activeUser.location,
+      }}
       profileTo="/farmer/profil"
     />
   );
@@ -116,10 +189,14 @@ function MiddlemanLayoutWrapper() {
   return (
     <DashboardLayout
       menu={middlemanMenu}
-      roleLabel="Mitra Tengkulak"
+      roleLabel="Mitra Pembeli"
       region={activeUser.region}
       footerNote="Pasar Tani Terverifikasi"
-      user={{ name: activeUser.name, subtitle: activeUser.subtitle }}
+      user={{
+        name: activeUser.name,
+        subtitle: activeUser.subtitle,
+        location: activeUser.location,
+      }}
       profileTo="/middleman/profil"
     />
   );
@@ -155,13 +232,16 @@ function MiddlemanDashboardWrapper() {
 
 // Komponen penentu root route berdasarkan session/role login
 function RootRedirect() {
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+  const userStr =
+    localStorage.getItem("user") || sessionStorage.getItem("user");
   if (token && userStr) {
     try {
       const user = JSON.parse(userStr);
       if (user.role === "farmer") return <Navigate to="/farmer" replace />;
-      if (user.role === "middleman") return <Navigate to="/middleman" replace />;
+      if (user.role === "middleman")
+        return <Navigate to="/middleman" replace />;
       if (user.role === "buyer") return <Navigate to="/produk" replace />;
     } catch {
       // ignore JSON parse error
@@ -173,12 +253,15 @@ function RootRedirect() {
 
 // Komponen pengarah link jual hasil panen
 function JualRedirect() {
-  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  const userStr =
+    localStorage.getItem("user") || sessionStorage.getItem("user");
   if (userStr) {
     try {
       const user = JSON.parse(userStr);
-      if (user.role === "farmer") return <Navigate to="/farmer/jual-panen" replace />;
-      if (user.role === "middleman") return <Navigate to="/middleman/jual-stok" replace />;
+      if (user.role === "farmer")
+        return <Navigate to="/farmer/jual-panen" replace />;
+      if (user.role === "middleman")
+        return <Navigate to="/middleman/jual-stok" replace />;
     } catch {
       // ignore JSON parse error
     }
@@ -188,12 +271,15 @@ function JualRedirect() {
 
 // Komponen pengarah rute profil global (/profil, /profile, /akun)
 function ProfileRedirect() {
-  const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  const userStr =
+    localStorage.getItem("user") || sessionStorage.getItem("user");
   if (userStr) {
     try {
       const user = JSON.parse(userStr);
-      if (user.role === "middleman") return <Navigate to="/middleman/profil" replace />;
-      if (user.role === "farmer") return <Navigate to="/farmer/profil" replace />;
+      if (user.role === "middleman")
+        return <Navigate to="/middleman/profil" replace />;
+      if (user.role === "farmer")
+        return <Navigate to="/farmer/profil" replace />;
       if (user.role === "buyer") return <Navigate to="/akun" replace />;
     } catch {
       // ignore JSON parse error
@@ -204,6 +290,72 @@ function ProfileRedirect() {
 
 export default function App() {
   const [showSplash, setShowSplash] = useState<boolean>(true);
+  const [cartCount, setCartCount] = useState<number>(0);
+
+  // Ambil jumlah item keranjang dari backend berdasarkan akun yang sedang login
+  const fetchUserCartCount = useCallback(async () => {
+    const token =
+      localStorage.getItem("token") || sessionStorage.getItem("token");
+
+    if (!token) {
+      setCartCount(0);
+      return;
+    }
+
+    try {
+      const cleanBase = API_BASE_URL.replace(/\/+$/, "");
+      const endpoint = cleanBase.endsWith("/api")
+        ? `${cleanBase}/cart`
+        : `${cleanBase}/api/cart`;
+
+      const res = await fetch(endpoint, {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        setCartCount(0);
+        return;
+      }
+
+      const json = await res.json();
+      const items =
+        json?.data?.items ||
+        json?.items ||
+        (Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json)
+          ? json
+          : []);
+
+      if (typeof json?.total_items === "number") {
+        setCartCount(json.total_items);
+      } else if (typeof json?.data?.total_items === "number") {
+        setCartCount(json.data.total_items);
+      } else if (Array.isArray(items)) {
+        setCartCount(items.length);
+      } else {
+        setCartCount(0);
+      }
+    } catch {
+      setCartCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUserCartCount();
+
+    const syncCart = () => fetchUserCartCount();
+    window.addEventListener("cartUpdated", syncCart);
+    window.addEventListener("storage", syncCart);
+
+    return () => {
+      window.removeEventListener("cartUpdated", syncCart);
+      window.removeEventListener("storage", syncCart);
+    };
+  }, [fetchUserCartCount]);
 
   if (showSplash) {
     return (
@@ -225,13 +377,16 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/login" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/auth/register" element={<Navigate to="/register" replace />} />
+        <Route
+          path="/auth/register"
+          element={<Navigate to="/register" replace />}
+        />
 
         {/* Redirection link cepat dari header */}
         <Route path="/jual" element={<JualRedirect />} />
 
         {/* Katalog / Pembeli / Storefront: header + footer */}
-        <Route element={<Layout cartCount={3} />}>
+        <Route element={<Layout cartCount={cartCount} />}>
           <Route path="/produk" element={<BuyerHomePage />} />
           <Route path="/katalog" element={<Navigate to="/produk" replace />} />
           <Route path="/kategori/:category" element={<BuyerHomePage />} />
@@ -271,9 +426,18 @@ export default function App() {
           <Route path="profil" element={<FarmerProfilePage role="farmer" />} />
 
           {/* Alias backward-compatible */}
-          <Route path="hasil-panen" element={<Navigate to="/farmer/jual-panen" replace />} />
-          <Route path="stok" element={<Navigate to="/farmer/jual-panen" replace />} />
-          <Route path="transaksi" element={<Navigate to="/farmer/pesanan" replace />} />
+          <Route
+            path="hasil-panen"
+            element={<Navigate to="/farmer/jual-panen" replace />}
+          />
+          <Route
+            path="stok"
+            element={<Navigate to="/farmer/jual-panen" replace />}
+          />
+          <Route
+            path="transaksi"
+            element={<Navigate to="/farmer/pesanan" replace />}
+          />
         </Route>
 
         {/* Mitra Tengkulak: header + sidebar dashboard (middlemanMenu) */}
@@ -287,7 +451,10 @@ export default function App() {
         >
           {/* Default /middleman langsung ke Beranda Tengkulak */}
           <Route index element={<MiddlemanDashboardWrapper />} />
-          <Route path="beranda" element={<Navigate to="/middleman" replace />} />
+          <Route
+            path="beranda"
+            element={<Navigate to="/middleman" replace />}
+          />
 
           {/* Rute sesuai middlemanMenu */}
           <Route path="cari-pasokan" element={<FindFarmersPage />} />
@@ -295,10 +462,16 @@ export default function App() {
           <Route path="jual-stok" element={<SellStockPage />} />
           <Route path="penawaran" element={<PriceNegotiationPage />} />
           <Route path="transaksi" element={<MiddlemanTransactionPage />} />
-          <Route path="profil" element={<FarmerProfilePage role="middleman" />} />
+          <Route
+            path="profil"
+            element={<FarmerProfilePage role="middleman" />}
+          />
 
           {/* Alias backward-compatible */}
-          <Route path="cari-petani" element={<Navigate to="/middleman/cari-pasokan" replace />} />
+          <Route
+            path="cari-petani"
+            element={<Navigate to="/middleman/cari-pasokan" replace />}
+          />
         </Route>
 
         {/* Catch-all redirect */}
