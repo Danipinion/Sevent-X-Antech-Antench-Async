@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Wheat,
   Wallet,
-  Star,
   Search,
   Calendar,
   ArrowUpDown,

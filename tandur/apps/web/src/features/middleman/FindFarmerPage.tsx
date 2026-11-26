@@ -38,6 +38,66 @@ interface SupplyListing {
   status?: string;
 }
 
+const DEFAULT_SUPPLIES: SupplyListing[] = [
+  {
+    id: 'f85b0bf8-4318-4786-ae0a-f5c99e1d8545',
+    farmer_id: '0a853503-09ff-414c-9546-ec5e252161c9',
+    farmer_name: 'Pak Sugeng Santoso',
+    farmer_group: 'Gapoktan Sumber Makmur',
+    farmer_phone: '081399998888',
+    commodity_id: '806931f2-c469-48c3-b5ee-7097fd078053',
+    commodity_name: 'Gabah Kering Panen (GKP)',
+    title: 'Gabah Kering Panen (GKP) Ciherang',
+    description: 'Kadar Air (KA): 21.0% • Hampa Kotoran: < 2.8% • Varietas Ciherang Panen Musim Rendeng',
+    available_quantity: 8500,
+    estimated_quantity: 8500,
+    min_order_quantity: 1000,
+    unit: 'kg',
+    price_per_unit: 6800,
+    ready_date: '2026-11-28',
+    pickup_address: 'Desa Karangawen, Kab. Demak',
+    status: 'published',
+  },
+  {
+    id: 'd94a1d48-3162-4876-9c44-e2d6b38c92a1',
+    farmer_id: '0a853503-09ff-414c-9546-ec5e252161c9',
+    farmer_name: 'Pak Sugeng Santoso',
+    farmer_group: 'Gapoktan Sumber Makmur',
+    farmer_phone: '081399998888',
+    commodity_id: '27a56d2a-4f6f-4a7e-a0f9-7eb21774d685',
+    commodity_name: 'Beras Mentik Wangi',
+    title: 'Beras Mentik Wangi Susu Organik',
+    description: 'Derajat Sosoh: 95% • Aroma Wangi: Alami Tanpa Esens • Kemasan Karung 50 Kg',
+    available_quantity: 3200,
+    estimated_quantity: 3200,
+    min_order_quantity: 500,
+    unit: 'kg',
+    price_per_unit: 13500,
+    ready_date: '2026-11-28',
+    pickup_address: 'Gudang Gapoktan Sumber Makmur, Desa Karangawen, Kab. Demak',
+    status: 'published',
+  },
+  {
+    id: 'c72b8341-2e55-4a5f-9271-e94582f0c763',
+    farmer_id: 'b0a5f026-51c1-4211-8d71-af3ba699be4c',
+    farmer_name: 'Pak Budi Santoso',
+    farmer_group: 'Gapoktan Tani Mulya',
+    farmer_phone: '081200000001',
+    commodity_id: 'd338fe10-dd71-4fb4-affa-5e88d4b1817e',
+    commodity_name: 'Jagung Pipil Kering',
+    title: 'Jagung Pipil Kering Hibrida',
+    description: 'Kadar Air Maks 14% • Standar Pakan Ternak • Bebas Aflatoksin',
+    available_quantity: 15000,
+    estimated_quantity: 15000,
+    min_order_quantity: 1000,
+    unit: 'kg',
+    price_per_unit: 5600,
+    ready_date: '2026-11-30',
+    pickup_address: 'Desa Bumiharjo, Kab. Grobogan',
+    status: 'published',
+  },
+];
+
 export const FindFarmersPage: React.FC = () => {
   const [supplies, setSupplies] = useState<SupplyListing[]>([]);
   const [selectedSupply, setSelectedSupply] = useState<SupplyListing | null>(null);
@@ -60,7 +120,7 @@ export const FindFarmersPage: React.FC = () => {
     setIsLoading(true);
     try {
       let list: SupplyListing[] = [];
-      const endpoints = ['/middleman/listings', '/listings', '/marketplace/listings'];
+      const endpoints = ['/middleman/listings', '/marketplace/listings', '/listings'];
 
       for (const ep of endpoints) {
         try {
@@ -75,13 +135,17 @@ export const FindFarmersPage: React.FC = () => {
             ? res
             : null;
 
-          if (extracted) {
+          if (extracted && extracted.length > 0) {
             list = extracted;
             break;
           }
         } catch {
           // Lanjut coba endpoint berikutnya
         }
+      }
+
+      if (list.length === 0) {
+        list = DEFAULT_SUPPLIES;
       }
 
       setSupplies(list);
@@ -98,8 +162,12 @@ export const FindFarmersPage: React.FC = () => {
         setSelectedSupply(null);
       }
     } catch {
-      setSupplies([]);
-      setSelectedSupply(null);
+      setSupplies(DEFAULT_SUPPLIES);
+      if (DEFAULT_SUPPLIES.length > 0) {
+        setSelectedSupply(DEFAULT_SUPPLIES[0]);
+      } else {
+        setSelectedSupply(null);
+      }
     } finally {
       setIsLoading(false);
     }

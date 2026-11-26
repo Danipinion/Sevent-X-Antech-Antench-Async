@@ -30,6 +30,9 @@ var (
 type FarmerListing struct {
 	ID                     string        `json:"id"`
 	FarmerID               string        `json:"farmer_id"`
+	FarmerName             string        `json:"farmer_name,omitempty"`
+	FarmerGroup            string        `json:"farmer_group,omitempty"`
+	FarmerPhone            string        `json:"farmer_phone,omitempty"`
 	CommodityID            string        `json:"commodity_id"`
 	CommodityName          string        `json:"commodity_name,omitempty"`
 	Category               string        `json:"category,omitempty"`
