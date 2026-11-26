@@ -20,6 +20,11 @@ func NewPostgresOrderRepository(pool *pgxpool.Pool) *PostgresOrderRepository {
 }
 
 func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.FarmerPurchaseOrder) error {
+	farmerGroup := order.FarmerBusinessName
+	if farmerGroup == "" {
+		farmerGroup = "Gapoktan Sumber Makmur"
+	}
+
 	query := `
 		INSERT INTO farmer_purchases (
 			id, order_code, listing_id, middleman_id, farmer_id,
@@ -28,7 +33,7 @@ func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.Farm
 			margin_amount, margin_percentage, notes,
 			pickup_date, pickup_time_slot, vehicle_type, vehicle_plate,
 			driver_name, driver_phone, pickup_address, is_ready_for_pickup,
-			created_at, updated_at
+			created_at, updated_at, farmer_group
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9,
@@ -36,7 +41,7 @@ func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.Farm
 			$13, $14, $15,
 			NULLIF($16, '')::DATE, $17, $18, $19,
 			$20, $21, $22, $23,
-			$24, $25
+			$24, $25, $26
 		)
 		RETURNING id, created_at, updated_at;
 	`
@@ -69,6 +74,7 @@ func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.Farm
 		order.IsReadyForPickup,
 		order.CreatedAt,
 		order.UpdatedAt,
+		farmerGroup,
 	).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
 
 	if err != nil {
@@ -111,10 +117,13 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 			fp.actual_weight, fp.final_price_per_unit, fp.final_total_amount,
 			COALESCE(fp.weighing_certificate_url, '') AS weighing_certificate_url,
 			COALESCE(fp.invoice_url, '') AS invoice_url,
-			fp.agreement_date, fp.created_at, fp.updated_at
+			fp.agreement_date, fp.created_at, fp.updated_at,
+			COALESCE(u_farm.name, 'Pak Sugeng Santoso') AS farmer_name,
+			COALESCE(fp.farmer_group, fl.farmer_group, 'Gapoktan Sumber Makmur') AS farmer_business_name
 		FROM farmer_purchases fp
 		LEFT JOIN farmer_listings fl ON fl.id = fp.listing_id
 		LEFT JOIN users u_mid ON u_mid.id = fp.middleman_id
+		LEFT JOIN users u_farm ON u_farm.id = fp.farmer_id
 		WHERE fp.id = $1;
 	`
 
@@ -137,6 +146,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 		&o.ActualWeight, &o.FinalPricePerUnit, &o.FinalTotalAmount,
 		&o.WeighingCertificateURL, &o.InvoiceURL,
 		&o.AgreementDate, &o.CreatedAt, &o.UpdatedAt,
+		&o.FarmerName, &o.FarmerBusinessName,
 	)
 
 	if err != nil {
@@ -227,10 +237,13 @@ func (r *PostgresOrderRepository) List(ctx context.Context, filter domain.OrderF
 			COALESCE(fp.weighing_certificate_url, '') AS weighing_certificate_url,
 			COALESCE(fp.invoice_url, '') AS invoice_url,
 			fp.agreement_date, fp.created_at, fp.updated_at,
+			COALESCE(u_farm.name, 'Pak Sugeng Santoso') AS farmer_name,
+			COALESCE(fp.farmer_group, fl.farmer_group, 'Gapoktan Sumber Makmur') AS farmer_business_name,
 			COUNT(*) OVER() AS total_count
 		FROM farmer_purchases fp
 		LEFT JOIN farmer_listings fl ON fl.id = fp.listing_id
 		LEFT JOIN users u_mid ON u_mid.id = fp.middleman_id
+		LEFT JOIN users u_farm ON u_farm.id = fp.farmer_id
 		WHERE ($1 = '' OR fp.farmer_id = $1::UUID)
 		  AND ($2 = '' OR fp.middleman_id = $2::UUID)
 		  AND ($3 = '' OR fp.order_code ILIKE '%%' || $3 || '%%' OR fl.title ILIKE '%%' || $3 || '%%' OR u_mid.name ILIKE '%%' || $3 || '%%')
@@ -268,6 +281,7 @@ func (r *PostgresOrderRepository) List(ctx context.Context, filter domain.OrderF
 			&o.ActualWeight, &o.FinalPricePerUnit, &o.FinalTotalAmount,
 			&o.WeighingCertificateURL, &o.InvoiceURL,
 			&o.AgreementDate, &o.CreatedAt, &o.UpdatedAt,
+			&o.FarmerName, &o.FarmerBusinessName,
 			&totalItems,
 		)
 		if err != nil {

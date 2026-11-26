@@ -85,11 +85,11 @@ func (r *PostgresMiddlemanRepository) GetDashboard(middlemanID string) (*domain.
 		SELECT 
 			COALESCE(pickup_date::text, 'Besok'), 
 			COALESCE(pickup_time_slot, '08:30 WIB'), 
-			c.name, 
+			COALESCE(l.commodity_name, c.name, 'Gabah'), 
 			p.offered_quantity / 1000.0
 		FROM farmer_purchases p
 		JOIN farmer_listings l ON p.listing_id = l.id
-		JOIN commodities c ON l.commodity_id = c.id
+		LEFT JOIN commodities c ON c.id::text = l.commodity_id
 		WHERE p.middleman_id = $1 AND p.status = 'scheduled_pickup'
 		ORDER BY p.pickup_date ASC, p.created_at DESC
 		LIMIT 1
@@ -127,12 +127,12 @@ func (r *PostgresMiddlemanRepository) GetDashboard(middlemanID string) (*domain.
 		SELECT 
 			p.id, p.order_code, COALESCE(p.vehicle_type, 'Truk Isuzu Elf (#01)'), 
 			COALESCE(p.driver_name, 'Budi (Driver Timbang)'), COALESCE(p.driver_phone, '08123456789'),
-			c.name, (p.offered_quantity / 1000.0),
+			COALESCE(l.commodity_name, c.name, 'Komoditas'), (p.offered_quantity / 1000.0),
 			p.status, COALESCE(p.pickup_time_slot, '08:30 WIB'), COALESCE(p.pickup_date::text, ''),
 			COALESCE(p.pickup_address, 'Desa Karangawen, Demak'), p.is_ready_for_pickup
 		FROM farmer_purchases p
 		JOIN farmer_listings l ON p.listing_id = l.id
-		JOIN commodities c ON l.commodity_id = c.id
+		LEFT JOIN commodities c ON c.id::text = l.commodity_id
 		WHERE p.middleman_id = $1 AND p.status IN ('scheduled_pickup', 'waiting_confirmation', 'in_negotiation')
 		ORDER BY p.pickup_date ASC, p.created_at DESC
 		LIMIT 5
@@ -188,7 +188,7 @@ func (r *PostgresMiddlemanRepository) ListOrdersWithSummary(middlemanID string, 
 	baseQuery := `
 		FROM farmer_purchases p
 		JOIN farmer_listings l ON p.listing_id = l.id
-		JOIN commodities c ON l.commodity_id = c.id
+		LEFT JOIN commodities c ON c.id::text = l.commodity_id
 		JOIN users u ON p.farmer_id = u.id
 		WHERE p.middleman_id = $1
 	`
@@ -211,7 +211,7 @@ func (r *PostgresMiddlemanRepository) ListOrdersWithSummary(middlemanID string, 
 	}
 
 	if filter.Search != "" {
-		baseQuery += fmt.Sprintf(" AND (p.order_code ILIKE $%d OR u.name ILIKE $%d OR c.name ILIKE $%d)", argIdx, argIdx, argIdx)
+		baseQuery += fmt.Sprintf(" AND (p.order_code ILIKE $%d OR u.name ILIKE $%d OR c.name ILIKE $%d OR l.title ILIKE $%d OR l.commodity_name ILIKE $%d)", argIdx, argIdx, argIdx, argIdx, argIdx)
 		args = append(args, "%"+filter.Search+"%")
 		argIdx++
 	}
@@ -235,8 +235,8 @@ func (r *PostgresMiddlemanRepository) ListOrdersWithSummary(middlemanID string, 
 	selectQuery := `
 		SELECT 
 			p.id, p.order_code, p.listing_id, p.farmer_id, p.middleman_id,
-			u.name, 'Gapoktan Sumber Makmur',
-			c.name, COALESCE(l.variety, ''), (p.offered_quantity / 1000.0),
+			u.name, COALESCE(p.farmer_group, l.farmer_group, 'Gapoktan Sumber Makmur'),
+			COALESCE(l.commodity_name, c.name, ''), COALESCE(l.category, ''), (p.offered_quantity / 1000.0),
 			p.offered_price, p.offered_quantity, (p.offered_price * p.offered_quantity),
 			p.status, COALESCE(p.pickup_date::text, ''), COALESCE(p.pickup_time_slot, ''),
 			COALESCE(p.vehicle_type, ''), COALESCE(p.vehicle_plate, ''),
@@ -349,7 +349,7 @@ func (r *PostgresMiddlemanRepository) ListOffers(middlemanID string, filter doma
 	baseQuery := `
 		FROM farmer_purchases p
 		JOIN farmer_listings l ON p.listing_id = l.id
-		JOIN commodities c ON l.commodity_id = c.id
+		LEFT JOIN commodities c ON c.id::text = l.commodity_id
 		JOIN users u ON p.farmer_id = u.id
 		WHERE p.middleman_id = $1
 	`
@@ -370,7 +370,7 @@ func (r *PostgresMiddlemanRepository) ListOffers(middlemanID string, filter doma
 	}
 
 	if filter.Commodity != "" && filter.Commodity != "all" {
-		baseQuery += fmt.Sprintf(" AND c.name ILIKE $%d", argIdx)
+		baseQuery += fmt.Sprintf(" AND (c.name ILIKE $%d OR l.commodity_name ILIKE $%d)", argIdx, argIdx)
 		args = append(args, "%"+filter.Commodity+"%")
 		argIdx++
 	}
@@ -392,7 +392,7 @@ func (r *PostgresMiddlemanRepository) ListOffers(middlemanID string, filter doma
 	selectQuery := `
 		SELECT 
 			p.id, p.order_code, u.name, COALESCE(p.pickup_address, 'Demak Karangawen'),
-			c.name, p.offered_quantity, (p.offered_quantity / 1000.0),
+			COALESCE(l.commodity_name, c.name, ''), p.offered_quantity, (p.offered_quantity / 1000.0),
 			p.offered_price, l.price_per_unit, (p.offered_price * p.offered_quantity),
 			COALESCE(p.pickup_date::text, ''), COALESCE(p.vehicle_type, 'Armada Disiapkan'),
 			p.status, p.created_at

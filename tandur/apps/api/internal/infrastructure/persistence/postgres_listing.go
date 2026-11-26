@@ -27,7 +27,8 @@ func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.
 			title, description,
 			estimated_quantity, available_quantity, min_order_quantity, unit,
 			price_per_unit, estimated_gross_revenue, estimated_harvest_date,
-			pickup_address, media_urls, status, location, created_at, updated_at
+			pickup_address, media_urls, status, location, created_at, updated_at,
+			farmer_group
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7,
@@ -35,7 +36,8 @@ func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.
 			$12, $13, NULLIF($14, '')::DATE,
 			$15, $16, $17,
 			ST_SetSRID(ST_MakePoint($18, $19), 4326)::geography,
-			$20, $21
+			$20, $21,
+			$22
 		)
 		RETURNING id, created_at, updated_at;
 	`
@@ -43,6 +45,11 @@ func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.
 	harvestDate := listing.EstimatedHarvestDate
 	if harvestDate == "" {
 		harvestDate = listing.ReadyDate
+	}
+
+	farmerGroup := listing.FarmerGroup
+	if farmerGroup == "" {
+		farmerGroup = "Gapoktan Sumber Makmur"
 	}
 
 	err := r.pool.QueryRow(
@@ -69,6 +76,7 @@ func (r *PostgresListingRepository) Create(ctx context.Context, listing *domain.
 		listing.Latitude,
 		listing.CreatedAt,
 		listing.UpdatedAt,
+		farmerGroup,
 	).Scan(&listing.ID, &listing.CreatedAt, &listing.UpdatedAt)
 
 	if err != nil {
@@ -94,9 +102,13 @@ func (r *PostgresListingRepository) GetByID(ctx context.Context, id string) (*do
 			fl.status,
 			ST_Y(fl.location::geometry) AS latitude,
 			ST_X(fl.location::geometry) AS longitude,
-			fl.created_at, fl.updated_at, fl.deleted_at
+			fl.created_at, fl.updated_at, fl.deleted_at,
+			COALESCE(u.name, 'Pak Sugeng Santoso') AS farmer_name,
+			COALESCE(fl.farmer_group, 'Gapoktan Sumber Makmur') AS farmer_group,
+			COALESCE(u.phone, '081399998888') AS farmer_phone
 		FROM farmer_listings fl
 		LEFT JOIN commodities c ON c.id::text = fl.commodity_id
+		LEFT JOIN users u ON u.id = fl.farmer_id
 		WHERE fl.id = $1 AND fl.deleted_at IS NULL;
 	`
 
@@ -114,6 +126,7 @@ func (r *PostgresListingRepository) GetByID(ctx context.Context, id string) (*do
 		&l.Latitude,
 		&l.Longitude,
 		&l.CreatedAt, &l.UpdatedAt, &l.DeletedAt,
+		&l.FarmerName, &l.FarmerGroup, &l.FarmerPhone,
 	)
 
 	if err != nil {
@@ -155,9 +168,13 @@ func (r *PostgresListingRepository) List(ctx context.Context, filter domain.List
 			ST_Y(fl.location::geometry) AS latitude,
 			ST_X(fl.location::geometry) AS longitude,
 			fl.created_at, fl.updated_at, fl.deleted_at,
+			COALESCE(u.name, 'Pak Sugeng Santoso') AS farmer_name,
+			COALESCE(fl.farmer_group, 'Gapoktan Sumber Makmur') AS farmer_group,
+			COALESCE(u.phone, '081399998888') AS farmer_phone,
 			COUNT(*) OVER() AS total_count
 		FROM farmer_listings fl
 		LEFT JOIN commodities c ON c.id::text = fl.commodity_id
+		LEFT JOIN users u ON u.id = fl.farmer_id
 		WHERE fl.deleted_at IS NULL
 		  AND ($1 = '' OR fl.farmer_id = $1::UUID)
 		  AND ($2 = '' OR $2 = 'all' OR fl.status = $2)
@@ -190,6 +207,7 @@ func (r *PostgresListingRepository) List(ctx context.Context, filter domain.List
 			&l.Latitude,
 			&l.Longitude,
 			&l.CreatedAt, &l.UpdatedAt, &l.DeletedAt,
+			&l.FarmerName, &l.FarmerGroup, &l.FarmerPhone,
 			&totalItems,
 		)
 		if err != nil {
