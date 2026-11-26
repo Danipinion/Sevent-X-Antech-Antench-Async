@@ -227,6 +227,32 @@ make backend
 | `make migrate-down` | Melakukan rollback migrasi database |
 | `make clean` | Menghapus build cache dan file sementara |
 
+### Pengelolaan Migrasi di Windows (Tanpa Makefile)
+
+Bagi pengguna OS Windows yang tidak menginstal `make`, telah disediakan script batch interaktif [`migrate.bat`](file:///migrate.bat):
+
+```cmd
+# Jalankan seluruh migrasi database ke versi terbaru
+migrate.bat up
+
+# Rollback 1 versi migrasi terakhir
+migrate.bat down
+
+# Cek versi migrasi aktif saat ini
+migrate.bat version
+
+# Buat sepasang file migrasi baru (.up.sql dan .down.sql)
+migrate.bat create nama_migrasi_baru
+
+# Memasukkan seed data awal
+migrate.bat seed
+
+# Perbaiki status dirty migration
+migrate.bat force 20
+
+# Atau cukup double-click migrate.bat dari File Explorer untuk membuka menu interaktif
+```
+
 ---
 
 ## 10. Pengujian & Kualitas Kode
