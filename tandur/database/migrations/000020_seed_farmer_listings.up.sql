@@ -5,24 +5,80 @@
 ALTER TABLE farmer_listings ADD COLUMN IF NOT EXISTS farmer_group VARCHAR(150);
 ALTER TABLE farmer_purchases ADD COLUMN IF NOT EXISTS farmer_group VARCHAR(150);
 
--- 2. Pastikan profil user sesuai dengan mockup
-UPDATE users
-SET name = 'Pak Sugeng Santoso',
-    birth_place = 'Demak, Jawa Tengah',
-    ktp_address = 'Desa Karangawen, Kab. Demak'
-WHERE id = '0a853503-09ff-414c-9546-ec5e252161c9';
+-- 2. Pastikan profil user dan komoditas pendukung tersedia (idempotent untuk fresh DB maupun existing DB)
+DO $$
+BEGIN
+    -- Pastikan user 0a853503-09ff-414c-9546-ec5e252161c9 (Pak Sugeng Santoso - Petani)
+    IF NOT EXISTS (SELECT 1 FROM users WHERE id = '0a853503-09ff-414c-9546-ec5e252161c9') THEN
+        DELETE FROM users WHERE phone = '081399998888' OR nik = '3321010101010001';
+        INSERT INTO users (id, nik, name, phone, password_hash, role, is_bisnis, birth_place, ktp_address)
+        VALUES ('0a853503-09ff-414c-9546-ec5e252161c9', '3321010101010001', 'Pak Sugeng Santoso', '081399998888', '$2a$10$1piOVtZ9vwgtk3C2UX/zzOC.MO1vAzIz2jnOIaC2lC9/GwjU5DjFq', 'farmer', false, 'Demak, Jawa Tengah', 'Desa Karangawen, Kab. Demak');
+    ELSE
+        UPDATE users
+        SET name = 'Pak Sugeng Santoso',
+            birth_place = 'Demak, Jawa Tengah',
+            ktp_address = 'Desa Karangawen, Kab. Demak',
+            role = 'farmer'
+        WHERE id = '0a853503-09ff-414c-9546-ec5e252161c9';
+    END IF;
 
-UPDATE users
-SET name = 'Pak Budi Santoso',
-    birth_place = 'Grobogan, Jawa Tengah',
-    ktp_address = 'Desa Bumiharjo, Kab. Grobogan'
-WHERE id = 'b0a5f026-51c1-4211-8d71-af3ba699be4c';
+    -- Pastikan user b0a5f026-51c1-4211-8d71-af3ba699be4c (Pak Budi Santoso - Petani)
+    IF NOT EXISTS (SELECT 1 FROM users WHERE id = 'b0a5f026-51c1-4211-8d71-af3ba699be4c') THEN
+        DELETE FROM users WHERE phone = '081200000001' OR nik = '3321010101010002';
+        INSERT INTO users (id, nik, name, phone, password_hash, role, is_bisnis, birth_place, ktp_address)
+        VALUES ('b0a5f026-51c1-4211-8d71-af3ba699be4c', '3321010101010002', 'Pak Budi Santoso', '081200000001', '$2a$10$1piOVtZ9vwgtk3C2UX/zzOC.MO1vAzIz2jnOIaC2lC9/GwjU5DjFq', 'farmer', false, 'Grobogan, Jawa Tengah', 'Desa Bumiharjo, Kab. Grobogan');
+    ELSE
+        UPDATE users
+        SET name = 'Pak Budi Santoso',
+            birth_place = 'Grobogan, Jawa Tengah',
+            ktp_address = 'Desa Bumiharjo, Kab. Grobogan',
+            role = 'farmer'
+        WHERE id = 'b0a5f026-51c1-4211-8d71-af3ba699be4c';
+    END IF;
 
-UPDATE users
-SET name = 'Haji Supardi',
-    is_bisnis = true,
-    birth_place = 'Demak, Jawa Tengah'
-WHERE id = 'b3618e70-e4dc-48e8-9189-48c824a42f98';
+    -- Pastikan user b3618e70-e4dc-48e8-9189-48c824a42f98 (Haji Supardi - Tengkulak/Pembeli)
+    IF NOT EXISTS (SELECT 1 FROM users WHERE id = 'b3618e70-e4dc-48e8-9189-48c824a42f98') THEN
+        DELETE FROM users WHERE phone = '081288887777' OR nik = '3321010101010003';
+        INSERT INTO users (id, nik, name, phone, password_hash, role, is_bisnis, birth_place, ktp_address)
+        VALUES ('b3618e70-e4dc-48e8-9189-48c824a42f98', '3321010101010003', 'Haji Supardi', '081288887777', '$2a$10$1piOVtZ9vwgtk3C2UX/zzOC.MO1vAzIz2jnOIaC2lC9/GwjU5DjFq', 'middleman', true, 'Demak, Jawa Tengah', 'Kota Demak');
+    ELSE
+        UPDATE users
+        SET name = 'Haji Supardi',
+            is_bisnis = true,
+            birth_place = 'Demak, Jawa Tengah',
+            role = 'middleman'
+        WHERE id = 'b3618e70-e4dc-48e8-9189-48c824a42f98';
+    END IF;
+
+    -- Pastikan komoditas yang direferensikan listing sudah ada dengan ID yang tepat
+    IF EXISTS (SELECT 1 FROM commodities WHERE name = 'Gabah GKP') THEN
+        UPDATE commodities SET id = '806931f2-c469-48c3-b5ee-7097fd078053' WHERE name = 'Gabah GKP';
+    ELSIF NOT EXISTS (SELECT 1 FROM commodities WHERE id = '806931f2-c469-48c3-b5ee-7097fd078053') THEN
+        INSERT INTO commodities (id, name, description, unit, is_active)
+        VALUES ('806931f2-c469-48c3-b5ee-7097fd078053', 'Gabah GKP', 'Gabah Kering Panen standar SNI/SP2KP', 'kg', true);
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM commodities WHERE name = 'Gabah GKG') THEN
+        UPDATE commodities SET id = 'adadd29d-e743-4bff-8d72-1bf747a21912' WHERE name = 'Gabah GKG';
+    ELSIF NOT EXISTS (SELECT 1 FROM commodities WHERE id = 'adadd29d-e743-4bff-8d72-1bf747a21912') THEN
+        INSERT INTO commodities (id, name, description, unit, is_active)
+        VALUES ('adadd29d-e743-4bff-8d72-1bf747a21912', 'Gabah GKG', 'Gabah Kering Giling standar SNI/SP2KP', 'kg', true);
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM commodities WHERE name = 'Jagung Pipil') THEN
+        UPDATE commodities SET id = 'd338fe10-dd71-4fb4-affa-5e88d4b1817e' WHERE name = 'Jagung Pipil';
+    ELSIF NOT EXISTS (SELECT 1 FROM commodities WHERE id = 'd338fe10-dd71-4fb4-affa-5e88d4b1817e') THEN
+        INSERT INTO commodities (id, name, description, unit, is_active)
+        VALUES ('d338fe10-dd71-4fb4-affa-5e88d4b1817e', 'Jagung Pipil', 'Jagung Pipil Kering pakan & konsumsi', 'kg', true);
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM commodities WHERE name = 'Beras Medium') THEN
+        UPDATE commodities SET id = '27a56d2a-4f6f-4a7e-a0f9-7eb21774d685' WHERE name = 'Beras Medium';
+    ELSIF NOT EXISTS (SELECT 1 FROM commodities WHERE id = '27a56d2a-4f6f-4a7e-a0f9-7eb21774d685') THEN
+        INSERT INTO commodities (id, name, description, unit, is_active)
+        VALUES ('27a56d2a-4f6f-4a7e-a0f9-7eb21774d685', 'Beras Medium', 'Beras Medium standar SP2KP', 'kg', true);
+    END IF;
+END $$;
 
 -- 3. Seed Pasokan Panen Petani (farmer_listings)
 INSERT INTO farmer_listings (

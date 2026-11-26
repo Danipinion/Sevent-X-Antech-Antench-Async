@@ -262,13 +262,35 @@ export const FindFarmersPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       // Sesuai struct domain.CreateOrderOfferInput di OrderService.CreateOffer
-      await MiddlemanApi.createPurchaseOrder({
+      const res = await MiddlemanApi.createPurchaseOrder({
         listing_id: selectedSupply.id,
         offered_quantity: totalKg,
         offered_price: activePricePerKg,
         pickup_date: loadingDate,
         notes: extraNote.trim() || 'Timbang digital bersama di titik muat',
       });
+
+      // Sinkronkan ke local storage agar seketika tampil di tab Transaksi & Pesanan
+      try {
+        const localList = JSON.parse(localStorage.getItem('tandur_local_po_orders') || '[]');
+        const resData = (res as any)?.data || res || {};
+        const newPO = {
+          id: resData.id || `po-${Date.now()}`,
+          po_number: resData.order_code || `PO-TNDR-${Date.now().toString().slice(-4)}`,
+          farmer_name: selectedSupply.farmer_name || 'Pak Sugeng Santoso',
+          farmer_group: selectedSupply.farmer_group || 'Gapoktan Sumber Makmur',
+          commodity_name: selectedSupply.commodity_name || selectedSupply.title,
+          pickup_address: selectedSupply.pickup_address,
+          offered_quantity: totalKg,
+          offered_price: activePricePerKg,
+          total_price: totalValue,
+          pickup_date: loadingDate,
+          notes: extraNote.trim() || 'Timbang digital bersama di titik muat',
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        };
+        localStorage.setItem('tandur_local_po_orders', JSON.stringify([newPO, ...localList]));
+      } catch {}
 
       await Swal.fire({
         icon: 'success',

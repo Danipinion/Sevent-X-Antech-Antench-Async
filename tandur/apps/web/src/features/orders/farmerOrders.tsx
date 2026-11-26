@@ -38,6 +38,29 @@ interface HarvestListing {
   created_at?: string;
 }
 
+type FarmerOrder = FarmerPurchaseOrder & {
+  order_code?: string;
+  listing_id?: string;
+  status_label?: string;
+  offered_quantity?: number;
+  offered_price?: number;
+  total_offered_price?: number;
+  pickup_time_slot?: string;
+  vehicle_type?: string;
+  vehicle_plate?: string;
+  driver_name?: string;
+};
+
+type FarmerOrdersResponse = {
+  status?: string;
+  message?: string;
+  data: FarmerOrder[];
+  meta?: { summary?: { waiting_confirmation_count?: number } };
+};
+
+const isWaitingConfirmation = (status?: string) =>
+  status === 'waiting_confirmation' || status === 'pending';
+
 export default function FarmerOrdersPage() {
   const navigate = useNavigate();
 
@@ -46,8 +69,9 @@ export default function FarmerOrdersPage() {
   const [sortNewest, setSortNewest] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [orders, setOrders] = useState<FarmerPurchaseOrder[]>([]);
+  const [orders, setOrders] = useState<FarmerOrder[]>([]);
   const [listings, setListings] = useState<HarvestListing[]>([]);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -56,7 +80,7 @@ export default function FarmerOrdersPage() {
       setIsLoading(true);
       try {
         const [ordersRes, listingsRes] = await Promise.allSettled([
-          fetchApi<{ data?: FarmerPurchaseOrder[] } | FarmerPurchaseOrder[]>('/orders'),
+          fetchApi<FarmerOrdersResponse>('/farmer/orders'),
           fetchApi<{ data?: HarvestListing[] } | HarvestListing[]>('/listings'),
         ]);
 
@@ -70,7 +94,11 @@ export default function FarmerOrdersPage() {
             : Array.isArray(rawOrders)
             ? rawOrders
             : [];
-          setOrders(orderList);
+          setOrders(orderList as FarmerOrder[]);
+          setOrdersError(null);
+        } else {
+          setOrders([]);
+          setOrdersError('Pesanan gagal dimuat. Silakan muat ulang halaman.');
         }
 
         // Parse listings (produk panen yang sudah ditambahkan petani)
@@ -163,7 +191,7 @@ export default function FarmerOrdersPage() {
   );
 
   const pendingOrders = useMemo(
-    () => orders.filter((o) => o.status === 'pending'),
+    () => orders.filter((o) => isWaitingConfirmation(o.status)),
     [orders]
   );
 
@@ -192,7 +220,7 @@ export default function FarmerOrdersPage() {
     return orders
       .filter((order: any) => {
         if (activeTab === 'listings') return false;
-        if (activeTab === 'pending' && order.status !== 'pending') return false;
+        if (activeTab === 'pending' && !isWaitingConfirmation(order.status)) return false;
         if (
           activeTab === 'scheduled' &&
           order.status !== 'scheduled' &&
@@ -206,6 +234,7 @@ export default function FarmerOrdersPage() {
         const q = searchQuery.toLowerCase();
         return (
           String(order.id || '').toLowerCase().includes(q) ||
+          String(order.order_code || '').toLowerCase().includes(q) ||
           String(order.buyer_name || '').toLowerCase().includes(q) ||
           String(order.commodity_name || '').toLowerCase().includes(q)
         );
@@ -236,6 +265,14 @@ export default function FarmerOrdersPage() {
         return sortNewest ? timeB - timeA : timeA - timeB;
       });
   }, [listings, activeTab, searchQuery, sortNewest]);
+
+  const incomingOffersByListing = useMemo(() => {
+    const counts = new Map<string, number>();
+    orders.filter((o) => isWaitingConfirmation(o.status)).forEach((o) => {
+      if (o.listing_id) counts.set(o.listing_id, (counts.get(o.listing_id) || 0) + 1);
+    });
+    return counts;
+  }, [orders]);
 
   const tabs: { id: OrderTab; label: string; count: number }[] = [
     { id: 'all', label: 'Semua Aktivitas', count: orders.length + listings.length },
@@ -534,7 +571,9 @@ export default function FarmerOrdersPage() {
                             </span>
                           </span>
                           <span className="text-[11px] font-semibold text-[#156E33] shrink-0 ml-2">
-                            Menunggu Penawaran
+                            {incomingOffersByListing.get(item.id)
+                              ? `${incomingOffersByListing.get(item.id)} Penawaran Masuk`
+                              : 'Menunggu Penawaran'}
                           </span>
                         </div>
                       </div>
@@ -556,7 +595,7 @@ export default function FarmerOrdersPage() {
 
                 {filteredOrders.map((order: any) => {
                   const status = order.status || 'pending';
-                  const isPending = status === 'pending';
+                  const isPending = isWaitingConfirmation(status);
                   const isScheduled = status === 'scheduled' || status === 'in_transit';
                   const isCompleted = status === 'completed';
 
@@ -576,7 +615,7 @@ export default function FarmerOrdersPage() {
                     ? 'bg-[#FEF3C7] text-[#92400E]'
                     : 'bg-[#F2EFE9] text-[#5C635E]';
 
-                  const statusLabel = isCompleted
+                  const statusLabel = order.status_label || (isCompleted
                     ? 'Transaksi Selesai & Lunas'
                     : status === 'in_transit'
                     ? 'Armada Menuju Lokasi'
@@ -584,12 +623,12 @@ export default function FarmerOrdersPage() {
                     ? 'Dijadwalkan Dijemput'
                     : isPending
                     ? 'Menunggu Persetujuan Anda'
-                    : 'Dibatalkan';
+                    : 'Dibatalkan');
 
-                  const qty = Number(order.quantity || order.estimated_quantity || 0);
-                  const unitPrice = Number(order.price_per_unit || order.agreed_price || 0);
+                  const qty = Number(order.offered_quantity ?? order.quantity ?? order.estimated_quantity ?? 0);
+                  const unitPrice = Number(order.offered_price ?? order.agreed_price ?? order.price_per_unit ?? 0);
                   const totalPrice = Number(
-                    order.total_price || order.total_amount || qty * unitPrice
+                    order.total_offered_price ?? order.total_price ?? order.total_amount ?? qty * unitPrice
                   );
 
                   return (
@@ -611,7 +650,7 @@ export default function FarmerOrdersPage() {
                             )}
                             {statusLabel}
                           </span>
-                          <span className="font-semibold text-[#7A827C]">#{order.id}</span>
+                          <span className="font-semibold text-[#7A827C]">{order.order_code || `#${order.id}`}</span>
                           {order.created_at && (
                             <span className="text-[#9AA19C]">
                               • {formatDate(order.created_at)}
@@ -620,7 +659,7 @@ export default function FarmerOrdersPage() {
                         </div>
                         <div className="sm:text-right">
                           <p className="text-[11px] text-[#7A827C]">
-                            {isCompleted ? 'Total Dana Diterima' : 'Nilai Kesepakatan'}
+                            {isCompleted ? 'Total Dana Diterima' : isPending ? 'Total Penawaran' : 'Nilai Kesepakatan'}
                           </p>
                           <p
                             className={`text-lg sm:text-xl font-bold ${
@@ -680,6 +719,9 @@ export default function FarmerOrdersPage() {
                           <p className="font-bold text-[#1C241E]">
                             {formatDate(order.pickup_date || order.ready_date)}
                           </p>
+                          {order.pickup_time_slot && (
+                            <p className="text-[11px] text-[#5C635E]">{order.pickup_time_slot}</p>
+                          )}
                           {order.notes && (
                             <p className="text-[11px] text-[#7A827C] line-clamp-2">{order.notes}</p>
                           )}
@@ -749,7 +791,12 @@ export default function FarmerOrdersPage() {
             )}
 
             {/* Empty State jika belum ada listing maupun pesanan */}
-            {filteredListings.length === 0 && filteredOrders.length === 0 && (
+            {ordersError && (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {ordersError}
+              </div>
+            )}
+            {!ordersError && filteredListings.length === 0 && filteredOrders.length === 0 && (
               <div className="bg-white rounded-2xl border border-[#EFECE6] p-10 sm:p-14 text-center space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-[#E8F5EC] text-[#156E33] flex items-center justify-center mx-auto">
                   <Wheat className="w-6 h-6" />
