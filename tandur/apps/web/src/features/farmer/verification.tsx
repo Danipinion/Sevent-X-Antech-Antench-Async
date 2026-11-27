@@ -22,7 +22,10 @@ import Swal from 'sweetalert2';
 import { fetchApi, getAuthToken } from '@/services/api';
 import { parseKtpText, type KtpOcrResult } from '@/utils/ktpOcrParser';
 
-const RAW_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const RAW_API_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:8080/api/v1');
 const BASE_HOST = RAW_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 const API_BASE_URL = `${BASE_HOST}/api/v1`;
 

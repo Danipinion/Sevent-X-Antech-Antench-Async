@@ -63,7 +63,10 @@ const iconClass = "absolute left-4 top-1/2 -translate-y-1/2 text-[#91a2bd]";
 
 const WILAYAH_API = "https://api.kodewilayah.web.id";
 const NOMINATIM_API = "https://nominatim.openstreetmap.org/reverse";
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+const API_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1\/?$/, '') ||
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
 const REGISTER_ENDPOINT = `${API_URL}/api/v1/auth/register`;
 
 // Tampilkan laporan diagnosa GPS di dialog (hanya saat npm run dev)

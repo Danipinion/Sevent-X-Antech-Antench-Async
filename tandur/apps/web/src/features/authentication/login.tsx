@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 
 // TODO: sesuaikan path endpoint dengan Swagger backend
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+const API_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1\/?$/, '') ||
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
 const LOGIN_ENDPOINT = `${API_URL}/api/v1/auth/login`;
 
 const Login = () => {
