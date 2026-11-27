@@ -327,10 +327,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </div>
             </div>
 
-            {/* Komoditas & Varietas */}
+            {/* Komoditas */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-[#2D332D]">
-                Komoditas &amp; Varietas
+                Komoditas (Acuan SP2KP)
               </label>
               <div className="relative">
                 <Wheat className="w-4 h-4 text-[#7A827A] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -339,7 +339,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={commodity}
                   onChange={(e) => setCommodity(e.target.value)}
-                  placeholder="Nama komoditas & varietas"
+                  placeholder="Nama komoditas acuan SP2KP"
                   className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-[#E2DACB] text-xs sm:text-sm text-[#1A201A] focus:outline-none focus:border-[#236B37]"
                 />
               </div>

@@ -517,16 +517,13 @@ func (h *Handler) UploadFarmerListingMedia(c fiber.Ctx) error {
 	// Buat nama objek acak yang aman di S3 Garage
 	key := fmt.Sprintf("listings/%s/%s%s", userID, uuid.New().String(), validated.Extension)
 
-	var publicURL string
 	if h.storage != nil {
-		url, err := h.storage.Upload(c.Context(), key, bytes.NewReader(buf), validated.MimeType)
+		_, err := h.storage.Upload(c.Context(), key, bytes.NewReader(buf), validated.MimeType)
 		if err != nil {
 			return RespondError(c, fiber.StatusInternalServerError, "STORAGE_ERROR", "Gagal mengunggah berkas ke Garage S3: "+err.Error())
 		}
-		publicURL = url
-	} else {
-		publicURL = fmt.Sprintf("%s/%s/%s", h.cfg.S3Endpoint, h.cfg.S3Bucket, key)
 	}
+	publicURL := fmt.Sprintf("/tandur/%s", key)
 
 	return RespondSuccess(c, fiber.StatusCreated, "Berkas media panen berhasil diunggah dan diverifikasi", fiber.Map{
 		"url":        publicURL,
@@ -596,12 +593,12 @@ func (h *Handler) sanitizeAndPersistMediaURLs(ctx context.Context, userID string
 					}
 					key := fmt.Sprintf("listings/%s/%s%s", userID, uuid.New().String(), ext)
 					if h.storage != nil {
-						if uploadedURL, errUpload := h.storage.Upload(ctx, key, bytes.NewReader(decoded), mimeType); errUpload == nil {
-							cleanURLs = append(cleanURLs, uploadedURL)
+						if _, errUpload := h.storage.Upload(ctx, key, bytes.NewReader(decoded), mimeType); errUpload == nil {
+							cleanURLs = append(cleanURLs, fmt.Sprintf("/tandur/%s", key))
 							continue
 						}
 					}
-					cleanURLs = append(cleanURLs, fmt.Sprintf("%s/%s/%s", h.cfg.S3Endpoint, h.cfg.S3Bucket, key))
+					cleanURLs = append(cleanURLs, fmt.Sprintf("/tandur/%s", key))
 					continue
 				}
 			}
@@ -969,6 +966,28 @@ func (h *Handler) ConfirmReadyForPickup(c fiber.Ctx) error {
 	return RespondSuccess(c, fiber.StatusOK, "Status siap muat dan titik jemput berhasil dikonfirmasi ke armada", order)
 }
 
+// CompleteFarmerOrder menyelesaikan pesanan oleh petani setelah serah terima hasil panen
+func (h *Handler) CompleteFarmerOrder(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	order, err := h.orderService.CompleteFarmerOrder(c.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			return RespondError(c, fiber.StatusNotFound, "ORDER_NOT_FOUND", err.Error())
+		}
+		if errors.Is(err, domain.ErrUnauthorizedOrderAccess) {
+			return RespondError(c, fiber.StatusForbidden, "FORBIDDEN_ACCESS", err.Error())
+		}
+		return RespondError(c, fiber.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Pesanan berhasil diselesaikan", order)
+}
+
 // ==========================================
 // TENGKULAK / MITRA PENGUMPUL B2B HANDLERS
 // ==========================================
@@ -1280,6 +1299,58 @@ func (h *Handler) CloseMiddlemanSaleListing(c fiber.Ctx) error {
 	}
 
 	return RespondSuccess(c, fiber.StatusOK, "Listing penjualan berhasil ditutup", nil)
+}
+
+// UpdateMiddlemanSaleListing memperbarui data listing penjualan
+func (h *Handler) UpdateMiddlemanSaleListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	var input domain.UpdateSaleListingInput
+	if err := c.Bind().Body(&input); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "BAD_REQUEST", "Format input tidak valid")
+	}
+
+	sale, err := h.middlemanService.UpdateSaleListing(userID, id, input)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "UPDATE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Listing penjualan berhasil diperbarui", sale)
+}
+
+// DeleteMiddlemanSaleListing menghapus listing penjualan
+func (h *Handler) DeleteMiddlemanSaleListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	if err := h.middlemanService.DeleteSaleListing(userID, id); err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "DELETE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Listing penjualan berhasil dihapus", nil)
+}
+
+// ToggleArchiveMiddlemanSaleListing mengarsipkan atau mengaktifkan kembali listing
+func (h *Handler) ToggleArchiveMiddlemanSaleListing(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return RespondError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Sesi tidak valid")
+	}
+
+	id := c.Params("id")
+	sale, err := h.middlemanService.ToggleArchiveSaleListing(userID, id)
+	if err != nil {
+		return RespondError(c, fiber.StatusBadRequest, "ARCHIVE_FAILED", err.Error())
+	}
+
+	return RespondSuccess(c, fiber.StatusOK, "Status listing berhasil diubah", sale)
 }
 
 // GetMiddlemanSaleBids mengambil penawaran pembeli grosir/rice mill yang masuk

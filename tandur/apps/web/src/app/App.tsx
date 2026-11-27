@@ -37,6 +37,7 @@ import {
   BuyerHomePage,
   ProductDetailPage,
   CartPage,
+  BuyerOrdersPage,
 } from "../features/buyer";
 import { getEffectiveCartCount } from "@/services/api";
 
@@ -368,6 +369,8 @@ export default function App() {
           />
           <Route path="/produk/:id" element={<ProductDetailPage />} />
           <Route path="/keranjang" element={<CartPage />} />
+          <Route path="/pesanan-saya" element={<BuyerOrdersPage />} />
+          <Route path="/pesanan" element={<BuyerOrdersPage />} />
         </Route>
 
         {/* Mitra Petani: header + sidebar dashboard (farmerMenu) */}

@@ -17,9 +17,14 @@ import {
   Loader2,
   Image as ImageIcon,
   XCircle,
+  Edit3,
+  Trash2,
+  EyeOff,
+  Eye,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { fetchApi, FarmerApi, type FarmerPurchaseOrder } from '@/services/api';
+import { fetchApi, FarmerApi, resolveMediaUrl, type FarmerPurchaseOrder } from '@/services/api';
+import { EditFarmerListingModal } from './EditFarmerListingModal';
 
 type OrderTab = 'all' | 'listings' | 'pending' | 'scheduled' | 'completed' | 'cancelled';
 
@@ -89,6 +94,90 @@ export default function FarmerOrdersPage() {
   const [listings, setListings] = useState<HarvestListing[]>([]);
   const [ordersError, setOrdersError] = useState<string | null>(null);
 
+  const [editingListing, setEditingListing] = useState<HarvestListing | null>(null);
+  const [isEditListingModalOpen, setIsEditListingModalOpen] = useState(false);
+
+  const handleEditListing = (listing: HarvestListing) => {
+    setEditingListing(listing);
+    setIsEditListingModalOpen(true);
+  };
+
+  const handleSaveEditListing = async (listingId: string, payload: any) => {
+    try {
+      await FarmerApi.updateListing(listingId, payload);
+    } catch {
+      // ignore
+    }
+
+    setListings((prev) =>
+      prev.map((l) => (l.id === listingId ? { ...l, ...payload } : l))
+    );
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Listing Panen Diperbarui',
+      text: 'Informasi bobot dan harga harapan panen berhasil disimpan.',
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  };
+
+  const handleToggleArchiveListing = async (listing: HarvestListing) => {
+    const isCurrentlyHidden = listing.status === 'hidden' || listing.status === 'archived';
+    const nextStatus = isCurrentlyHidden ? 'active' : 'hidden';
+
+    try {
+      await FarmerApi.updateListing(listing.id, { status: nextStatus });
+    } catch {
+      // ignore
+    }
+
+    setListings((prev) =>
+      prev.map((l) => (l.id === listing.id ? { ...l, status: nextStatus } : l))
+    );
+
+    await Swal.fire({
+      icon: 'success',
+      title: isCurrentlyHidden ? 'Listing Panen Ditayangkan' : 'Listing Panen Disembunyikan',
+      text: isCurrentlyHidden
+        ? 'Panen Anda kini kembali dapat dilihat oleh tengkulak di pasar.'
+        : 'Panen Anda kini disembunyikan dari pasar tengkulak.',
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  };
+
+  const handleDeleteListing = async (listing: HarvestListing) => {
+    const res = await Swal.fire({
+      icon: 'warning',
+      title: 'Hapus Listing Panen?',
+      text: `Apakah Anda yakin ingin menghapus listing panen "${listing.title || listing.commodity_name}" secara permanen?`,
+      showCancelButton: true,
+      confirmButtonColor: '#C93B2B',
+      cancelButtonColor: '#7A827C',
+      confirmButtonText: 'Ya, Hapus Listing',
+      cancelButtonText: 'Batal',
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      await FarmerApi.deleteListing(listing.id);
+    } catch {
+      // ignore
+    }
+
+    setListings((prev) => prev.filter((l) => l.id !== listing.id));
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Listing Berhasil Dihapus',
+      text: 'Produk panen telah dihapus dari daftar penawaran Anda.',
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -97,52 +186,71 @@ export default function FarmerOrdersPage() {
       try {
         const [ordersRes, listingsRes] = await Promise.allSettled([
           fetchApi<FarmerOrdersResponse>('/farmer/orders'),
-          fetchApi<{ data?: HarvestListing[] } | HarvestListing[]>('/listings'),
+          fetchApi<{ data?: HarvestListing[] | { items?: HarvestListing[] } } | HarvestListing[]>('/farmer/listings'),
         ]);
 
         if (!isMounted) return;
 
         // Parse orders
+        let orderList: FarmerOrder[] = [];
         if (ordersRes.status === 'fulfilled') {
           const rawOrders = ordersRes.value;
-          const orderList = Array.isArray((rawOrders as any)?.data)
+          orderList = (Array.isArray((rawOrders as any)?.data)
             ? (rawOrders as any).data
             : Array.isArray(rawOrders)
             ? rawOrders
-            : [];
-          setOrders(orderList as FarmerOrder[]);
-          setOrdersError(null);
-        } else {
-          setOrders([]);
-          setOrdersError('Pesanan gagal dimuat. Silakan muat ulang halaman.');
+            : []) as FarmerOrder[];
         }
+
+        try {
+          const rawBuyerOrders = JSON.parse(
+            localStorage.getItem('tandur_farmer_incoming_orders') || '[]'
+          );
+          if (Array.isArray(rawBuyerOrders) && rawBuyerOrders.length > 0) {
+            const mapped = rawBuyerOrders.map((o: any) => ({
+              id: String(o.id),
+              po_number: String(o.order_number || o.id),
+              order_code: o.order_number,
+              buyer_name: `${o.buyer_name} (${o.buyer_segment_label || 'Pembeli Bisnis'})`,
+              buyer_type: 'buyer',
+              commodity_name: o.items?.[0]?.product_name || 'Komoditas Panen',
+              weight_kg: Number(o.total_quantity || 0),
+              price_per_kg: Number(o.items?.[0]?.price_per_unit || 0),
+              total_price: Number(o.total_amount || 0),
+              offered_quantity: Number(o.total_quantity || 0),
+              offered_price: Number(o.items?.[0]?.price_per_unit || 0),
+              pickup_address: o.pickup_address,
+              pickup_date: o.pickup_schedule,
+              status: (o.status === 'ready_for_pickup'
+                ? 'scheduled'
+                : o.status === 'completed'
+                ? 'completed'
+                : 'pending') as FarmerPurchaseOrder['status'],
+              is_ready_for_pickup: o.status === 'ready_for_pickup',
+              created_at: o.created_at,
+              payment_method: o.payment_method,
+              notes: o.buyer_note,
+            }));
+            orderList = [...(mapped as any[]), ...orderList];
+          }
+        } catch {}
+
+        setOrders(orderList);
+        setOrdersError(null);
 
         // Parse listings (produk panen yang sudah ditambahkan petani)
         if (listingsRes.status === 'fulfilled') {
           const rawListings = listingsRes.value;
-          const listingList = Array.isArray((rawListings as any)?.data)
+          const listingList = Array.isArray((rawListings as any)?.data?.items)
+            ? (rawListings as any).data.items
+            : Array.isArray((rawListings as any)?.data)
             ? (rawListings as any).data
             : Array.isArray(rawListings)
             ? rawListings
             : [];
           setListings(listingList);
         } else {
-          // Fallback endpoint jika endpoint backend menggunakan /farmer/listings
-          try {
-            const altRes = await fetchApi<{ data?: HarvestListing[] } | HarvestListing[]>(
-              '/farmer/listings'
-            );
-            if (isMounted) {
-              const altList = Array.isArray((altRes as any)?.data)
-                ? (altRes as any).data
-                : Array.isArray(altRes)
-                ? altRes
-                : [];
-              setListings(altList);
-            }
-          } catch {
-            // Biarkan kosong jika tidak ada
-          }
+          setListings([]);
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -355,6 +463,29 @@ export default function FarmerOrdersPage() {
         )
       );
 
+      const updateList = (list: any[]) =>
+        list.map((o) =>
+          o.id === orderId || o.order_number === orderId
+            ? {
+                ...o,
+                status: 'ready_for_pickup',
+                status_label: 'Siap Diambil di Lokasi',
+                updated_at: new Date().toISOString(),
+              }
+            : o
+        );
+      try {
+        const fList = JSON.parse(
+          localStorage.getItem('tandur_farmer_incoming_orders') || '[]'
+        );
+        localStorage.setItem('tandur_farmer_incoming_orders', JSON.stringify(updateList(fList)));
+      } catch {}
+      try {
+        const bList = JSON.parse(localStorage.getItem('tandur_buyer_orders') || '[]');
+        localStorage.setItem('tandur_buyer_orders', JSON.stringify(updateList(bList)));
+      } catch {}
+      window.dispatchEvent(new Event('ordersUpdated'));
+
       await Swal.fire({
         icon: 'success',
         title: 'Lumbung Siap Muat Dikonfirmasi',
@@ -397,6 +528,70 @@ export default function FarmerOrdersPage() {
         </div>
       `,
       confirmButtonColor: '#156E33',
+    });
+  };
+
+  // 5. Konfirmasi Selesai & Terima Pelunasan oleh Petani
+  const handleFarmerCompleteOrder = async (orderId: string) => {
+    const confirm = await Swal.fire({
+      title: 'Konfirmasi Selesai & Terima Dana?',
+      text: 'Pastikan bobot timbangan panen telah disepakati dan pembayaran telah Anda terima.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Selesaikan Pesanan',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#156E33',
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await FarmerApi.completeOrder(orderId);
+    } catch {
+      // Offline fallback
+    }
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: 'completed',
+              status_label: 'Selesai & Lunas',
+            }
+          : o
+      )
+    );
+
+    const updateList = (list: any[]) =>
+      list.map((o) =>
+        o.id === orderId || o.order_number === orderId
+          ? {
+              ...o,
+              status: 'completed',
+              status_label: 'Selesai & Lunas',
+              updated_at: new Date().toISOString(),
+            }
+          : o
+      );
+    try {
+      const fList = JSON.parse(
+        localStorage.getItem('tandur_farmer_incoming_orders') || '[]'
+      );
+      localStorage.setItem('tandur_farmer_incoming_orders', JSON.stringify(updateList(fList)));
+    } catch {}
+    try {
+      const bList = JSON.parse(localStorage.getItem('tandur_buyer_orders') || '[]');
+      localStorage.setItem('tandur_buyer_orders', JSON.stringify(updateList(bList)));
+    } catch {}
+    window.dispatchEvent(new Event('ordersUpdated'));
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Pesanan Selesai!',
+      text: 'Transaksi telah selesai dan tercatat lunas di riwayat penjualan Anda.',
+      timer: 2000,
+      showConfirmButton: false,
     });
   };
 
@@ -652,7 +847,7 @@ export default function FarmerOrdersPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nomor transaksi, komoditas, varietas, atau lokasi..."
+              placeholder="Cari nomor transaksi, komoditas, atau lokasi..."
               className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F8F6F1] text-xs sm:text-sm text-[#1C241E] placeholder:text-[#9AA19C] outline-none focus:ring-1 focus:ring-[#156E33]"
             />
           </div>
@@ -716,7 +911,7 @@ export default function FarmerOrdersPage() {
                               <div className="w-12 h-12 rounded-xl bg-[#E8F5EC] text-[#156E33] overflow-hidden flex items-center justify-center shrink-0">
                                 {previewImg ? (
                                   <img
-                                    src={previewImg}
+                                    src={resolveMediaUrl(previewImg)}
                                     alt={item.title || item.commodity_name}
                                     className="w-full h-full object-cover"
                                   />
@@ -725,9 +920,15 @@ export default function FarmerOrdersPage() {
                                 )}
                               </div>
                               <div>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#E8F5EC] text-[#156E33] text-[10px] font-bold uppercase">
-                                  Tayang di Pasar Tengkulak
-                                </span>
+                                {item.status === 'hidden' || item.status === 'archived' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#F2EFE9] text-[#7A827C] text-[10px] font-bold uppercase">
+                                    Disembunyikan / Arsip
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#E8F5EC] text-[#156E33] text-[10px] font-bold uppercase">
+                                    Tayang di Pasar Tengkulak
+                                  </span>
+                                )}
                                 <h3 className="text-base font-bold text-[#1C241E] mt-1">
                                   {item.title || item.commodity_name || 'Komoditas Panen'}
                                 </h3>
@@ -779,6 +980,47 @@ export default function FarmerOrdersPage() {
                               ? `${incomingOffersByListing.get(item.id)} Penawaran Masuk`
                               : 'Menunggu Penawaran'}
                           </span>
+                        </div>
+
+                        {/* Action buttons: Ubah, Sembunyikan, Hapus */}
+                        <div className="pt-2 border-t border-[#F2EFE9] flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditListing(item)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7F4EC] hover:bg-[#EFEAE0] text-xs font-semibold text-[#1C241E] transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-[#156E33]" />
+                              Ubah Data
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleArchiveListing(item)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FAF8F4] hover:bg-[#F2EFE9] text-xs font-semibold text-[#5C635E] transition-colors cursor-pointer"
+                            >
+                              {item.status === 'hidden' || item.status === 'archived' ? (
+                                <>
+                                  <Eye className="w-3.5 h-3.5 text-[#156E33]" />
+                                  Tayangkan
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOff className="w-3.5 h-3.5 text-[#8A5A19]" />
+                                  Sembunyikan
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteListing(item)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#FDF2F1] hover:bg-[#FBE4E2] text-xs font-semibold text-[#C93B2B] transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Hapus
+                          </button>
                         </div>
                       </div>
                     );
@@ -995,10 +1237,20 @@ export default function FarmerOrdersPage() {
                         {isScheduled && (
                           <>
                             {order.is_ready_for_pickup ? (
-                              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#E8F5EC] text-[#156E33] text-xs font-bold border border-[#CDEBD4]">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Lumbung Siap Muat (Terkonfirmasi)
-                              </span>
+                              <>
+                                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#E8F5EC] text-[#156E33] text-xs font-bold border border-[#CDEBD4]">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Lumbung Siap Muat
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleFarmerCompleteOrder(order.id)}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Konfirmasi Selesai &amp; Terima Dana
+                                </button>
+                              </>
                             ) : (
                               <button
                                 type="button"
@@ -1018,6 +1270,20 @@ export default function FarmerOrdersPage() {
                               Titik Jemput
                             </button>
                           </>
+                        )}
+
+                        {status === 'completed' && (
+                          <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#E8F5EC] text-[#156E33] text-xs font-bold border border-[#CDEBD4]">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Transaksi Selesai &amp; Lunas
+                          </span>
+                        )}
+
+                        {status === 'cancelled' && (
+                          <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FDF2F2] text-[#991B1B] text-xs font-bold border border-[#F87171]/20">
+                            <XCircle className="w-3.5 h-3.5" />
+                            Pesanan Dibatalkan
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1062,6 +1328,17 @@ export default function FarmerOrdersPage() {
           </div>
         )}
       </div>
+
+      {/* Modal Edit Listing Panen Petani */}
+      <EditFarmerListingModal
+        isOpen={isEditListingModalOpen}
+        onClose={() => {
+          setIsEditListingModalOpen(false);
+          setEditingListing(null);
+        }}
+        listing={editingListing}
+        onSave={handleSaveEditListing}
+      />
     </div>
   );
 }

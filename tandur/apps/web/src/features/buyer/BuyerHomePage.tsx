@@ -13,6 +13,8 @@ import {
   PackageOpen,
   RefreshCw,
   Sparkles,
+  ShoppingBag,
+  Building2,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import {
@@ -30,6 +32,7 @@ export const BuyerHomePage: React.FC = () => {
   const [popularProducts, setPopularProducts] = useState<BuyerProduct[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
+  const [buyerSegment, setBuyerSegment] = useState<'retail' | 'business'>('retail');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [cartCount, setCartCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -178,14 +181,16 @@ export const BuyerHomePage: React.FC = () => {
               const offeredTons = Number(item.offered_tons ?? item.offer_ton ?? 0);
               const stockKg = Math.round(offeredTons * 1000);
               const minOrderTons = Number(item.min_order_tons ?? item.min_order_ton ?? 0.05);
-              const minOrderKg = Math.max(25, Math.round(minOrderTons * 1000));
+              const minOrderKg = item.min_order_kg
+                ? Number(item.min_order_kg)
+                : Math.max(1, Math.round(minOrderTons * 1000));
               const unitPrice = Number(item.selling_price_per_kg ?? item.price_per_kg ?? 0);
 
               return {
                 id: String(item.id || `local-prod-${idx}`),
                 source: 'middleman',
                 source_label: 'Mitra Gudang Tandur',
-                name: `${item.commodity_name || 'Komoditas Panen'} (${item.variety || 'Standar Gudang'})`,
+                name: item.commodity_name || 'Komoditas Panen',
                 commodity_name: item.commodity_name || 'Komoditas Panen',
                 category_id: 'cat-local',
                 category_name: item.category || 'Gabah',
@@ -193,6 +198,7 @@ export const BuyerHomePage: React.FC = () => {
                 unit: 'kg',
                 available_stock: stockKg,
                 min_order_quantity: minOrderKg,
+                primary_image_url: item.image_url || item.primary_image_url || '',
                 is_preorder: false,
                 seller: {
                   id: 'local-seller',
@@ -245,36 +251,52 @@ export const BuyerHomePage: React.FC = () => {
 
   const filteredProducts = useMemo(() => {
     return products.filter((item) => {
-      const catName = item.category_name || item.category || '';
+      const catName = (item.category_name || item.category || '').toLowerCase();
+      const titleStr = (item.name || item.title || '').toLowerCase();
+      const minQty = Number(item.min_order_quantity ?? item.min_order_kg ?? 1);
+
+      // SEGMENTASI PASAR: RUMAH TANGGA (KG) VS PENGADAAN BISNIS (TON)
+      const isRawFarmerHarvest =
+        item.source === 'farmer' ||
+        catName.includes('gabah') ||
+        titleStr.includes('gabah') ||
+        titleStr.includes('gkp') ||
+        titleStr.includes('gkg') ||
+        minQty >= 100;
+
+      if (buyerSegment === 'retail') {
+        // Mode Konsumen Rumah Tangga: Hanya produk olahan / siap masak (Beras, Sayur, Minyak, Gula, Palawija)
+        // Gabah mentah petani atau pasokan partai besar (>= 100 kg) TIDAK TAMPIL untuk pembeli rumahan biasa!
+        if (isRawFarmerHarvest) return false;
+      }
+
       const matchCategory =
         selectedCategory === 'Semua' ||
-        catName.toLowerCase() === selectedCategory.toLowerCase() ||
-        catName.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-        selectedCategory.toLowerCase().includes(catName.toLowerCase()) ||
-        (selectedCategory.includes('Beras') && (catName.toLowerCase().includes('beras') || catName.toLowerCase().includes('gabah') || catName.toLowerCase().includes('padi'))) ||
-        (selectedCategory.includes('Sayur') && catName.toLowerCase().includes('sayur')) ||
-        (selectedCategory.includes('Buah') && catName.toLowerCase().includes('buah')) ||
-        (selectedCategory.includes('Bibit') && (catName.toLowerCase().includes('bibit') || catName.toLowerCase().includes('ternak'))) ||
-        (selectedCategory.includes('Rempah') && (catName.toLowerCase().includes('rempah') || catName.toLowerCase().includes('bumbu'))) ||
+        catName.includes(selectedCategory.toLowerCase()) ||
+        selectedCategory.toLowerCase().includes(catName) ||
+        (selectedCategory.includes('Beras') && (catName.includes('beras') || catName.includes('gabah') || catName.includes('padi'))) ||
+        (selectedCategory.includes('Sayur') && catName.includes('sayur')) ||
+        (selectedCategory.includes('Buah') && catName.includes('buah')) ||
+        (selectedCategory.includes('Bibit') && (catName.includes('bibit') || catName.includes('ternak'))) ||
+        (selectedCategory.includes('Rempah') && (catName.includes('rempah') || catName.includes('bumbu'))) ||
         item.category_id === selectedCategory;
 
       const q = searchQuery.trim().toLowerCase();
       if (!q) return matchCategory;
 
-      const titleStr = item.name || item.title || '';
-      const commStr = item.commodity_name || '';
-      const sellerStr = item.seller?.name || item.seller_name || '';
-      const locStr = item.seller?.city || item.seller?.address || item.seller_location || '';
+      const commStr = (item.commodity_name || '').toLowerCase();
+      const sellerStr = (item.seller?.name || item.seller_name || '').toLowerCase();
+      const locStr = (item.seller?.city || item.seller?.address || item.seller_location || '').toLowerCase();
 
       const matchSearch =
-        titleStr.toLowerCase().includes(q) ||
-        commStr.toLowerCase().includes(q) ||
-        sellerStr.toLowerCase().includes(q) ||
-        locStr.toLowerCase().includes(q);
+        titleStr.includes(q) ||
+        commStr.includes(q) ||
+        sellerStr.includes(q) ||
+        locStr.includes(q);
 
       return matchCategory && matchSearch;
     });
-  }, [products, selectedCategory, searchQuery]);
+  }, [products, selectedCategory, searchQuery, buyerSegment]);
 
   const handleQuickAddCart = async (product: BuyerProduct) => {
     const minQty = product.min_order_quantity || product.min_order_kg || 1;
@@ -367,6 +389,54 @@ export const BuyerHomePage: React.FC = () => {
 
       {/* Main Catalog Section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Segment Switcher: Konsumen Rumah Tangga (Kg) vs Pengadaan Bisnis & Grosir (Ton) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-white border border-[#ECE6DA] shadow-xs">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#236B37]">
+                {buyerSegment === 'retail' ? 'Mode Belanja Konsumen' : 'Mode Pengadaan Bisnis (B2B)'}
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                buyerSegment === 'retail' ? 'bg-[#E1F3E5] text-[#236B37]' : 'bg-[#FADEC9] text-[#9A4D16]'
+              }`}>
+                {buyerSegment === 'retail' ? 'Satuan Kilogram (Kg)' : 'Satuan Tonase / Grosir'}
+              </span>
+            </div>
+            <p className="text-xs text-[#6D756D] mt-1">
+              {buyerSegment === 'retail'
+                ? 'Menampilkan beras & komoditas siap masak untuk dapur rumah tangga (satuan kg, tanpa gabah mentah berton-ton).'
+                : 'Menampilkan pasokan panen langsung dari petani (gabah berton-ton) dan lumbung tengkulak untuk pabrik/grosir.'}
+            </p>
+          </div>
+
+          <div className="inline-flex p-1 rounded-xl bg-[#F4EFE6] border border-[#E8E2D5] gap-1 shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setBuyerSegment('retail')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                buyerSegment === 'retail'
+                  ? 'bg-white text-[#1A201A] shadow-xs'
+                  : 'text-[#6D756D] hover:text-[#1A201A]'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-[#236B37]" />
+              Konsumen Rumah Tangga (Kg)
+            </button>
+            <button
+              type="button"
+              onClick={() => setBuyerSegment('business')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                buyerSegment === 'business'
+                  ? 'bg-[#236B37] text-white shadow-xs'
+                  : 'text-[#6D756D] hover:text-[#236B37]'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              Pengadaan Bisnis &amp; Grosir (Ton)
+            </button>
+          </div>
+        </div>
+
         {/* Search & Filter Toolbar */}
         <div className="bg-white rounded-2xl border border-[#ECE6DA] p-4 sm:p-5 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.015)]">
           <div className="flex flex-col md:flex-row gap-3">
@@ -512,9 +582,6 @@ export const BuyerHomePage: React.FC = () => {
               const pSellerName = product.seller?.name || product.seller_name || 'Mitra Penjual';
               const pLocation =
                 product.seller?.city || product.seller?.address || product.seller_location || 'Demak';
-              const pSourceLabel =
-                product.source_label ||
-                (product.source === 'farmer' ? 'Petani Mitra' : 'Mitra Tengkulak');
               const pCategory = product.category_name || product.category || 'Komoditas';
               const pImage =
                 product.primary_image_url ||
@@ -542,9 +609,11 @@ export const BuyerHomePage: React.FC = () => {
                         <span className="px-2.5 py-1 rounded-full bg-white/90 text-[#236B37] text-[10px] font-bold shadow-xs">
                           {pCategory}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#236B37]/90 text-white text-[10px] font-semibold">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-white text-[10px] font-semibold ${
+                          product.source === 'farmer' ? 'bg-[#156E33]/90' : 'bg-[#236B37]/90'
+                        }`}>
                           <ShieldCheck className="w-3 h-3" />
-                          {pSourceLabel}
+                          {product.source === 'farmer' ? '🌾 Panen Petani (B2B)' : '🏭 Mitra Gudang'}
                         </span>
                       </div>
 
@@ -578,7 +647,15 @@ export const BuyerHomePage: React.FC = () => {
                           <span className="truncate">{pLocation}</span>
                         </div>
                         <div className="text-[11px] text-[#7A827A]">
-                          Stok: <strong>{pStock.toLocaleString('id-ID')} {pUnit}</strong> • Min. {pMinOrder} {pUnit}
+                          {buyerSegment === 'business' && pStock >= 1000 ? (
+                            <>
+                              Stok: <strong>{(pStock / 1000).toFixed(1)} Ton</strong> • Min. {(pMinOrder / 1000).toFixed(1)} Ton
+                            </>
+                          ) : (
+                            <>
+                              Stok: <strong>{pStock.toLocaleString('id-ID')} {pUnit}</strong> • Min. {pMinOrder} {pUnit}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

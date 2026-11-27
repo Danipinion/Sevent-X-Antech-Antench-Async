@@ -103,11 +103,11 @@ export const InventoryListPage: React.FC = () => {
       status,
       statusBadgeText:
         status === 'Aman' ? 'Aman / Optimal' : status === 'Menipis' ? 'Stok Menipis' : 'Stok Kritis',
-      processingStatus: category === 'Beras' ? 'Siap Distribusi Pasar' : 'Tersimpan di Silo',
+      processingStatus: category === 'Beras' ? 'Siap Distribusi Pasar' : 'Tersimpan di Gudang',
       totalStockTon: `${(stockKg / 1000).toFixed(1)} Ton`,
       totalStockKg: `${stockKg.toLocaleString('id-ID')} kg`,
       progressPercent: pct,
-      location: inv.location || inv.warehouse_name || 'Gudang Mitra Tandur',
+      location: inv.location || inv.warehouse_name || 'Gudang Utama',
       occupancyText: `Okupansi ${pct}% • Kapasitas Maks ${(capacityKg / 1000).toFixed(1)} Ton`,
       avgBuyPrice: `Rp ${avgBuy.toLocaleString('id-ID')}`,
       buyPriceNote: 'Harga tertimbang masuk',
@@ -159,8 +159,30 @@ export const InventoryListPage: React.FC = () => {
         // Abaikan parse error
       }
 
-      const combined = [...localList, ...apiList];
-      setItems(combined.map((inv, idx) => mapRawToDetail(inv, idx)));
+      // Jika API mengembalikan data, bersihkan data lokal yang duplikat dengan API
+      if (apiList.length > 0 && localList.length > 0) {
+        const apiCodes = new Set(
+          apiList
+            .flatMap((inv) => [inv.batch_code, inv.lot_code, inv.commodity_name])
+            .filter(Boolean)
+        );
+        localList = localList.filter(
+          (loc) => !apiCodes.has(loc.batch_code) && !apiCodes.has(loc.lot_code)
+        );
+        localStorage.setItem(LOCAL_INVENTORY_KEY, JSON.stringify(localList));
+      }
+
+      const combined = [...apiList, ...localList];
+      const uniqueMap = new Map();
+      combined.forEach((inv) => {
+        const key =
+          inv.batch_code ||
+          inv.lot_code ||
+          `${inv.commodity_name || 'komoditas'}-${inv.total_weight_kg || inv.stock_kg || 0}`;
+        if (!uniqueMap.has(key)) uniqueMap.set(key, inv);
+      });
+      const uniqueList = Array.from(uniqueMap.values());
+      setItems(uniqueList.map((inv, idx) => mapRawToDetail(inv, idx)));
 
       // Muat log mutasi keluar-masuk
       let apiMutations: MutationLogItem[] = [];
@@ -216,36 +238,40 @@ export const InventoryListPage: React.FC = () => {
     const stockKg = Math.round(Number(formData.tonnage || 0) * 1000);
     const buyPrice = Number(formData.buyPrice || 0);
     const marketRefPrice = Number(formData.marketRefPrice || buyPrice);
-    const locationClean = String(formData.siloLocation || 'Gudang Utama').split(' (')[0];
+    const locationClean = 'Gudang Utama';
     const batchCode = formData.batchCode || `LOT-${Date.now().toString().slice(-5)}`;
     const commodityName = formData.commodity || 'Komoditas Panen';
     const category = normalizeCategory('', commodityName);
 
-    let savedFromApi = false;
+    let apiSuccess = false;
     try {
       await MiddlemanApi.addIncomingStock({
         batch_code: batchCode,
         commodity_name: commodityName,
         category: category.toLowerCase(),
-        variety: formData.variety || 'Standar Gudang',
-        supplier_name: formData.supplier || 'Petani Mitra Tandur',
-        source_gapoktan: formData.supplier || 'Petani Mitra Tandur',
+        variety: 'Standar SP2KP',
+        supplier_name: 'Mitra Petani Tandur',
+        source_gapoktan: 'Mitra Petani Tandur',
         location: locationClean,
         warehouse_name: locationClean,
         stock_kg: stockKg,
         weight_kg: stockKg,
+        weight_tons: Number(formData.tonnage || 0),
         capacity_kg: Math.max(stockKg, 20000),
         avg_buy_price: buyPrice,
         buy_price_per_kg: buyPrice,
         market_ref_price: marketRefPrice,
         market_price_per_kg: marketRefPrice,
+        yield_percent: formData.yieldPercent,
+        moisture_content: formData.yieldPercent,
+        entry_date: new Date().toISOString(),
       });
-      savedFromApi = true;
+      apiSuccess = true;
     } catch {
-      // Fallback ke penyimpanan lokal agar tetap tercatat
+      // Fallback ke penyimpanan lokal jika server offline
     }
 
-    if (!savedFromApi) {
+    if (!apiSuccess) {
       try {
         const existingLocal = JSON.parse(localStorage.getItem(LOCAL_INVENTORY_KEY) || '[]');
         const newLocalRecord = {
@@ -253,7 +279,7 @@ export const InventoryListPage: React.FC = () => {
           batch_code: batchCode,
           commodity_name: commodityName,
           category,
-          variety: formData.variety || formData.supplier || 'Standar Gudang',
+          variety: 'Standar SP2KP',
           location: locationClean,
           stock_kg: stockKg,
           capacity_kg: Math.max(stockKg, 20000),
@@ -262,7 +288,7 @@ export const InventoryListPage: React.FC = () => {
           moisture_level: formData.yieldPercent
             ? `Rendemen Giling ${formData.yieldPercent}%`
             : 'Kadar Air Standar',
-          supplier_name: formData.supplier || 'Petani Mitra Tandur',
+          supplier_name: 'Mitra Petani Tandur',
           updated_at: new Date().toISOString(),
         };
         localStorage.setItem(
@@ -279,8 +305,8 @@ export const InventoryListPage: React.FC = () => {
       id: `mut-${Date.now()}`,
       type: 'in',
       title: `+${Number(formData.tonnage || 0).toFixed(1)} Ton ${commodityName}`,
-      partner: formData.supplier || 'Petani Mitra Tandur',
-      docRef: `Batch: ${batchCode} • ${locationClean}`,
+      partner: 'Mitra Petani Tandur',
+      docRef: `Batch: ${batchCode}`,
       timeLabel: formData.receivedTime || 'Baru saja',
       statusLabel: 'Timbang Selesai',
     };
@@ -420,13 +446,13 @@ export const InventoryListPage: React.FC = () => {
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F3EFE6] text-[#7D5318] text-[11px] font-bold tracking-wide uppercase">
               <Warehouse className="w-3.5 h-3.5" />
-              GUDANG UTAMA &amp; SILO PENAMPUNGAN
+              GUDANG UTAMA PENAMPUNGAN
             </div>
             <h1 className="text-2xl sm:text-[26px] font-bold text-[#1A201A] tracking-tight">
               Inventaris Stok Gudang
             </h1>
             <p className="text-xs sm:text-sm text-[#6D756D]">
-              Monitoring real-time kapasitas silo, tonase komoditas gabah, beras, dan palawija, serta pergerakan keluar-masuk gudang.
+              Monitoring real-time tonase komoditas gabah, beras, dan palawija, serta pergerakan keluar-masuk gudang.
             </p>
           </div>
 
@@ -586,7 +612,7 @@ export const InventoryListPage: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari jenis komoditas, varietas, lokasi, atau batch..."
+                placeholder="Cari jenis komoditas, lokasi, atau batch..."
                 className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F6F2EA] border border-[#E6DFD2] text-xs sm:text-sm text-[#1A201A] placeholder-[#8E968E] focus:outline-none focus:border-[#236B37]"
               />
             </div>
@@ -656,7 +682,7 @@ export const InventoryListPage: React.FC = () => {
               <p className="text-xs text-[#6D756D] max-w-md mx-auto">
                 {searchQuery || selectedCategory !== 'Semua' || statusFilter !== 'Semua'
                   ? 'Tidak ditemukan lot komoditas yang sesuai dengan filter pencarian Anda.'
-                  : 'Catat penerimaan hasil panen masuk ke silo atau gudang dengan menekan tombol "Tambah Stok Masuk".'}
+                  : 'Catat penerimaan hasil panen masuk ke gudang dengan menekan tombol "Tambah Stok Masuk".'}
               </p>
               {!searchQuery && selectedCategory === 'Semua' && statusFilter === 'Semua' && (
                 <div className="pt-2">
@@ -676,7 +702,7 @@ export const InventoryListPage: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-[880px]">
                 <thead>
                   <tr className="bg-[#F6F2EA] text-[11px] font-bold uppercase tracking-wider text-[#6D756D]">
-                    <th className="py-3.5 px-4 rounded-l-xl">KOMODITAS &amp; VARIETAS</th>
+                    <th className="py-3.5 px-4 rounded-l-xl">KOMODITAS (ACUAN SP2KP)</th>
                     <th className="py-3.5 px-4">LOKASI PENYIMPANAN</th>
                     <th className="py-3.5 px-4 text-right">TOTAL STOK (KG/TON)</th>
                     <th className="py-3.5 px-4 text-right">HARGA TEBAS AVG</th>
@@ -873,7 +899,7 @@ export const InventoryListPage: React.FC = () => {
               </div>
               <div>
                 <h2 className="text-sm font-bold text-[#1A201A]">
-                  Standar Mutu &amp; Tera Silo
+                  Standar Mutu &amp; Tera Timbangan Gudang
                 </h2>
                 <p className="text-[11px] text-[#6D756D]">
                   Pencatatan Timbangan Digital Tandur
@@ -882,7 +908,7 @@ export const InventoryListPage: React.FC = () => {
             </div>
 
             <p className="text-xs text-[#555D55] leading-relaxed">
-              Seluruh bobot komoditas yang masuk ke silo dan gudang tercatat menggunakan standar penimbangan digital terkalibrasi guna menjaga transparansi rendemen dan kadar air.
+              Seluruh bobot komoditas yang masuk ke gudang tercatat menggunakan standar penimbangan digital terkalibrasi guna menjaga transparansi rendemen dan kadar air.
             </p>
           </div>
         </div>

@@ -414,6 +414,69 @@ func (m *MemoryMiddlemanRepository) CloseSaleListing(middlemanID string, id stri
 	return nil
 }
 
+func (m *MemoryMiddlemanRepository) UpdateSaleListing(middlemanID string, id string, input domain.UpdateSaleListingInput) (*domain.MiddlemanSalesListing, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sale, exists := m.sales[id]
+	if !exists || sale.MiddlemanID != middlemanID {
+		return nil, fmt.Errorf("listing penjualan tidak ditemukan")
+	}
+	if input.OfferedTons > 0 {
+		sale.OfferedTons = input.OfferedTons
+	}
+	if input.MinOrderTons > 0 {
+		sale.MinOrderTons = input.MinOrderTons
+	}
+	if input.SellingPricePerKg > 0 {
+		sale.SellingPricePerKg = input.SellingPricePerKg
+		sale.TargetMarginPerKg = sale.SellingPricePerKg - sale.CostPricePerKg
+		sale.TotalTargetMargin = sale.TargetMarginPerKg * sale.OfferedTons * 1000.0
+	}
+	if input.DeliveryOption != "" {
+		sale.DeliveryOption = input.DeliveryOption
+	}
+	if len(input.TargetMarkets) > 0 {
+		sale.TargetMarkets = input.TargetMarkets
+	}
+	if input.Status != "" {
+		sale.Status = input.Status
+	}
+	sale.UpdatedAt = time.Now()
+	m.sales[id] = sale
+	return &sale, nil
+}
+
+func (m *MemoryMiddlemanRepository) DeleteSaleListing(middlemanID string, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sale, exists := m.sales[id]
+	if !exists || sale.MiddlemanID != middlemanID {
+		return fmt.Errorf("listing penjualan tidak ditemukan")
+	}
+	delete(m.sales, id)
+	return nil
+}
+
+func (m *MemoryMiddlemanRepository) ToggleArchiveSaleListing(middlemanID string, id string) (*domain.MiddlemanSalesListing, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sale, exists := m.sales[id]
+	if !exists || sale.MiddlemanID != middlemanID {
+		return nil, fmt.Errorf("listing penjualan tidak ditemukan")
+	}
+	if sale.Status == "closed" {
+		sale.Status = "active"
+	} else {
+		sale.Status = "closed"
+	}
+	sale.UpdatedAt = time.Now()
+	m.sales[id] = sale
+	return &sale, nil
+}
+
 func (m *MemoryMiddlemanRepository) ListSaleBids(saleID string) ([]domain.MiddlemanSalesBid, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

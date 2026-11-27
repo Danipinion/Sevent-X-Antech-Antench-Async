@@ -815,6 +815,64 @@ func (r *PostgresMiddlemanRepository) CloseSaleListing(middlemanID string, id st
 	return nil
 }
 
+func (r *PostgresMiddlemanRepository) UpdateSaleListing(middlemanID string, id string, input domain.UpdateSaleListingInput) (*domain.MiddlemanSalesListing, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		UPDATE middleman_sales_listings
+		SET offered_tons = CASE WHEN $3 > 0 THEN $3 ELSE offered_tons END,
+		    min_order_tons = CASE WHEN $4 > 0 THEN $4 ELSE min_order_tons END,
+		    selling_price_per_kg = CASE WHEN $5 > 0 THEN $5 ELSE selling_price_per_kg END,
+		    delivery_option = CASE WHEN $6 != '' THEN $6 ELSE delivery_option END,
+		    status = CASE WHEN $7 != '' THEN $7 ELSE status END,
+		    updated_at = NOW()
+		WHERE id = $1 AND middleman_id = $2
+	`
+	cmd, err := r.pool.Exec(ctx, query, id, middlemanID, input.OfferedTons, input.MinOrderTons, input.SellingPricePerKg, input.DeliveryOption, input.Status)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.RowsAffected() == 0 {
+		return nil, fmt.Errorf("listing penjualan tidak ditemukan")
+	}
+	return r.GetSaleListingByID(middlemanID, id)
+}
+
+func (r *PostgresMiddlemanRepository) DeleteSaleListing(middlemanID string, id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd, err := r.pool.Exec(ctx, "DELETE FROM middleman_sales_listings WHERE id = $1 AND middleman_id = $2", id, middlemanID)
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return fmt.Errorf("listing penjualan tidak ditemukan")
+	}
+	return nil
+}
+
+func (r *PostgresMiddlemanRepository) ToggleArchiveSaleListing(middlemanID string, id string) (*domain.MiddlemanSalesListing, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		UPDATE middleman_sales_listings
+		SET status = CASE WHEN status = 'closed' THEN 'active' ELSE 'closed' END,
+		    updated_at = NOW()
+		WHERE id = $1 AND middleman_id = $2
+	`
+	cmd, err := r.pool.Exec(ctx, query, id, middlemanID)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.RowsAffected() == 0 {
+		return nil, fmt.Errorf("listing penjualan tidak ditemukan")
+	}
+	return r.GetSaleListingByID(middlemanID, id)
+}
+
 func (r *PostgresMiddlemanRepository) ListSaleBids(saleID string) ([]domain.MiddlemanSalesBid, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

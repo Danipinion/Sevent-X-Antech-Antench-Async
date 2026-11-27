@@ -24,7 +24,7 @@ export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [product, setProduct] = useState<BuyerProduct | null>(null);
-  const [quantityKg, setQuantityKg] = useState<number>(25);
+  const [quantityKg, setQuantityKg] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -60,15 +60,19 @@ export const ProductDetailPage: React.FC = () => {
             if (foundLocal) {
               const offeredTons = Number(foundLocal.offered_tons ?? foundLocal.offer_ton ?? 0);
               const stockKg = Math.round(offeredTons * 1000);
-              const minOrderTons = Number(foundLocal.min_order_tons ?? foundLocal.min_order_ton ?? 0.05);
-              const minOrderKg = Math.max(25, Math.round(minOrderTons * 1000));
+              const minOrderTons = Number(foundLocal.min_order_tons ?? foundLocal.min_order_ton ?? 0.005);
+              const minOrderKg = foundLocal.min_order_kg
+                ? Number(foundLocal.min_order_kg)
+                : foundLocal.min_order_quantity
+                ? Number(foundLocal.min_order_quantity)
+                : Math.max(1, Math.round(minOrderTons * 1000));
               const unitPrice = Number(foundLocal.selling_price_per_kg ?? foundLocal.price_per_kg ?? 0);
 
               const mappedProduct: BuyerProduct = {
                 id: String(foundLocal.id),
                 source: 'middleman',
                 source_label: 'Mitra Gudang Tandur',
-                name: `${foundLocal.commodity_name || 'Komoditas Panen'} (${foundLocal.variety || 'Standar Gudang'})`,
+                name: foundLocal.commodity_name || 'Komoditas Panen',
                 commodity_name: foundLocal.commodity_name || 'Komoditas Panen',
                 category_id: 'cat-local',
                 category_name: foundLocal.category || 'Gabah',
@@ -76,6 +80,7 @@ export const ProductDetailPage: React.FC = () => {
                 unit: 'kg',
                 available_stock: stockKg,
                 min_order_quantity: minOrderKg,
+                primary_image_url: foundLocal.image_url || foundLocal.primary_image_url || '',
                 is_preorder: false,
                 seller: {
                   id: 'local-seller',
@@ -349,21 +354,31 @@ export const ProductDetailPage: React.FC = () => {
                   type="button"
                   onClick={handleDecrease}
                   disabled={quantityKg <= stepKg}
-                  className="w-9 h-9 rounded-lg bg-white border border-[#DFD8CA] flex items-center justify-center text-[#1A201A] disabled:opacity-40 cursor-pointer"
+                  className="w-9 h-9 rounded-lg bg-white border border-[#DFD8CA] flex items-center justify-center text-[#1A201A] disabled:opacity-40 cursor-pointer hover:bg-[#F9F7F1]"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
-                <div className="w-24 text-center">
-                  <span className="text-base font-bold text-[#1A201A]">
-                    {quantityKg}
-                  </span>{' '}
-                  <span className="text-xs text-[#6D756D]">{pUnit}</span>
+                <div className="w-28 text-center flex items-center justify-center gap-1 bg-white rounded-lg border border-[#DFD8CA] px-2 py-1">
+                  <input
+                    type="number"
+                    min={stepKg}
+                    max={pStock}
+                    value={quantityKg}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (!isNaN(val)) {
+                        setQuantityKg(Math.min(pStock, Math.max(stepKg, val)));
+                      }
+                    }}
+                    className="w-16 text-center font-bold text-[#1A201A] text-base outline-none bg-transparent"
+                  />
+                  <span className="text-xs text-[#6D756D] font-medium">{pUnit}</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleIncrease}
                   disabled={quantityKg >= pStock}
-                  className="w-9 h-9 rounded-lg bg-white border border-[#DFD8CA] flex items-center justify-center text-[#1A201A] disabled:opacity-40 cursor-pointer"
+                  className="w-9 h-9 rounded-lg bg-white border border-[#DFD8CA] flex items-center justify-center text-[#1A201A] disabled:opacity-40 cursor-pointer hover:bg-[#F9F7F1]"
                 >
                   <Plus className="w-4 h-4" />
                 </button>

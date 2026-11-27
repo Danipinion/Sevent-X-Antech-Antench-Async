@@ -175,16 +175,66 @@ export const CartPage: React.FC = () => {
     if (items.length === 0) return;
 
     setIsCheckingOut(true);
+    const nowIso = new Date().toISOString();
+    const orderNumber = `TND-ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const effectiveSchedule = pickupSchedule || 'Hari Ini, 14:00 - 17:00 WIB';
+
+    let authUser: any = null;
+    try {
+      authUser = JSON.parse(localStorage.getItem('tandur_auth_user') || '{}');
+    } catch {}
+
+    const firstSeller: any = items[0]?.seller || {};
+    const sellerName = items[0]?.seller_name || firstSeller.name || 'Mitra Gudang Tandur';
+    const isFarmerSeller = (items[0] as any)?.source === 'farmer' || firstSeller.role === 'farmer';
+
+    const newOrder = {
+      id: `ORD-${Date.now()}`,
+      order_number: orderNumber,
+      buyer_id: authUser?.id || 'buyer-1',
+      buyer_name: authUser?.name || 'Pak Budi Santoso',
+      buyer_phone: authUser?.phone || '0812-3456-7890',
+      buyer_segment: totalWeightKg >= 1000 ? 'b2b' : 'b2c',
+      buyer_segment_label: totalWeightKg >= 1000 ? 'Pengadaan Bisnis & Grosir' : 'Konsumen Rumah Tangga',
+      seller_id: firstSeller.id || 'seller-1',
+      seller_name: sellerName,
+      seller_role: isFarmerSeller ? 'farmer' : 'middleman',
+      seller_role_label: isFarmerSeller ? 'Mitra Petani' : 'Mitra Gudang / Tengkulak',
+      seller_location: firstSeller.city || 'Gudang Utama - Madiun',
+      items: items.map((it) => ({
+        id: it.id,
+        product_id: it.product_id,
+        product_name: it.product_name || it.title || 'Komoditas',
+        category: (it as any).category || 'Beras',
+        image_url: it.media_url || it.image_url || '',
+        quantity: Number(it.quantity ?? it.quantity_kg ?? 1),
+        unit: it.unit || 'kg',
+        price_per_unit: Number(it.price_per_kg ?? it.unit_price ?? 0),
+        subtotal: Number(it.subtotal ?? 0),
+      })),
+      total_amount: totalAmount,
+      total_quantity: totalWeightKg,
+      unit: 'kg',
+      payment_method: 'Cash on Pickup (Bayar Tunai di Lokasi)',
+      pickup_schedule: effectiveSchedule,
+      pickup_address: firstSeller.city || 'Gudang Utama Penampungan, Madiun',
+      buyer_note: buyerNote || 'Harap siapkan timbangan digital sebelum saya tiba.',
+      status: 'pending' as const,
+      status_label: 'Menunggu Konfirmasi Penjual',
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
     try {
       const itemIDs = items.map((it) => it.id).filter(Boolean);
       await BuyerApi.createOrder({
         item_ids: itemIDs.length > 0 ? itemIDs : undefined,
-        notes: [pickupSchedule, buyerNote].filter(Boolean).join(' • '),
+        notes: [effectiveSchedule, buyerNote].filter(Boolean).join(' • '),
       });
     } catch {
       try {
         await BuyerApi.checkoutCashOnPickup({
-          pickup_schedule: pickupSchedule,
+          pickup_schedule: effectiveSchedule,
           buyer_note: buyerNote,
           payment_method: 'cash_on_pickup',
         });
@@ -195,21 +245,61 @@ export const CartPage: React.FC = () => {
       setIsCheckingOut(false);
     }
 
+    // 1. Simpan ke daftar pesanan pembeli
+    try {
+      const existing = JSON.parse(localStorage.getItem('tandur_buyer_orders') || '[]');
+      localStorage.setItem(
+        'tandur_buyer_orders',
+        JSON.stringify([newOrder, ...(Array.isArray(existing) ? existing : [])])
+      );
+    } catch {}
+
+    // 2. Sinkronkan ke antrean seller (Tengkulak atau Petani)
+    if (newOrder.seller_role === 'middleman') {
+      try {
+        const midList = JSON.parse(localStorage.getItem('tandur_middleman_buyer_orders') || '[]');
+        localStorage.setItem(
+          'tandur_middleman_buyer_orders',
+          JSON.stringify([newOrder, ...(Array.isArray(midList) ? midList : [])])
+        );
+      } catch {}
+    } else {
+      try {
+        const farList = JSON.parse(localStorage.getItem('tandur_farmer_incoming_orders') || '[]');
+        localStorage.setItem(
+          'tandur_farmer_incoming_orders',
+          JSON.stringify([newOrder, ...(Array.isArray(farList) ? farList : [])])
+        );
+      } catch {}
+    }
+
     try {
       localStorage.removeItem(CART_STORAGE_KEY);
-    } catch {
-      // Abaikan jika localStorage gagal
-    }
+    } catch {}
     setItems([]);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('cartUpdated'));
+      window.dispatchEvent(new Event('ordersUpdated'));
+    }
 
     await Swal.fire({
       icon: 'success',
-      title: 'Pesanan Cash on Pickup Dibuat!',
-      text: `Jadwal pengambilan "${pickupSchedule}" telah diteruskan ke mitra petani/gudang. Silakan lakukan pembayaran tunai saat pengambilan di lokasi.`,
+      title: 'Pesanan Berhasil Dibuat!',
+      html: `
+        <div style="font-size: 13px; text-align: left; line-height: 1.5;">
+          <p>Nomor Pesanan: <b>${orderNumber}</b></p>
+          <p>Jadwal Pengambilan: <b>${effectiveSchedule}</b></p>
+          <p style="margin-top: 8px; color: #15803d; font-weight: 600;">
+            ✓ Pesanan telah diteruskan ke mitra ${newOrder.seller_name}. Anda akan diarahkan ke halaman Pesanan Saya untuk memantau status pengambilan barang.
+          </p>
+        </div>
+      `,
       confirmButtonColor: '#236B37',
+      confirmButtonText: 'Buka Pesanan Saya',
     });
 
-    navigate('/produk');
+    navigate('/pesanan-saya');
   };
 
   return (

@@ -7,18 +7,43 @@ const API_BASE_URL = `${BASE_HOST}/api/v1`;
 
 export function resolveMediaUrl(url?: string): string {
   if (!url) return '';
-  if (url.startsWith('data:')) return url;
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    if (url.includes(':3900/tandur/')) {
-      const path = url.split(':3900/tandur/')[1];
-      return `${BASE_HOST}/api/v1/storage/tandur/${path}`;
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+
+  // Tangani URL internal Garage S3 (port 3900) agar dialihkan ke endpoint publik API storage
+  if (url.includes(':3900/')) {
+    const afterS3 = url.split(/:3900\/(?:tandur\/)?/)[1];
+    if (afterS3) {
+      return `${BASE_HOST}/api/v1/storage/tandur/${afterS3.replace(/^\/+/, '')}`;
     }
+  }
+
+  // Jika URL mengarah ke bucket tandur pada host S3 lain
+  if (url.includes('/tandur/')) {
+    const afterTandur = url.split(/\/tandur\//)[1];
+    if (afterTandur && (url.startsWith('http://') || url.startsWith('https://'))) {
+      if (!url.startsWith(BASE_HOST)) {
+        return `${BASE_HOST}/api/v1/storage/tandur/${afterTandur.replace(/^\/+/, '')}`;
+      }
+    }
+  }
+
+  // Jika sudah merupakan link API storage tandur
+  if (url.includes('/storage/tandur/') || url.startsWith('/tandur/')) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    return `${BASE_HOST}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
+
   if (url.startsWith('/')) {
     return `${BASE_HOST}${url}`;
   }
-  return `${BASE_HOST}/api/v1/storage/tandur/${url}`;
+
+  return `${BASE_HOST}/api/v1/storage/tandur/${url.replace(/^\/+/, '')}`;
 }
 
 export function getAuthToken(): string | null {
@@ -587,6 +612,10 @@ export const FarmerApi = {
     fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}/confirm-ready`, {
       method: 'POST',
     }),
+  completeOrder: (orderId: string) =>
+    fetchApi<{ data: FarmerPurchaseOrder }>(`/farmer/orders/${orderId}/complete`, {
+      method: 'POST',
+    }),
   updateOrderStatus: async (orderId: string, status: string, notes?: string) => {
     if (status === 'scheduled' || status === 'scheduled_pickup' || status === 'accepted') {
       return FarmerApi.acceptOrder(orderId);
@@ -622,20 +651,26 @@ export const FarmerApi = {
   },
   createListing: async (payload: Record<string, unknown>) => {
     try {
-      return await fetchApi('/farmer/offers', {
+      return await fetchApi('/farmer/listings', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
     } catch (err: any) {
-      if (String(err?.message || '').includes('404')) {
-        return fetchApi('/farmer/listings', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
-      throw err;
+      return fetchApi('/farmer/offers', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     }
   },
+  updateListing: (id: string, payload: Record<string, unknown>) =>
+    fetchApi(`/farmer/listings/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  deleteListing: (id: string) =>
+    fetchApi(`/farmer/listings/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 export const MiddlemanApi = {
@@ -652,11 +687,27 @@ export const MiddlemanApi = {
     }),
   deleteInventory: (id: string) =>
     fetchApi(`/middleman/inventory/${id}`, { method: 'DELETE' }),
+  getSales: () => fetchApi<{ data: any }>('/middleman/sales'),
   openSellOffer: (payload: Record<string, unknown>) =>
-    fetchApi('/middleman/sell-offers', {
+    fetchApi('/middleman/sales', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  updateSaleListing: (id: string, payload: Record<string, unknown>) =>
+    fetchApi(`/middleman/sales/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  closeSaleListing: (id: string) =>
+    fetchApi(`/middleman/sales/${id}/close`, {
+      method: 'PUT',
+    }),
+  toggleArchiveSaleListing: (id: string) =>
+    fetchApi(`/middleman/sales/${id}/toggle-archive`, {
+      method: 'PUT',
+    }),
+  deleteSaleListing: (id: string) =>
+    fetchApi(`/middleman/sales/${id}`, { method: 'DELETE' }),
   getPurchaseOrders: () =>
     fetchApi<{ data: FarmerPurchaseOrder[] }>('/middleman/orders'),
   createPurchaseOrder: (payload: Record<string, unknown>) =>
@@ -671,6 +722,11 @@ export const MiddlemanApi = {
     }),
   deletePurchaseOrder: (id: string) =>
     fetchApi(`/middleman/orders/${id}`, { method: 'DELETE' }),
+  completePurchaseOrder: (id: string, payload?: Record<string, unknown>) =>
+    fetchApi(`/middleman/orders/${id}/weighing-and-complete`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
   getNegotiations: () =>
     fetchApi<{ data: NegotiationOffer[] }>('/middleman/negotiations'),
   acceptNegotiation: (id: string) =>

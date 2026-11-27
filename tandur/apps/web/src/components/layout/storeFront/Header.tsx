@@ -12,6 +12,7 @@ import {
   LogOut,
   UserCheck,
   LayoutDashboard,
+  Package,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { getEffectiveCartCount } from "@/services/api";
@@ -75,12 +76,42 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [liveCartCount, setLiveCartCount] = useState<number>(cartCount);
+  const [activeOrdersCount, setActiveOrdersCount] = useState<number>(0);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const catNavRef = useRef<HTMLLIElement>(null);
 
   // Deteksi status user login
   const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const syncOrders = () => {
+      try {
+        const raw = localStorage.getItem('tandur_buyer_orders');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const count = parsed.filter(
+              (o) => o.status !== 'completed' && o.status !== 'cancelled'
+            ).length;
+            setActiveOrdersCount(count);
+            return;
+          }
+        }
+        setActiveOrdersCount(0);
+      } catch {
+        setActiveOrdersCount(0);
+      }
+    };
+
+    syncOrders();
+    window.addEventListener('ordersUpdated', syncOrders);
+    window.addEventListener('storage', syncOrders);
+    return () => {
+      window.removeEventListener('ordersUpdated', syncOrders);
+      window.removeEventListener('storage', syncOrders);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -288,6 +319,22 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
 
           {/* Actions */}
           <div className="ml-auto flex items-center gap-1 sm:gap-2 md:ml-0">
+            {/* Pesanan Saya */}
+            <Link
+              to="/pesanan-saya"
+              aria-label="Pesanan Saya"
+              className="relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 hover:text-green-800 transition"
+              title="Pesanan Saya"
+            >
+              <Package size={20} className="text-green-800" />
+              <span className="hidden sm:inline font-bold">Pesanan</span>
+              {activeOrdersCount > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-green-700 px-1 text-[10px] font-bold text-white">
+                  {activeOrdersCount}
+                </span>
+              )}
+            </Link>
+
             {/* Keranjang dengan badge real-time dari backend */}
             <Link
               to="/keranjang"
@@ -389,6 +436,13 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
                           className="flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-green-50 hover:text-green-800"
                         >
                           <UserCheck size={16} /> Profil &amp; Akun
+                        </Link>
+                        <Link
+                          to="/pesanan-saya"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-green-50 hover:text-green-800 font-medium"
+                        >
+                          <Package size={16} /> Pesanan Saya ({activeOrdersCount})
                         </Link>
                         <Link
                           to="/keranjang"

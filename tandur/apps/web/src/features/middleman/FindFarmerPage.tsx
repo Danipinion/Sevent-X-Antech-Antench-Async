@@ -44,16 +44,16 @@ const DEFAULT_SUPPLIES: SupplyListing[] = [
     farmer_name: 'Pak Sugeng Santoso',
     farmer_group: 'Gapoktan Sumber Makmur',
     farmer_phone: '081399998888',
-    commodity_id: '806931f2-c469-48c3-b5ee-7097fd078053',
-    commodity_name: 'Gabah Kering Panen (GKP)',
-    category: 'Padi Sawah',
-    title: 'Gabah Kering Panen (GKP) Ciherang',
-    description: 'Kadar Air (KA): 21.0% • Hampa Kotoran: < 2.8% • Varietas Ciherang Panen Musim Rendeng',
+    commodity_id: '52',
+    commodity_name: 'Beras Medium',
+    category: 'Beras Medium',
+    title: 'Beras Medium (Acuan SP2KP)',
+    description: 'Kadar Air (KA): 14.0% • Hampa Kotoran: < 1.0% • Standar Mutu Komoditas SP2KP',
     available_quantity: 8500,
     estimated_quantity: 8500,
     min_order_quantity: 1000,
     unit: 'kg',
-    price_per_unit: 6800,
+    price_per_unit: 14025,
     ready_date: '2026-11-28',
     pickup_address: 'Desa Karangawen, Kab. Demak',
     status: 'published',
@@ -64,16 +64,16 @@ const DEFAULT_SUPPLIES: SupplyListing[] = [
     farmer_name: 'Pak Sugeng Santoso',
     farmer_group: 'Gapoktan Sumber Makmur',
     farmer_phone: '081399998888',
-    commodity_id: '27a56d2a-4f6f-4a7e-a0f9-7eb21774d685',
-    commodity_name: 'Beras Mentik Wangi',
-    category: 'Beras Berkualitas',
-    title: 'Beras Mentik Wangi Susu Organik',
-    description: 'Derajat Sosoh: 95% • Aroma Wangi: Alami Tanpa Esens • Kemasan Karung 50 Kg',
+    commodity_id: '51',
+    commodity_name: 'Beras Premium',
+    category: 'Beras Premium',
+    title: 'Beras Premium (Acuan SP2KP)',
+    description: 'Derajat Sosoh: 98% • Butir Patah < 5% • Standar Mutu Komoditas SP2KP',
     available_quantity: 3200,
     estimated_quantity: 3200,
     min_order_quantity: 500,
     unit: 'kg',
-    price_per_unit: 13500,
+    price_per_unit: 15710,
     ready_date: '2026-11-28',
     pickup_address: 'Gudang Gapoktan Sumber Makmur, Desa Karangawen, Kab. Demak',
     status: 'published',
@@ -122,7 +122,7 @@ export const FindFarmersPage: React.FC = () => {
     setIsLoading(true);
     try {
       let list: SupplyListing[] = [];
-      const endpoints = ['/middleman/listings', '/marketplace/listings', '/listings'];
+      const endpoints = ['/middleman/listings', '/marketplace/listings', '/farmer/listings'];
 
       for (const ep of endpoints) {
         try {
@@ -338,7 +338,7 @@ export const FindFarmersPage: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-[#F4EFE6] border border-[#DFD8CA] text-xs sm:text-sm font-semibold text-[#1A201A] transition-colors shadow-xs cursor-pointer"
             >
               <SlidersHorizontal className="w-4 h-4 text-[#236B37]" />
-              Filter Varietas
+              Filter Komoditas
             </button>
             <button
               type="button"

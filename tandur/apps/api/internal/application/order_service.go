@@ -408,3 +408,23 @@ func (s *OrderService) CompleteWeighingAndSettlement(ctx context.Context, middle
 
 	return order, nil
 }
+
+// CompleteFarmerOrder menyelesaikan pesanan oleh petani setelah serah terima hasil panen & pelunasan
+func (s *OrderService) CompleteFarmerOrder(ctx context.Context, farmerID string, orderID string) (*domain.FarmerPurchaseOrder, error) {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if order.FarmerID != farmerID {
+		return nil, domain.ErrUnauthorizedOrderAccess
+	}
+
+	order.Status = domain.OrderStatusCompleted
+	order.StatusLabel = "Transaksi Selesai & Lunas"
+
+	if err := s.orderRepo.Update(ctx, order); err != nil {
+		return nil, err
+	}
+
+	return order, nil
+}

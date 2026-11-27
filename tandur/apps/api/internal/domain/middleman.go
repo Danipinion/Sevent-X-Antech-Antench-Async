@@ -163,6 +163,8 @@ type MiddlemanInventoryMutation struct {
 
 // CreateInventoryInput input modal tambah stok masuk gudang
 type CreateInventoryInput struct {
+	LotCode           string  `json:"lot_code"`
+	BatchCode         string  `json:"batch_code"`
 	CommodityID       string  `json:"commodity_id"`
 	CommodityName     string  `json:"commodity_name"`
 	Category          string  `json:"category"`
@@ -172,7 +174,9 @@ type CreateInventoryInput struct {
 	WeightTons        float64 `json:"weight_tons"`
 	WeightKg          float64 `json:"weight_kg"`
 	BuyPricePerKg     float64 `json:"buy_price_per_kg"`
+	AvgBuyPrice       float64 `json:"avg_buy_price"`
 	MarketPricePerKg  float64 `json:"market_price_per_kg"`
+	MarketRefPrice    float64 `json:"market_ref_price"`
 	MoistureContent   float64 `json:"moisture_content"`
 	ImpurityContent   float64 `json:"impurity_content"`
 	EntryDate         string  `json:"entry_date"`
@@ -227,6 +231,17 @@ type CreateSaleListingInput struct {
 	ValidityDays      int      `json:"validity_days"`
 }
 
+// UpdateSaleListingInput input modal edit penawaran jual
+type UpdateSaleListingInput struct {
+	OfferedTons       float64  `json:"offered_tons"`
+	MinOrderTons      float64  `json:"min_order_tons"`
+	SellingPricePerKg float64  `json:"selling_price_per_kg"`
+	DeliveryOption    string   `json:"delivery_option"`
+	TargetMarkets     []string `json:"target_markets"`
+	ValidityDays      int      `json:"validity_days"`
+	Status            string   `json:"status"` // "active" or "closed"
+}
+
 // MiddlemanSalesBid penawaran masuk dari pembeli grosir
 type MiddlemanSalesBid struct {
 	ID                 string    `json:"id"`
@@ -275,6 +290,9 @@ type MiddlemanRepository interface {
 	ListSalesWithSummary(middlemanID string, tab string, page int, limit int) ([]MiddlemanSalesListing, MiddlemanSalesSummary, int, error)
 	GetSaleListingByID(middlemanID string, id string) (*MiddlemanSalesListing, error)
 	CreateSaleListing(sale *MiddlemanSalesListing) error
+	UpdateSaleListing(middlemanID string, id string, input UpdateSaleListingInput) (*MiddlemanSalesListing, error)
+	DeleteSaleListing(middlemanID string, id string) error
+	ToggleArchiveSaleListing(middlemanID string, id string) (*MiddlemanSalesListing, error)
 	CloseSaleListing(middlemanID string, id string) error
 	ListSaleBids(saleID string) ([]MiddlemanSalesBid, error)
 }

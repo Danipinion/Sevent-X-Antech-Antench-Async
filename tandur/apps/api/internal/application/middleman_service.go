@@ -161,6 +161,23 @@ func (s *MiddlemanService) CreateInventory(middlemanID string, input domain.Crea
 	}
 
 	lotCode := fmt.Sprintf("LOT-DEM-%d", time.Now().UnixNano()%100000)
+	if input.BatchCode != "" {
+		lotCode = input.BatchCode
+	} else if input.LotCode != "" {
+		lotCode = input.LotCode
+	}
+
+	buyPrice := input.BuyPricePerKg
+	if buyPrice <= 0 && input.AvgBuyPrice > 0 {
+		buyPrice = input.AvgBuyPrice
+	}
+	marketPrice := input.MarketPricePerKg
+	if marketPrice <= 0 && input.MarketRefPrice > 0 {
+		marketPrice = input.MarketRefPrice
+	}
+	if marketPrice <= 0 {
+		marketPrice = buyPrice
+	}
 
 	status := "aman"
 	if weightTons < 2.0 {
@@ -179,9 +196,9 @@ func (s *MiddlemanService) CreateInventory(middlemanID string, input domain.Crea
 		WarehouseCapacityTons: 50.0,
 		TotalWeightKg:         weightKg,
 		TotalWeightTons:       weightTons,
-		AverageBuyPrice:       input.BuyPricePerKg,
-		CurrentMarketPrice:    input.MarketPricePerKg,
-		MarginPerUnit:         input.MarketPricePerKg - input.BuyPricePerKg,
+		AverageBuyPrice:       buyPrice,
+		CurrentMarketPrice:    marketPrice,
+		MarginPerUnit:         marketPrice - buyPrice,
 		MoistureContent:       input.MoistureContent,
 		ImpurityContent:       input.ImpurityContent,
 		SourceGapoktan:        input.SourceGapoktan,
@@ -325,6 +342,27 @@ func (s *MiddlemanService) CloseSaleListing(middlemanID string, id string) error
 		return fmt.Errorf("parameter tidak valid")
 	}
 	return s.middlemanRepo.CloseSaleListing(middlemanID, id)
+}
+
+func (s *MiddlemanService) UpdateSaleListing(middlemanID string, id string, input domain.UpdateSaleListingInput) (*domain.MiddlemanSalesListing, error) {
+	if middlemanID == "" || id == "" {
+		return nil, fmt.Errorf("parameter tidak valid")
+	}
+	return s.middlemanRepo.UpdateSaleListing(middlemanID, id, input)
+}
+
+func (s *MiddlemanService) DeleteSaleListing(middlemanID string, id string) error {
+	if middlemanID == "" || id == "" {
+		return fmt.Errorf("parameter tidak valid")
+	}
+	return s.middlemanRepo.DeleteSaleListing(middlemanID, id)
+}
+
+func (s *MiddlemanService) ToggleArchiveSaleListing(middlemanID string, id string) (*domain.MiddlemanSalesListing, error) {
+	if middlemanID == "" || id == "" {
+		return nil, fmt.Errorf("parameter tidak valid")
+	}
+	return s.middlemanRepo.ToggleArchiveSaleListing(middlemanID, id)
 }
 
 func (s *MiddlemanService) ListSaleBids(middlemanID string, saleID string) ([]domain.MiddlemanSalesBid, error) {

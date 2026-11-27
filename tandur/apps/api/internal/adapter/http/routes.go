@@ -130,6 +130,7 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	farmer.Post("/orders/:id/negotiate", handler.NegotiateFarmerOrder)
 	farmer.Post("/orders/:id/reject", handler.RejectFarmerOrder)
 	farmer.Post("/orders/:id/confirm-ready", handler.ConfirmReadyForPickup)
+	farmer.Post("/orders/:id/complete", handler.CompleteFarmerOrder)
 
 	// Middleman / Tengkulak Routing (Seluruh Halaman Tengkulak)
 	middleman := v1.Group("/middleman", handler.AuthMiddleware())
@@ -166,8 +167,19 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	middleman.Get("/sales", handler.GetMiddlemanSales)
 	middleman.Post("/sales", handler.CreateMiddlemanSaleListing)
 	middleman.Get("/sales/:id", handler.GetMiddlemanSaleListingByID)
+	middleman.Put("/sales/:id", handler.UpdateMiddlemanSaleListing)
+	middleman.Delete("/sales/:id", handler.DeleteMiddlemanSaleListing)
 	middleman.Put("/sales/:id/close", handler.CloseMiddlemanSaleListing)
+	middleman.Put("/sales/:id/toggle-archive", handler.ToggleArchiveMiddlemanSaleListing)
 	middleman.Get("/sales/:id/bids", handler.GetMiddlemanSaleBids)
+
+	// Aliases for sell-offers
+	middleman.Get("/sell-offers", handler.GetMiddlemanSales)
+	middleman.Post("/sell-offers", handler.CreateMiddlemanSaleListing)
+	middleman.Put("/sell-offers/:id", handler.UpdateMiddlemanSaleListing)
+	middleman.Delete("/sell-offers/:id", handler.DeleteMiddlemanSaleListing)
+	middleman.Put("/sell-offers/:id/close", handler.CloseMiddlemanSaleListing)
+	middleman.Put("/sell-offers/:id/toggle-archive", handler.ToggleArchiveMiddlemanSaleListing)
 
 	// Public Marketplace
 	v1.Get("/marketplace/listings", handler.ListMiddlemanListings)
