@@ -1,0 +1,1168 @@
+User:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    nik:
+      type: string
+      nullable: true
+      maxLength: 16
+      example: "3201010101010099"
+    name:
+      type: string
+      maxLength: 150
+      example: "Pak Slamet Petani"
+    phone:
+      type: string
+      maxLength: 13
+      example: "081399998888"
+    role:
+      type: string
+      enum: [farmer, middleman, buyer]
+      example: "farmer"
+    is_bisnis:
+      type: boolean
+      default: false
+      example: false
+    is_active:
+      type: boolean
+      default: true
+      example: true
+    is_verified:
+      type: boolean
+      default: false
+      example: true
+    verification_status:
+      type: string
+      enum: [unverified, pending, verified, rejected]
+      example: "verified"
+    can_sell_harvest:
+      type: boolean
+      example: true
+    avatar_url:
+      type: string
+      nullable: true
+      example: "https://storage.tandur.com/avatars/user-avatar.jpg"
+    ktp_photo_url:
+      type: string
+      nullable: true
+      example: "https://storage.tandur.com/ktp/3321041405760002.jpg"
+    birth_place:
+      type: string
+      nullable: true
+      example: "Demak"
+    birth_date:
+      type: string
+      nullable: true
+      example: "1978-05-14"
+    ktp_address:
+      type: string
+      nullable: true
+      example: "RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566"
+    verified_at:
+      type: string
+      format: date-time
+      nullable: true
+      example: "2026-11-21T07:30:00Z"
+    rejection_reason:
+      type: string
+      nullable: true
+      example: null
+    created_at:
+      type: string
+      format: date-time
+      example: "2026-11-19T18:10:18Z"
+    updated_at:
+      type: string
+      format: date-time
+      example: "2026-11-19T18:10:18Z"
+    location:
+      $ref: "#/components/schemas/UserLocation"
+
+UserLocation:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      example: "562e7d5c-d1af-42d6-b64d-858c49e28b8d"
+    user_id:
+      type: string
+      format: uuid
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    label:
+      type: string
+      example: "Kebun Cabai Utama"
+    address:
+      type: string
+      example: "Jl. Raya Pertanian No. 12"
+    village:
+      type: string
+      example: "Cikanyere"
+    district:
+      type: string
+      example: "Sukaresmi"
+    city:
+      type: string
+      example: "Kabupaten Cianjur"
+    province:
+      type: string
+      example: "Jawa Barat"
+    latitude:
+      type: number
+      format: double
+      example: -6.7456
+    longitude:
+      type: number
+      format: double
+      example: 107.0872
+    is_primary:
+      type: boolean
+      example: true
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+RegisterRequest:
+  type: object
+  required:
+    - name
+    - phone
+    - password
+    - role
+  properties:
+    nik:
+      type: string
+      maxLength: 16
+      example: "3201010101010099"
+    name:
+      type: string
+      maxLength: 150
+      example: "Pak Slamet Petani"
+    phone:
+      type: string
+      maxLength: 13
+      example: "081399998888"
+    password:
+      type: string
+      minLength: 6
+      format: password
+      example: "secretPassword123"
+    role:
+      type: string
+      enum: [farmer, middleman, buyer]
+      example: "farmer"
+    is_bisnis:
+      type: boolean
+      default: false
+      example: false
+    location:
+      type: object
+      required:
+        - address
+        - latitude
+        - longitude
+      properties:
+        label:
+          type: string
+          example: "Kebun Cabai Utama"
+        address:
+          type: string
+          example: "Jl. Raya Pertanian No. 12"
+        village:
+          type: string
+          example: "Cikanyere"
+        district:
+          type: string
+          example: "Sukaresmi"
+        city:
+          type: string
+          example: "Kabupaten Cianjur"
+        province:
+          type: string
+          example: "Jawa Barat"
+        latitude:
+          type: number
+          format: double
+          example: -6.7456
+        longitude:
+          type: number
+          format: double
+          example: 107.0872
+
+LoginRequest:
+  type: object
+  required:
+    - username
+    - password
+  properties:
+    username:
+      type: string
+      description: Nomor Handphone (10-13 digit) atau NIK (16 digit angka)
+      example: "081399998888"
+    password:
+      type: string
+      format: password
+      description: Password akun pengguna
+      example: "secretPassword123"
+
+LoginResponseData:
+  type: object
+  properties:
+    token:
+      type: string
+      description: JSON Web Token (JWT) untuk autentikasi sesi
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    token_type:
+      type: string
+      example: "Bearer"
+    expires_at:
+      type: string
+      format: date-time
+      example: "2026-11-23T15:30:00Z"
+    user:
+      $ref: "#/User"
+
+UpdateProfileRequest:
+  type: object
+  properties:
+    name:
+      type: string
+      maxLength: 150
+      description: Nama lengkap pengguna
+      example: "Pak Slamet Petani Makmur"
+    phone:
+      type: string
+      maxLength: 13
+      description: Nomor Handphone 10-13 digit
+      example: "081399998888"
+    avatar_url:
+      type: string
+      description: URL tautan foto profil baru
+      example: "https://storage.tandur.com/avatars/new-profile.jpg"
+    is_bisnis:
+      type: boolean
+      description: Status akun bisnis/perorangan
+      example: false
+    label:
+      type: string
+      description: Label penamaan lokasi (cth. Kebun Utama, Rumah, Gudang)
+      example: "Rumah Utama"
+    address:
+      type: string
+      description: Alamat lengkap lokasi pengguna
+      example: "Jl. Pertanian Modern No. 5"
+    village:
+      type: string
+      example: "Cikanyere"
+    district:
+      type: string
+      example: "Sukaresmi"
+    city:
+      type: string
+      example: "Kabupaten Cianjur"
+    province:
+      type: string
+      example: "Jawa Barat"
+    latitude:
+      type: number
+      format: double
+      example: -6.7456
+    longitude:
+      type: number
+      format: double
+      example: 107.0872
+
+FarmerVerificationInput:
+  type: object
+  required:
+    - nik
+    - name
+    - ktp_address
+    - ktp_photo_url
+    - declaration_accepted
+  properties:
+    nik:
+      type: string
+      pattern: "^[0-9]{16}$"
+      example: "3321041405760002"
+    name:
+      type: string
+      example: "SUGENG RIYADI"
+    birth_place:
+      type: string
+      example: "Demak"
+    birth_date:
+      type: string
+      example: "1978-05-14"
+    ktp_address:
+      type: string
+      example: "RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566"
+    ktp_photo_url:
+      type: string
+      example: "https://storage.tandur.com/ktp/3321041405760002.jpg"
+    declaration_accepted:
+      type: boolean
+      example: true
+
+FarmerVerificationResponse:
+  type: object
+  properties:
+    user_id:
+      type: string
+      format: uuid
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    nik:
+      type: string
+      example: "3321041405760002"
+    name:
+      type: string
+      example: "SUGENG RIYADI"
+    verification_status:
+      type: string
+      enum: [unverified, pending, verified, rejected]
+      example: "verified"
+    is_verified:
+      type: boolean
+      example: true
+    can_sell_harvest:
+      type: boolean
+      example: true
+    avatar_url:
+      type: string
+      nullable: true
+      example: "https://storage.tandur.com/avatars/user-avatar.jpg"
+    ktp_photo_url:
+      type: string
+      example: "https://storage.tandur.com/ktp/3321041405760002.jpg"
+    birth_place:
+      type: string
+      example: "Demak"
+    birth_date:
+      type: string
+      example: "1978-05-14"
+    ktp_address:
+      type: string
+      example: "RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten Demak, Jawa Tengah 59566"
+    verified_at:
+      type: string
+      format: date-time
+      example: "2026-11-21T07:30:00Z"
+    message:
+      type: string
+      example: "Dokumen e-KTP berhasil diverifikasi. Kemitraan resmi aktif dan Anda dapat mulai menjual hasil panen."
+
+FarmerListing:
+  type: object
+  properties:
+    id:
+      type: string
+      example: "9e81b672-0e24-419b-a320-b6f790c68123"
+    farmer_id:
+      type: string
+      format: uuid
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    commodity_id:
+      type: string
+      example: "gabah-kering-panen"
+    commodity_name:
+      type: string
+      example: "Gabah GKP"
+    category:
+      type: string
+      example: "Gabah GKP"
+    title:
+      type: string
+      example: "Gabah GKP Super Siap Panen Kualitas Prima"
+    description:
+      type: string
+      example: "Varietas Inpari 32 (Standar Bulir Sedang). Dipanen memakai mesin Combine Harvester, bersih tanpa jerami dan batu."
+    estimated_quantity:
+      type: number
+      example: 8500
+    available_quantity:
+      type: number
+      example: 8500
+    min_order_quantity:
+      type: number
+      example: 500
+    unit:
+      type: string
+      example: "kg"
+    price_per_unit:
+      type: number
+      example: 7300
+    estimated_gross_revenue:
+      type: number
+      example: 62050000
+    ready_date:
+      type: string
+      example: "2025-02-07"
+    estimated_harvest_date:
+      type: string
+      example: "2025-02-07"
+    pickup_address:
+      type: string
+      example: "Sukamaju, Ngawi"
+    media_urls:
+      type: array
+      items:
+        type: string
+      example:
+        - "http://localhost:3900/tandur/listings/user1/sample1.jpg"
+        - "http://localhost:3900/tandur/listings/user1/video1.mp4"
+    status:
+      type: string
+      example: "published"
+    latitude:
+      type: number
+      example: -7.4045
+    longitude:
+      type: number
+      example: 111.4452
+    created_at:
+      type: string
+      example: "2026-11-21T07:30:00Z"
+
+CreateListingInput:
+  type: object
+  required:
+    - commodity_id
+    - title
+    - estimated_quantity
+    - price_per_unit
+    - media_urls
+  properties:
+    commodity_id:
+      type: string
+      example: "gabah-kering-panen"
+    commodity_name:
+      type: string
+      example: "Gabah GKP"
+    category:
+      type: string
+      example: "Gabah GKP"
+    title:
+      type: string
+      example: "Gabah GKP Super Siap Panen Kualitas Prima"
+    description:
+      type: string
+      example: "Varietas Inpari 32. Dipanen memakai mesin Combine Harvester, bersih tanpa jerami dan batu."
+    estimated_quantity:
+      type: number
+      description: Estimasi bobot (minimal 500 kg)
+      example: 8500
+    min_order_quantity:
+      type: number
+      default: 500
+      example: 500
+    unit:
+      type: string
+      default: "kg"
+      example: "kg"
+    price_per_unit:
+      type: number
+      description: Harga harapan petani per kilogram
+      example: 7300
+    ready_date:
+      type: string
+      description: Tanggal siap timbang dan muat (YYYY-MM-DD)
+      example: "2025-02-07"
+    estimated_harvest_date:
+      type: string
+      example: "2025-02-07"
+    pickup_address:
+      type: string
+      description: Titik muat atau lokasi gudang tani
+      example: "Sukamaju, Ngawi"
+    media_urls:
+      type: array
+      description: Berkas media (minimal 1 foto, maksimal 1 video, total maksimal 5 berkas)
+      items:
+        type: string
+      example:
+        - "http://localhost:3900/tandur/listings/user1/sampel_gabah_bkkk.jpg"
+    latitude:
+      type: number
+      example: -7.4045
+    longitude:
+      type: number
+      example: 111.4452
+
+UpdateListingInput:
+  type: object
+  properties:
+    commodity_id:
+      type: string
+      example: "gabah-kering-panen"
+    commodity_name:
+      type: string
+      example: "Gabah GKP"
+    category:
+      type: string
+      example: "Gabah GKP"
+    title:
+      type: string
+      example: "Gabah GKP Super Siap Panen Update"
+    description:
+      type: string
+      example: "Varietas Inpari 32 kadar air 21% bersih"
+    estimated_quantity:
+      type: number
+      example: 9000
+    min_order_quantity:
+      type: number
+      example: 500
+    price_per_unit:
+      type: number
+      example: 7350
+    ready_date:
+      type: string
+      example: "2025-02-08"
+    pickup_address:
+      type: string
+      example: "Sukamaju, Ngawi"
+    media_urls:
+      type: array
+      items:
+        type: string
+    latitude:
+      type: number
+      example: -7.4045
+    longitude:
+      type: number
+      example: 111.4452
+
+UploadMediaResponse:
+  type: object
+  properties:
+    url:
+      type: string
+      example: "http://localhost:3900/tandur/listings/user1/uuid.jpg"
+    key:
+      type: string
+      example: "listings/user1/uuid.jpg"
+    media_type:
+      type: string
+      enum: [photo, video]
+      example: "photo"
+    mime_type:
+      type: string
+      example: "image/jpeg"
+    size_bytes:
+      type: integer
+      example: 1450000
+
+FarmerPurchaseOrder:
+  type: object
+  properties:
+    id:
+      type: string
+      example: "9e81b672-0e24-419b-a320-b6f790c68123"
+    order_code:
+      type: string
+      example: "#TND-ORD-2025-0894"
+    listing_id:
+      type: string
+      example: "d4c69c62-8844-4da0-84af-4a62f2b47ec4"
+    farmer_id:
+      type: string
+      example: "e445499d-4f26-424c-9e70-10ffcc8b2a35"
+    middleman_id:
+      type: string
+      example: "c77b819a-9e33-4f9e-a890-7bf12f7b3011"
+    status:
+      type: string
+      enum: [waiting_confirmation, in_negotiation, scheduled_pickup, completed, cancelled]
+      example: "waiting_confirmation"
+    status_label:
+      type: string
+      example: "Menunggu Persetujuan Anda"
+    commodity_id:
+      type: string
+      example: "jagung-pipil-kering"
+    commodity_name:
+      type: string
+      example: "Jagung Pipil Kering Hibrida"
+    category:
+      type: string
+      example: "Jagung Pipil Kering Hibrida"
+    listing_title:
+      type: string
+      example: "Jagung Pipil Kering Standar Pakan Ternak"
+    unit:
+      type: string
+      example: "kg"
+    buyer_name:
+      type: string
+      example: "PT Sentosa Pakan Ternak Jatim"
+    buyer_type:
+      type: string
+      example: "Pembeli Kontrak Skala Menengah"
+    buyer_city:
+      type: string
+      example: "Sidoarjo"
+    buyer_rating:
+      type: number
+      example: 4.9
+    offered_quantity:
+      type: number
+      example: 5000
+    offered_price:
+      type: number
+      example: 5750
+    total_offered_price:
+      type: number
+      example: 28750000
+    agreed_price:
+      type: number
+      example: 5750
+    total_price:
+      type: number
+      example: 28750000
+    benchmark_price:
+      type: number
+      example: 5600
+    margin_amount:
+      type: number
+      example: 750000
+    margin_percentage:
+      type: number
+      example: 2.68
+    margin_note:
+      type: string
+      example: "Harga Ditawarkan Rp 150/kg Di Atas Rata-rata Pasar"
+    pickup_date:
+      type: string
+      example: "2025-02-13"
+    pickup_time_slot:
+      type: string
+      example: "09.00 - 11.00 WIB"
+    vehicle_type:
+      type: string
+      example: "Truk Isuzu Elf"
+    vehicle_plate:
+      type: string
+      example: "AD 8291 QA"
+    driver_name:
+      type: string
+      example: "Pak Suparno"
+    is_ready_for_pickup:
+      type: boolean
+      example: true
+
+FarmerOrderSummary:
+  type: object
+  properties:
+    total_sales_this_month:
+      type: number
+      example: 188000000
+    partner_rating:
+      type: number
+      example: 4.9
+    all_count:
+      type: integer
+      example: 18
+    waiting_confirmation_count:
+      type: integer
+      example: 2
+    scheduled_pickup_count:
+      type: integer
+      example: 3
+    completed_paid_count:
+      type: integer
+      example: 9
+    cancelled_count:
+      type: integer
+      example: 4
+
+CreateOrderOfferInput:
+  type: object
+  required:
+    - listing_id
+    - offered_quantity
+    - offered_price
+  properties:
+    listing_id:
+      type: string
+      example: "d4c69c62-8844-4da0-84af-4a62f2b47ec4"
+    offered_quantity:
+      type: number
+      description: Kuantitas yang diajukan (minimal 500 kg)
+      example: 5000
+    offered_price:
+      type: number
+      description: Harga tawaran per kg
+      example: 5750
+    notes:
+      type: string
+      example: "Pengambilan siap dilakukan dengan armada sendiri"
+    pickup_date:
+      type: string
+      example: "2025-02-13"
+    pickup_time_slot:
+      type: string
+      example: "09.00 - 11.00 WIB"
+    vehicle_type:
+      type: string
+      example: "Truk Isuzu Elf"
+    vehicle_plate:
+      type: string
+      example: "AD 8291 QA"
+    driver_name:
+      type: string
+      example: "Pak Suparno"
+    driver_phone:
+      type: string
+      example: "081234567899"
+
+NegotiateOrderInput:
+  type: object
+  required:
+    - counter_price
+  properties:
+    counter_price:
+      type: number
+      example: 6000
+    counter_quantity:
+      type: number
+      example: 5000
+    counter_notes:
+      type: string
+      example: "Bisa dinaikkan sedikit ke Rp 6.000 mengingat kualitas kadar air sangat rendah."
+
+UpdateLogisticsInput:
+  type: object
+  properties:
+    pickup_date:
+      type: string
+      example: "2025-02-13"
+    pickup_time_slot:
+      type: string
+      example: "09.00 - 11.00 WIB"
+    vehicle_type:
+      type: string
+      example: "Truk Isuzu Elf"
+    vehicle_plate:
+      type: string
+      example: "AD 8291 QA"
+    driver_name:
+      type: string
+      example: "Pak Suparno"
+    driver_phone:
+      type: string
+      example: "081234567899"
+
+CompleteWeighingInput:
+  type: object
+  required:
+    - actual_weight
+    - final_price_per_unit
+  properties:
+    actual_weight:
+      type: number
+      description: Hasil timbangan digital di lokasi (kg)
+      example: 12040
+    final_price_per_unit:
+      type: number
+      example: 8100
+    weighing_certificate_url:
+      type: string
+      example: "http://localhost:3900/tandur/certificates/cert_123.pdf"
+    invoice_url:
+      type: string
+      example: "http://localhost:3900/tandur/invoices/inv_123.pdf"
+
+MiddlemanDashboard:
+  type: object
+  properties:
+    greeting:
+      type: string
+      example: "Selamat Pagi, Haji Supardi"
+    role_label:
+      type: string
+      example: "Mitra Pengumpul Demak"
+    work_area:
+      type: string
+      example: "Karangawen, Demak"
+    total_transactions:
+      type: object
+      properties:
+        value:
+          type: string
+          example: "3 Kontrak"
+        description:
+          type: string
+          example: "2 Siap Timbang, 1 Menuju Gudang"
+    used_capacity:
+      type: object
+      properties:
+        total_tons:
+          type: number
+          example: 55.5
+        warehouse_tons:
+          type: number
+          example: 38.2
+        otw_tons:
+          type: number
+          example: 17.3
+        description:
+          type: string
+          example: "38,2 Ton di Gudang, 17,3 Ton OTW"
+    scheduled_truck:
+      type: object
+      properties:
+        next_schedule:
+          type: string
+          example: "Besok, 08:30"
+        commodity_detail:
+          type: string
+          example: "Kedatangan: 7,5 Ton GKP"
+    partner_farmers:
+      type: object
+      properties:
+        total_count:
+          type: integer
+          example: 14
+        description:
+          type: string
+          example: "Wilayah Kab. Demak & Kudus"
+    scheduled_pickups:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          order_code:
+            type: string
+            example: "#PO-TND-2025-0112"
+          vehicle:
+            type: string
+            example: "Truk Isuzu Elf (#01)"
+          driver_name:
+            type: string
+            example: "Budi (Driver Timbang)"
+          commodity_name:
+            type: string
+            example: "Jagung Hibrida"
+          quantity_tons:
+            type: number
+            example: 5.0
+          status_label:
+            type: string
+            example: "Armada Menuju Lokasi"
+          scheduled_time:
+            type: string
+            example: "Besok, 08:30 WIB"
+          pickup_address:
+            type: string
+            example: "Desa Karangawen, Demak"
+    benchmark_prices:
+      type: array
+      items:
+        type: object
+        properties:
+          commodity_name:
+            type: string
+            example: "GKP Ciherang"
+          price_per_kg:
+            type: number
+            example: 6800
+          change_amount:
+            type: number
+            example: 150
+          trend:
+            type: string
+            example: "up"
+
+MiddlemanOrdersSummary:
+  type: object
+  properties:
+    total_active_contracts_amount:
+      type: number
+      example: 151850000
+    total_volume_in_delivery_tons:
+      type: number
+      example: 55.0
+    nearest_weighing_schedule:
+      type: string
+      example: "Besok 08:30 (Karangawen)"
+
+MiddlemanOfferItem:
+  type: object
+  properties:
+    id:
+      type: string
+    offer_code:
+      type: string
+      example: "#OFF-TND-011"
+    farmer_name:
+      type: string
+      example: "Gapoktan Sumber Makmur"
+    location:
+      type: string
+      example: "Demak Karangawen"
+    commodity_name:
+      type: string
+      example: "GKP Ciherang"
+    quantity_tons:
+      type: number
+      example: 10.0
+    offered_price:
+      type: number
+      example: 6750
+    farmer_asking_price:
+      type: number
+      example: 6800
+    total_amount:
+      type: number
+      example: 67500000
+    status_label:
+      type: string
+      example: "Aktif Berjalan"
+    can_counter:
+      type: boolean
+      example: true
+
+MiddlemanInventory:
+  type: object
+  properties:
+    id:
+      type: string
+    lot_code:
+      type: string
+      example: "LOT-DEM-2025-0142"
+    commodity_name:
+      type: string
+      example: "Gabah Kering Panen (GKP)"
+    category:
+      type: string
+      example: "gabah"
+    variety:
+      type: string
+      example: "Ciherang Super"
+    warehouse_name:
+      type: string
+      example: "Gudang A - Demak"
+    total_weight_tons:
+      type: number
+      example: 18.5
+    average_buy_price:
+      type: number
+      example: 6800
+    current_market_price:
+      type: number
+      example: 7250
+    margin_per_unit:
+      type: number
+      example: 450
+    status:
+      type: string
+      example: "aman"
+
+MiddlemanInventorySummary:
+  type: object
+  properties:
+    total_stock_tons:
+      type: number
+      example: 38.2
+    warehouse_capacity_tons:
+      type: number
+      example: 50.0
+    capacity_percentage:
+      type: number
+      example: 76.4
+    estimated_stock_value:
+      type: number
+      example: 312450000
+    available_capacity_tons:
+      type: number
+      example: 11.8
+    stock_warnings_count:
+      type: integer
+      example: 2
+
+CreateInventoryInput:
+  type: object
+  required:
+    - commodity_name
+    - buy_price_per_kg
+  properties:
+    commodity_id:
+      type: string
+    commodity_name:
+      type: string
+      example: "Gabah Kering Giling (GKG)"
+    category:
+      type: string
+      example: "gabah"
+    variety:
+      type: string
+      example: "Ciherang Super"
+    source_gapoktan:
+      type: string
+      example: "Gapoktan Sumber Makmur - Demak"
+    warehouse_name:
+      type: string
+      example: "Gudang Karangawen"
+    weight_tons:
+      type: number
+      example: 10.0
+    buy_price_per_kg:
+      type: number
+      example: 7800
+    market_price_per_kg:
+      type: number
+      example: 8300
+    moisture_content:
+      type: number
+      example: 13.5
+    notes:
+      type: string
+      example: "Penerimaan hasil panen kelompok tani"
+
+MiddlemanInventoryMutation:
+  type: object
+  properties:
+    id:
+      type: string
+    lot_code:
+      type: string
+      example: "LOT-Dem-0417"
+    mutation_type:
+      type: string
+      example: "in"
+    commodity_name:
+      type: string
+      example: "Gabah GKG"
+    quantity_tons:
+      type: number
+      example: 10.0
+    partner_name:
+      type: string
+      example: "Gapoktan Sumber Makmur"
+
+MiddlemanSalesSummary:
+  type: object
+  properties:
+    ready_to_sell_tons:
+      type: number
+      example: 28.0
+    active_listings_count:
+      type: integer
+      example: 4
+    incoming_bids_count:
+      type: integer
+      example: 6
+    average_sell_margin:
+      type: string
+      example: "+Rp 450 / kg"
+
+MiddlemanSalesListing:
+  type: object
+  properties:
+    id:
+      type: string
+    inventory_id:
+      type: string
+    lot_code:
+      type: string
+      example: "LOT: GKP-DEM-0142"
+    commodity_name:
+      type: string
+      example: "Gabah Kering Panen (GKP)"
+    variety:
+      type: string
+      example: "Ciherang"
+    offered_tons:
+      type: number
+      example: 10.0
+    cost_price_per_kg:
+      type: number
+      example: 6800
+    selling_price_per_kg:
+      type: number
+      example: 7250
+    total_selling_value:
+      type: number
+      example: 72500000
+    target_margin_per_kg:
+      type: number
+      example: 450
+    delivery_option:
+      type: string
+      example: "warehouse_pickup"
+    status:
+      type: string
+      example: "active"
+
+CreateSaleListingInput:
+  type: object
+  required:
+    - inventory_id
+    - offered_tons
+    - selling_price_per_kg
+  properties:
+    inventory_id:
+      type: string
+    offered_tons:
+      type: number
+      example: 10.0
+    min_order_tons:
+      type: number
+      example: 2.0
+    selling_price_per_kg:
+      type: number
+      example: 7250
+    delivery_option:
+      type: string
+      example: "warehouse_pickup"
+    target_markets:
+      type: array
+      items:
+        type: string
+      example: ["rice_mill", "wholesaler"]
+    validity_days:
+      type: integer
+      example: 3
+
+UpdateOrderPOInput:
+  type: object
+  properties:
+    offered_quantity:
+      type: number
+      example: 5000
+    offered_price:
+      type: number
+      example: 6800
+    pickup_date:
+      type: string
+      example: "2025-05-15"
+    pickup_time_slot:
+      type: string
+      example: "08:30 WIB"
+    vehicle_type:
+      type: string
+      example: "Truk Engkel (4 Roda)"
+    notes:
+      type: string
+      example: "Pastikan karung 50 kg cukup dan timbangan digital sudah dikalibrasi."
+
+CounterOfferInput:
+  type: object
+  required:
+    - counter_price
+  properties:
+    counter_price:
+      type: number
+      example: 6850
+    counter_notes:
+      type: string
+      example: "Penawaran harga susulan disesuaikan dengan mutu gabah super."
+

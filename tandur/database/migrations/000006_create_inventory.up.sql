@@ -1,4 +1,4 @@
-CREATE TABLE inventory (
+CREATE TABLE IF NOT EXISTS inventory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     middleman_id UUID NOT NULL REFERENCES users(id),
     commodity_id UUID NOT NULL REFERENCES commodities(id),
@@ -25,7 +25,7 @@ CREATE TABLE inventory (
         )
 );
 
-CREATE TABLE inventory_movements (
+CREATE TABLE IF NOT EXISTS inventory_movements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     inventory_id UUID NOT NULL REFERENCES inventory(id),
     movement_type VARCHAR(20) NOT NULL,

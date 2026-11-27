@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+	_ "time/tzdata"
 
 	"github.com/gofiber/fiber/v3"
 	adapterHttp "tandur/api/internal/adapter/http"
 	"tandur/api/internal/application"
+	"tandur/api/internal/domain"
+	"tandur/api/internal/infrastructure/cache"
 	"tandur/api/internal/infrastructure/config"
+	"tandur/api/internal/infrastructure/external"
 	"tandur/api/internal/infrastructure/logger"
 	"tandur/api/internal/infrastructure/persistence"
 )
@@ -22,23 +28,76 @@ func main() {
 	logger.Init(cfg.AppEnv)
 	logger.Log.Info("Inisialisasi TANDUR Backend API", "env", cfg.AppEnv, "port", cfg.AppPort)
 
-	// 3. Initialize Repositories (Persistence)
+	// 3. Initialize Database Connection Pool (PostgreSQL + PostGIS)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dbPool, err := persistence.NewPostgresPool(ctx, cfg)
+	if err != nil {
+		logger.Log.Error("Gagal menghubungkan ke PostgreSQL", "error", err)
+	} else {
+		defer dbPool.Close()
+		// Auto-migrate pending database migrations if any
+		if err := persistence.AutoMigrate(ctx, dbPool); err != nil {
+			logger.Log.Error("Gagal menjalankan auto-migrasi database", "error", err)
+		}
+	}
+
+	// 4. Initialize Repositories (Persistence) & Cache
+	var userRepo *persistence.PostgresUserRepository
+	var listingRepo domain.FarmerListingRepository
+	var orderRepo domain.OrderRepository
+	var middlemanRepo domain.MiddlemanRepository
+	var buyerRepo domain.BuyerRepository
+	if dbPool != nil {
+		userRepo = persistence.NewPostgresUserRepository(dbPool)
+		listingRepo = persistence.NewPostgresListingRepository(dbPool)
+		orderRepo = persistence.NewPostgresOrderRepository(dbPool)
+		middlemanRepo = persistence.NewPostgresMiddlemanRepository(dbPool)
+		buyerRepo = persistence.NewPostgresBuyerRepository(dbPool)
+	} else {
+		orderRepo = persistence.NewMemoryOrderRepository()
+		middlemanRepo = persistence.NewMemoryMiddlemanRepository(orderRepo)
+		buyerRepo = persistence.NewMemoryBuyerRepository()
+	}
 	commodityRepo := persistence.NewMemoryCommodityRepository()
 
-	// 4. Initialize Application Services (Use Cases)
-	commodityService := application.NewCommodityService(commodityRepo)
+	redisClient := cache.NewRedisClient(cfg)
+	var tokenBlacklist domain.TokenBlacklist
+	var marketPriceCache domain.MarketPriceCache
+	var realtimeCache domain.RealtimeMarketPriceCache
+	if err := redisClient.Ping(ctx); err == nil {
+		logger.Log.Info("Terhubung ke Redis cache untuk token blacklist, SP2KP (TTL 6 jam), dan harga realtime Tandur (TTL 10 menit)")
+		tokenBlacklist = redisClient
+		marketPriceCache = redisClient
+		realtimeCache = redisClient
+	} else {
+		logger.Log.Warn("Redis tidak terhubung, menggunakan in-memory cache fallback", "error", err)
+	}
 
-	// 5. Initialize HTTP Handlers & Adapter
-	httpHandler := adapterHttp.NewHandler(cfg, commodityService)
+	// 5. Initialize External Providers & Clients
+	marketPriceClient := external.NewMarketPriceClient(cfg)
 
-	// 6. Setup Fiber Web Application
+	// 6. Initialize Application Services (Use Cases)
+	jwtDuration := time.Duration(cfg.JWTExpirationHours) * time.Hour
+	authService := application.NewAuthService(userRepo, cfg.JWTSecret, jwtDuration, tokenBlacklist)
+	commodityService := application.NewCommodityService(commodityRepo, marketPriceClient, marketPriceCache, realtimeCache)
+	farmerService := application.NewFarmerService(userRepo, listingRepo)
+	orderService := application.NewOrderService(orderRepo, listingRepo, userRepo, commodityService)
+	middlemanService := application.NewMiddlemanService(middlemanRepo, orderRepo, listingRepo, commodityService)
+	buyerService := application.NewBuyerService(buyerRepo, userRepo)
+
+	// 6. Initialize HTTP Handlers & Adapter
+	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService, farmerService, orderService, middlemanService, buyerService)
+
+	// 7. Setup Fiber Web Application
 	app := fiber.New(fiber.Config{
 		AppName: "TANDUR API v1.0.0",
 	})
 
 	adapterHttp.SetupRoutes(app, httpHandler)
 
-	// 7. Graceful Shutdown Setup
+	// 8. Graceful Shutdown Setup
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.AppPort)
 		logger.Log.Info("Server API berjalan", "addr", addr)
@@ -55,4 +114,3 @@ func main() {
 	_ = app.Shutdown()
 	logger.Log.Info("Server API berhasil dihentikan.")
 }
-

@@ -35,7 +35,7 @@ setup: ## Menyiapkan kebutuhan awal proyek (copy .env dan install dependencies)
 	@echo "$(YELLOW)Menginstal dependencies frontend...$(RESET)"
 	@cd apps/web && npm install
 	@echo "$(YELLOW)Mengunduh dependencies backend...$(RESET)"
-	@cd apps/api && go mod tidy
+	@if command -v go >/dev/null 2>&1; then cd apps/api && go mod tidy; else echo "$(BLUE)Golang tidak terdeteksi di mesin lokal. Backend akan berjalan otomatis di dalam Docker container.$(RESET)"; fi
 	@echo "$(GREEN)Setup proyek TANDUR selesai! Gunakan 'make up' untuk menjalankan service.$(RESET)"
 
 up: ## Menjalankan seluruh service development menggunakan Docker Compose
@@ -44,6 +44,11 @@ up: ## Menjalankan seluruh service development menggunakan Docker Compose
 	@echo "$(GREEN)Seluruh service berhasil berjalan!$(RESET)"
 	@echo "$(BLUE)Web Frontend: http://localhost:5173$(RESET)"
 	@echo "$(BLUE)Backend API:  http://localhost:8080/health$(RESET)"
+
+backend-up: ## Menjalankan backend dan database saja di Docker (tanpa container web)
+	@echo "$(YELLOW)Menjalankan backend API & database di Docker...$(RESET)"
+	docker compose up -d postgres redis garage api
+	@echo "$(GREEN)Backend API siap digunakan di http://localhost:8080 !$(RESET)"
 
 up-build: ## Menjalankan service dengan membangun ulang image
 	@echo "$(YELLOW)Membangun ulang image dan menjalankan service...$(RESET)"

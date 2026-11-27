@@ -35,3 +35,158 @@ Commodity:
       type: string
       format: date-time
 
+SP2KPCommodityPrice:
+  type: object
+  required:
+    - variant_id
+    - variant_nama
+    - satuan_display
+    - tanggal
+    - harga
+  properties:
+    variant_id:
+      type: integer
+      example: 2
+    variant_nama:
+      type: string
+      example: "Cabai Merah Keriting"
+    satuan_display:
+      type: string
+      example: "kg"
+    tanggal:
+      type: string
+      example: "2026-11-20"
+    harga:
+      type: number
+      example: 48667
+    tanggal_pembanding:
+      type: string
+      example: "2026-11-19"
+    harga_pembanding:
+      type: number
+      example: 48667
+    delta_harga:
+      type: number
+      example: 0
+    persen_perubahan:
+      type: number
+      example: 0
+    status_perubahan:
+      type: string
+      example: "Tidak Berubah"
+    is_regional:
+      type: boolean
+      example: false
+    region:
+      type: array
+      items:
+        $ref: "#/SP2KPRegionPrice"
+
+SP2KPRegionPrice:
+  type: object
+  properties:
+    region:
+      type: string
+      example: "Region A"
+    satuan_display:
+      type: string
+      example: "kg"
+    harga:
+      type: number
+      example: 14082
+    harga_pembanding:
+      type: number
+      example: 14087
+    persen_perubahan:
+      type: number
+      example: -0.035
+    status_perubahan:
+      type: string
+      example: "Turun"
+
+DashboardCommodityPrice:
+  type: object
+  required:
+    - commodity_id
+    - commodity_name
+    - unit
+    - average_price
+    - yesterday_price
+    - delta_price
+    - percentage_change
+    - trend
+    - trend_label
+    - last_updated_at
+    - source
+  properties:
+    commodity_id:
+      type: string
+      example: "52"
+    commodity_name:
+      type: string
+      example: "Beras Medium"
+    unit:
+      type: string
+      example: "kg"
+    average_price:
+      type: number
+      example: 7200
+    yesterday_price:
+      type: number
+      example: 7050
+    delta_price:
+      type: number
+      example: 150
+    percentage_change:
+      type: number
+      example: 2.13
+    trend:
+      type: string
+      enum: [UP, DOWN, STABLE]
+      example: "UP"
+    trend_label:
+      type: string
+      example: "+Rp 150"
+    last_updated_at:
+      type: string
+      format: date-time
+      example: "2026-11-21T07:30:00Z"
+    source:
+      type: string
+      example: "tandur_real_market"
+
+PriceGuide:
+  type: object
+  required:
+    - commodity_name
+    - benchmark_price
+    - allowed_min_price
+    - allowed_max_price
+    - margin_percentage
+    - unit
+    - message
+  properties:
+    commodity_name:
+      type: string
+      example: "Gabah Kering Panen"
+    benchmark_price:
+      type: number
+      example: 7200
+    allowed_min_price:
+      type: number
+      example: 6120
+    allowed_max_price:
+      type: number
+      example: 8280
+    margin_percentage:
+      type: number
+      example: 15.0
+    unit:
+      type: string
+      example: "kg"
+    source:
+      type: string
+      example: "tandur_real_market"
+    message:
+      type: string
+      example: "Harga jual disarankan antara Rp 6.120 s/d Rp 8.280 per kg (toleransi ±15% dari harga pasar)"

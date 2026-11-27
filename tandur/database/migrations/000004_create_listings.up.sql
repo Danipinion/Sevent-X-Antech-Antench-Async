@@ -1,4 +1,4 @@
-CREATE TABLE farmer_listings (
+CREATE TABLE IF NOT EXISTS farmer_listings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     farmer_id UUID NOT NULL REFERENCES users(id),
     commodity_id UUID NOT NULL REFERENCES commodities(id),

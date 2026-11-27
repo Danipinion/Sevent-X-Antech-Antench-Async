@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/logger"
@@ -11,18 +13,175 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	// Middleware
 	app.Use(recover.New())
 	app.Use(logger.New())
+	app.Use(TraceMiddleware())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"http://localhost:5173", "http://localhost", "*"},
-		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization"},
-		AllowMethods: []string{"GET, POST, PUT, DELETE, OPTIONS"},
+		AllowHeaders: []string{"Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Correlation-ID, X-Trace-ID"},
+		AllowMethods: []string{"GET, POST, PUT, PATCH, DELETE, OPTIONS"},
 	}))
+
+	// URL rewrite: allow endpoints called without /api/v1 prefix (e.g. /farmer/*, /middleman/*, /marketplace/*, /listings, Swagger try-it-out)
+	app.Use(func(c fiber.Ctx) error {
+		p := c.Path()
+		if !strings.HasPrefix(p, "/api/v1") &&
+			!strings.HasPrefix(p, "/swagger") &&
+			!strings.HasPrefix(p, "/docs") &&
+			!strings.HasPrefix(p, "/scalar") &&
+			!strings.HasPrefix(p, "/openapi") &&
+			!strings.HasPrefix(p, "/health") &&
+			!strings.HasPrefix(p, "/metrics") &&
+			!strings.HasPrefix(p, "/tandur") &&
+			!strings.HasPrefix(p, "/uploads") {
+			if p == "/listings" {
+				c.Path("/api/v1/marketplace/listings")
+			} else {
+				c.Path("/api/v1" + p)
+			}
+		}
+		return c.Next()
+	})
 
 	// Root Healthcheck
 	app.Get("/health", handler.HealthCheck)
 
+	// Media & Object Storage Routes (Garage S3 Static Delivery)
+	app.Get("/tandur/*", handler.ServeStorage)
+	app.Get("/uploads/*", handler.ServeStorage)
+
+	// Interactive API Documentation (Swagger UI & Scalar)
+	docsHandler := NewDocsHandler()
+	app.Get("/swagger", docsHandler.SwaggerUI)
+	app.Get("/docs", docsHandler.SwaggerUI)
+	app.Get("/scalar", docsHandler.ScalarUI)
+	app.Get("/docs/openapi.json", docsHandler.OpenAPISpecJSON)
+	app.Get("/docs/openapi.yaml", docsHandler.OpenAPISpecYAML)
+	app.Get("/openapi.json", docsHandler.OpenAPISpecJSON)
+	app.Get("/openapi.yaml", docsHandler.OpenAPISpecYAML)
+
 	// API v1 Routing
 	v1 := app.Group("/api/v1")
 	v1.Get("/health", handler.HealthCheck)
+	v1.Get("/swagger", docsHandler.SwaggerUI)
+	v1.Get("/docs", docsHandler.SwaggerUI)
+	v1.Get("/storage/:bucket/*", handler.ServeStorage)
+	v1.Get("/storage/*", handler.ServeStorage)
 	v1.Get("/commodities", handler.ListCommodities)
+	v1.Get("/commodities/realtime-prices", handler.GetRealtimeDashboardPrices)
+	v1.Get("/commodities/price-guide", handler.GetPriceGuide)
+	v1.Get("/commodities/market-prices", handler.GetMarketPrices)
+	v1.Post("/commodities/market-prices", handler.GetMarketPrices)
 	v1.Get("/commodities/:id", handler.GetCommodity)
+
+	// Auth Routing
+	auth := v1.Group("/auth")
+	auth.Post("/register", handler.Register)
+	auth.Post("/login", handler.Login)
+	auth.Post("/logout", handler.Logout, handler.AuthMiddleware())
+	auth.Get("/me", handler.Me, handler.AuthMiddleware())
+	auth.Get("/profile", handler.Me, handler.AuthMiddleware())
+	auth.Put("/profile", handler.UpdateProfile, handler.AuthMiddleware())
+	auth.Patch("/profile", handler.UpdateProfile, handler.AuthMiddleware())
+	auth.Post("/profile/photo", handler.UploadProfilePhoto, handler.AuthMiddleware())
+
+	// User Profile Routing (alias kompatibel untuk frontend /users/profile)
+	users := v1.Group("/users", handler.AuthMiddleware())
+	users.Get("/profile", handler.Me)
+	users.Put("/profile", handler.UpdateProfile)
+	users.Patch("/profile", handler.UpdateProfile)
+
+	// Buyer Catalog & Exploration (OptionalAuth untuk membedakan business_buyer vs retail_buyer)
+	v1.Get("/categories", handler.ListCategories)
+	v1.Get("/products", handler.ListProducts, handler.OptionalAuthMiddleware())
+	v1.Get("/products/popular", handler.ListPopularProducts, handler.OptionalAuthMiddleware())
+	v1.Get("/products/:id", handler.GetProductDetail, handler.OptionalAuthMiddleware())
+
+	// Buyer Cart & Stock Consolidation
+	cart := v1.Group("/cart", handler.AuthMiddleware())
+	cart.Get("/", handler.GetCart)
+	cart.Post("/items", handler.AddCartItem)
+	cart.Patch("/items/:item_id", handler.UpdateCartItem)
+	cart.Delete("/items/:item_id", handler.DeleteCartItem)
+
+	// Buyer Primary Address & Downstream Orders (Cash on Pickup)
+	v1.Get("/addresses/primary", handler.GetPrimaryAddress, handler.AuthMiddleware())
+	orders := v1.Group("/orders", handler.AuthMiddleware())
+	orders.Post("/checkout-summary", handler.CheckoutSummary)
+	orders.Post("/", handler.CreateBuyerOrder)
+	orders.Get("/", handler.ListBuyerOrders)
+	orders.Get("/:order_id", handler.GetBuyerOrderDetail)
+	orders.Patch("/:order_id/cancel", handler.CancelBuyerOrder)
+	orders.Patch("/:order_id/confirm-receipt", handler.ConfirmBuyerOrderReceipt)
+
+	// Farmer Routing
+	farmer := v1.Group("/farmer", handler.AuthMiddleware())
+	farmer.Get("/verification", handler.GetFarmerVerification)
+	farmer.Post("/verification", handler.SubmitFarmerVerification)
+	farmer.Post("/listings", handler.CreateFarmerListing)
+	farmer.Get("/listings", handler.ListFarmerListings)
+	farmer.Get("/listings/:id", handler.GetFarmerListing)
+	farmer.Put("/listings/:id", handler.UpdateFarmerListing)
+	farmer.Delete("/listings/:id", handler.CancelFarmerListing)
+	farmer.Post("/listings/upload-media", handler.UploadFarmerListingMedia)
+
+	// Farmer Orders (Daftar Pesanan & Penjualan - Mockup Gambar 2)
+	farmer.Get("/orders", handler.ListFarmerOrders)
+	farmer.Get("/orders/:id", handler.GetFarmerOrder)
+	farmer.Post("/orders/:id/accept", handler.AcceptFarmerOrder)
+	farmer.Post("/orders/:id/negotiate", handler.NegotiateFarmerOrder)
+	farmer.Post("/orders/:id/reject", handler.RejectFarmerOrder)
+	farmer.Post("/orders/:id/confirm-ready", handler.ConfirmReadyForPickup)
+	farmer.Post("/orders/:id/complete", handler.CompleteFarmerOrder)
+
+	// Middleman / Tengkulak Routing (Seluruh Halaman Tengkulak)
+	middleman := v1.Group("/middleman", handler.AuthMiddleware())
+
+	// 1. Beranda Tengkulak
+	middleman.Get("/dashboard", handler.GetMiddlemanDashboard)
+
+	// 2. Cari Petani & Pasokan (Listing Hasil Panen)
+	middleman.Get("/listings", handler.ListMiddlemanListings)
+	middleman.Get("/listings/:id", handler.GetMiddlemanListing)
+
+	// 3. Transaksi & Surat Pesanan (PO)
+	middleman.Get("/orders", handler.GetMiddlemanOrders)
+	middleman.Post("/orders", handler.CreateMiddlemanOffer)
+	middleman.Get("/orders/export", handler.ExportMiddlemanOrdersReport)
+	middleman.Get("/orders/:id", handler.GetMiddlemanOrder)
+	middleman.Put("/orders/:id", handler.UpdateMiddlemanOrderPO)
+	middleman.Delete("/orders/:id", handler.CancelMiddlemanOrderPO)
+	middleman.Put("/orders/:id/logistics", handler.UpdateOrderLogistics)
+	middleman.Post("/orders/:id/weighing-and-complete", handler.CompleteWeighingAndSettlement)
+
+	// 4. Penawaran & Kesepakatan Harga
+	middleman.Get("/offers", handler.GetMiddlemanOffers)
+	middleman.Post("/offers/:id/counter", handler.CounterMiddlemanOffer)
+
+	// 5. Inventaris Stok Gudang
+	middleman.Get("/inventory", handler.GetMiddlemanInventory)
+	middleman.Post("/inventory", handler.CreateMiddlemanInventory)
+	middleman.Get("/inventory/mutations", handler.GetMiddlemanMutations)
+	middleman.Get("/inventory/:id", handler.GetMiddlemanInventoryByID)
+	middleman.Delete("/inventory/:id", handler.DeleteMiddlemanInventory)
+
+	// 6. Jual Stok Gudang
+	middleman.Get("/sales", handler.GetMiddlemanSales)
+	middleman.Post("/sales", handler.CreateMiddlemanSaleListing)
+	middleman.Get("/sales/:id", handler.GetMiddlemanSaleListingByID)
+	middleman.Put("/sales/:id", handler.UpdateMiddlemanSaleListing)
+	middleman.Delete("/sales/:id", handler.DeleteMiddlemanSaleListing)
+	middleman.Put("/sales/:id/close", handler.CloseMiddlemanSaleListing)
+	middleman.Put("/sales/:id/toggle-archive", handler.ToggleArchiveMiddlemanSaleListing)
+	middleman.Get("/sales/:id/bids", handler.GetMiddlemanSaleBids)
+
+	// Aliases for sell-offers
+	middleman.Get("/sell-offers", handler.GetMiddlemanSales)
+	middleman.Post("/sell-offers", handler.CreateMiddlemanSaleListing)
+	middleman.Put("/sell-offers/:id", handler.UpdateMiddlemanSaleListing)
+	middleman.Delete("/sell-offers/:id", handler.DeleteMiddlemanSaleListing)
+	middleman.Put("/sell-offers/:id/close", handler.CloseMiddlemanSaleListing)
+	middleman.Put("/sell-offers/:id/toggle-archive", handler.ToggleArchiveMiddlemanSaleListing)
+
+	// Public Marketplace
+	v1.Get("/marketplace/listings", handler.ListMiddlemanListings)
+	v1.Get("/marketplace/listings/:id", handler.GetMiddlemanListing)
 }

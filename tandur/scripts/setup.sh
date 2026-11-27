@@ -15,9 +15,13 @@ cd apps/web && npm install
 cd ../..
 
 # 3. Backend setup
-echo "Mengunduh modul backend Go..."
-cd apps/api && go mod tidy
-cd ../..
+if command -v go >/dev/null 2>&1; then
+  echo "Mengunduh modul backend Go..."
+  cd apps/api && go mod tidy
+  cd ../..
+else
+  echo "Golang tidak terpasang di lokal (dilewati). Backend akan berjalan otomatis via Docker."
+fi
 
 echo "✅ Lingkungan pengembangan TANDUR siap digunakan!"
 echo "Jalankan 'make up' untuk menyalakan seluruh service docker."

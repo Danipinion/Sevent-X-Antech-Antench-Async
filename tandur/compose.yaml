@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/frontend/Dockerfile
+      network: host
     container_name: tandur-web
     restart: unless-stopped
     ports:
@@ -24,21 +25,23 @@ services:
       dockerfile: infrastructure/docker/backend/Dockerfile
     container_name: tandur-api
     restart: unless-stopped
-    ports:
-      - "${API_PORT:-8080}:8080"
+    network_mode: host
     volumes:
       - ./apps/api:/app
+      - ./database/migrations:/migrations:ro
       - go_modules:/go/pkg/mod
     environment:
       APP_ENV: development
       APP_PORT: 8080
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT: http://garage:3900
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://127.0.0.1:6380/0
+      S3_ENDPOINT: http://127.0.0.1:3900
       S3_REGION: ${S3_REGION:-garage}
       S3_BUCKET: ${S3_BUCKET:-tandur}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET:-tandur-secret-key-super-secure-change-in-production}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-72}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,13 +55,11 @@ services:
         - wget
         - --spider
         - -q
-        - http://localhost:8080/health
+        - http://127.0.0.1:8080/health
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      - tandur-network
 
   postgres:
     image: postgis/postgis:17-3.5
@@ -139,12 +140,32 @@ services:
     networks:
       - tandur-network
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: tandur-pgadmin
+    restart: unless-stopped
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@tandur.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - tandur-network
+
 volumes:
   postgres_data:
   redis_data:
   garage_data:
   garage_meta:
   filestash_data:
+  pgadmin_data:
   web_node_modules:
   go_modules:
 

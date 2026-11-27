@@ -180,8 +180,12 @@ make down
 ```
 
 ### Akses Layanan Lokal
-- **Aplikasi Web:** [http://localhost](http://localhost)
-- **API Endpoint:** [http://localhost/api/v1/health](http://localhost/api/v1/health) atau [http://localhost:8080/api/v1/health](http://localhost:8080/api/v1/health)
+- **Aplikasi Web (Frontend):** [http://localhost:5173](http://localhost:5173)
+- **API Endpoint:** [http://localhost:8080/api/v1/health](http://localhost:8080/api/v1/health)
+- **Dokumentasi API (Swagger UI):** [http://localhost:8080/swagger](http://localhost:8080/swagger) atau [http://localhost:8080/docs](http://localhost:8080/docs)
+- **Dokumentasi API (Scalar UI):** [http://localhost:8080/scalar](http://localhost:8080/scalar)
+- **Database Web Dashboard (pgAdmin):** [http://localhost:5050](http://localhost:5050)
+- **Storage Web Dashboard (Filestash):** [http://localhost:8334](http://localhost:8334)
 - **Traefik Dashboard:** [http://localhost:8081](http://localhost:8081)
 
 ---
@@ -222,6 +226,32 @@ make backend
 | `make migrate-up` | Menjalankan migrasi database PostgreSQL |
 | `make migrate-down` | Melakukan rollback migrasi database |
 | `make clean` | Menghapus build cache dan file sementara |
+
+### Pengelolaan Migrasi di Windows (Tanpa Makefile)
+
+Bagi pengguna OS Windows yang tidak menginstal `make`, telah disediakan script batch interaktif [`migrate.bat`](file:///migrate.bat):
+
+```cmd
+# Jalankan seluruh migrasi database ke versi terbaru
+migrate.bat up
+
+# Rollback 1 versi migrasi terakhir
+migrate.bat down
+
+# Cek versi migrasi aktif saat ini
+migrate.bat version
+
+# Buat sepasang file migrasi baru (.up.sql dan .down.sql)
+migrate.bat create nama_migrasi_baru
+
+# Memasukkan seed data awal
+migrate.bat seed
+
+# Perbaiki status dirty migration
+migrate.bat force 20
+
+# Atau cukup double-click migrate.bat dari File Explorer untuk membuka menu interaktif
+```
 
 ---
 

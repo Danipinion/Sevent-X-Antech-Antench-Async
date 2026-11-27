@@ -1,10 +1,109 @@
 ErrorResponse:
   type: object
   required:
+    - status
     - error
+    - meta
   properties:
-    error:
+    status:
       type: string
-      description: Pesan deskripsi kesalahan
-      example: Komoditas tidak ditemukan
+      example: error
+    error:
+      $ref: "#/ErrorDetail"
+    meta:
+      $ref: "#/ErrorMeta"
 
+ErrorDetail:
+  type: object
+  required:
+    - code
+    - message
+  properties:
+    code:
+      type: string
+      example: INVALID_CREDENTIALS
+      description: Kode error unik huruf kapital standar
+    message:
+      type: string
+      example: Nomor HP/NIK atau password salah
+      description: Deskripsi pesan error
+
+ErrorMeta:
+  type: object
+  required:
+    - trace
+  properties:
+    trace:
+      $ref: "#/TraceMeta"
+
+Meta:
+  type: object
+  required:
+    - trace
+  properties:
+    trace:
+      $ref: "#/TraceMeta"
+    pagination:
+      $ref: "#/PaginationMeta"
+
+TraceMeta:
+  type: object
+  required:
+    - request_id
+    - trace_id
+    - timestamp
+  properties:
+    request_id:
+      type: string
+      example: req_8f92a3b4-1c2d-4e5f-9a8b-7c6d5e4f3a2b
+    correlation_id:
+      type: string
+      example: corr_11223344-5566-7788-99aa-bbccddeeff00
+    trace_id:
+      type: string
+      example: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id:
+      type: string
+      example: 00f067aa0ba902b7
+    timestamp:
+      type: string
+      format: date-time
+      example: "2026-11-21T02:31:00.123Z"
+    api_version:
+      type: string
+      example: v1.0.0
+    processing_time_ms:
+      type: integer
+      example: 42
+    service_node:
+      type: string
+      example: tandur-api-dev
+
+PaginationMeta:
+  type: object
+  required:
+    - page
+    - per_page
+    - total_items
+    - total_pages
+    - has_next
+    - has_prev
+  properties:
+    page:
+      type: integer
+      example: 1
+    per_page:
+      type: integer
+      example: 20
+    total_items:
+      type: integer
+      example: 478
+    total_pages:
+      type: integer
+      example: 24
+    has_next:
+      type: boolean
+      example: true
+    has_prev:
+      type: boolean
+      example: false

@@ -1,0 +1,3897 @@
+openapi: 3.0.3
+info:
+  title: TANDUR API
+  version: 1.0.0
+  description: 'Spesifikasi REST API TANDUR sebagai kontrak komunikasi antara Frontend
+    dan Backend. Mendukung operasional rantai pasok komoditas pertanian, agregasi
+    stok petani, dan mekanisme kontrol margin harga.
+
+    '
+servers:
+- url: http://localhost:8080/api/v1
+  description: Development Server Local
+- url: /api/v1
+  description: Traefik Proxy Path
+tags:
+- name: Autentikasi & Pengguna
+  description: Endpoint registrasi akun, autentikasi login (No HP / NIK), informasi
+    sesi pengguna (/auth/me), dan pencabutan sesi (logout).
+- name: Pantauan Harga & Komoditas
+  description: Katalog komoditas pangan, pantauan harga pasar riil (dashboard realtime
+    update 10 menit), panduan batas margin harga jual, dan acuan harga SP2KP Kemendag.
+- name: Verifikasi Kemitraan Petani
+  description: Pemeriksaan status verifikasi identitas petani dan pengajuan dokumen
+    e-KTP terenkripsi AES-256-GCM ke Garage S3 untuk membuka kuota jual panen.
+- name: Penjualan Panen Petani
+  description: Manajemen listing hasil panen milik petani yang siap ditransaksikan
+    ke pembeli/tengkulak, diproteksi guard verifikasi kemitraan.
+- name: Pesanan & Penjualan Petani
+  description: Pengelolaan pesanan dan penawaran masuk untuk petani, penerimaan/penolakan
+    penawaran tengkulak, negosiasi harga counter, dan konfirmasi armada muat.
+- name: Tengkulak & Pembeli Bisnis
+  description: Pencarian petani panen, pengajuan penawaran pembelian borongan (min.
+    500 kg), pengaturan logistik armada, dan penyelesaian timbangan digital.
+- name: Marketplace Hasil Panen
+  description: Katalog publik hasil panen petani yang dapat dijelajahi oleh calon
+    pembeli dan mitra agribisnis.
+- name: Sistem & Pemantauan
+  description: Pemeriksaan kesehatan sistem (healthcheck), konektivitas database PostgreSQL
+    + PostGIS, dan cache Redis.
+paths:
+  /health:
+    get:
+      tags:
+      - Sistem & Pemantauan
+      summary: Healthcheck Status Server
+      description: Memeriksa ketersediaan API backend dan koneksi database.
+      responses:
+        '200':
+          description: Server beroperasi normal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Server beroperasi normal
+                  data:
+                    type: object
+                    properties:
+                      service:
+                        type: string
+                        example: tandur-api
+                      version:
+                        type: string
+                        example: v1.0.0
+                      database:
+                        type: string
+                        example: connected
+                      timestamp:
+                        type: string
+                        example: '2026-11-21T09:30:00Z'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /commodities:
+    get:
+      tags:
+      - Pantauan Harga & Komoditas
+      summary: Daftar Seluruh Komoditas
+      description: Mengambil daftar komoditas pertanian beserta acuan harga dasar
+        dan harga pasar.
+      responses:
+        '200':
+          description: Berhasil mengambil daftar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Daftar komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Commodity'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /commodities/realtime-prices:
+    get:
+      tags:
+      - Pantauan Harga & Komoditas
+      summary: Pantauan Harga Pasar Riil Komoditas (Dashboard Petani)
+      description: 'Mengambil pantauan harga pasar riil komoditas pertanian (Gabah
+        Kering Panen, GKG, Jagung Pipil, Kedelai Lokal) yang diperbarui setiap 10
+        menit sekali dengan perhitungan selisih/delta harian (Hari ini vs Kemarin).
+
+        '
+      parameters:
+      - name: kode_provinsi
+        in: query
+        description: Kode BPS Provinsi (contoh 35 untuk Jawa Timur).
+        required: false
+        schema:
+          type: string
+          example: '35'
+      - name: kode_kab_kota
+        in: query
+        description: Kode BPS Kabupaten/Kota (contoh 3519 untuk Kabupaten Madiun).
+        required: false
+        schema:
+          type: string
+          example: '3519'
+      responses:
+        '200':
+          description: Berhasil mengambil pantauan harga pasar riil komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Pantauan harga pasar riil komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DashboardCommodityPrice'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /commodities/price-guide:
+    get:
+      tags:
+      - Pantauan Harga & Komoditas
+      summary: Panduan Batas Margin Harga Jual Panen
+      description: "Mengambil rekomendasi batas harga jual terendah dan tertinggi\
+        \ (toleransi \xB115%) berdasarkan harga pasar riil untuk komoditas tertentu.\n"
+      parameters:
+      - name: commodity_name
+        in: query
+        description: Nama komoditas (contoh "Cabai Merah Keriting", "Gabah Kering
+          Panen")
+        required: true
+        schema:
+          type: string
+          example: Gabah Kering Panen
+      - name: kode_provinsi
+        in: query
+        description: Kode BPS Provinsi
+        required: false
+        schema:
+          type: string
+          example: '35'
+      - name: kode_kab_kota
+        in: query
+        description: Kode BPS Kabupaten/Kota
+        required: false
+        schema:
+          type: string
+          example: '3519'
+      responses:
+        '200':
+          description: Panduan batas rentang harga berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Panduan rentang harga komoditas berhasil diambil
+                  data:
+                    $ref: '#/components/schemas/PriceGuide'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /commodities/market-prices:
+    get:
+      tags:
+      - Pantauan Harga & Komoditas
+      summary: Harga Pasar Komoditas Terbaru (SP2KP Kemendag)
+      description: 'Mengambil data perbandingan harga komoditas pangan dan pertanian
+        dari SP2KP Kemendag RI secara nasional atau spesifik wilayah BPS (berdasarkan
+        kode provinsi dan kode kabupaten/kota).
+
+        '
+      parameters:
+      - name: tanggal
+        in: query
+        description: Tanggal acuan harga (format YYYY-MM-DD). Default hari ini / hari
+          kerja terakhir.
+        required: false
+        schema:
+          type: string
+          example: '2026-11-20'
+      - name: tanggal_pembanding
+        in: query
+        description: Tanggal pembanding untuk menghitung selisih harga (format YYYY-MM-DD).
+          Default H-1.
+        required: false
+        schema:
+          type: string
+          example: '2026-11-19'
+      - name: kode_provinsi
+        in: query
+        description: Kode BPS Provinsi (contoh 35 untuk Jawa Timur). Kosongkan untuk
+          harga nasional.
+        required: false
+        schema:
+          type: string
+          example: '35'
+      - name: kode_kab_kota
+        in: query
+        description: Kode BPS Kabupaten/Kota (contoh 3519 untuk Kabupaten Madiun).
+        required: false
+        schema:
+          type: string
+          example: '3519'
+      responses:
+        '200':
+          description: Berhasil mengambil data harga pasar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Harga pasar komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SP2KPCommodityPrice'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '500':
+          description: Gagal mengambil data harga pasar SP2KP Kemendag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+      - Pantauan Harga & Komoditas
+      summary: Query Harga Pasar Komoditas (SP2KP Kemendag)
+      description: Mengambil data perbandingan harga komoditas melalui JSON payload
+        body atau Form parameters.
+      parameters:
+      - name: tanggal
+        in: query
+        description: Tanggal acuan harga (opsional lewat query)
+        required: false
+        schema:
+          type: string
+          example: '2026-11-20'
+      - name: tanggal_pembanding
+        in: query
+        description: Tanggal pembanding (opsional lewat query)
+        required: false
+        schema:
+          type: string
+          example: '2026-11-19'
+      - name: kode_provinsi
+        in: query
+        description: Kode BPS Provinsi (opsional lewat query)
+        required: false
+        schema:
+          type: string
+          example: '35'
+      - name: kode_kab_kota
+        in: query
+        description: Kode BPS Kabupaten/Kota (opsional lewat query)
+        required: false
+        schema:
+          type: string
+          example: '3519'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tanggal:
+                  type: string
+                  example: '2026-11-20'
+                tanggal_pembanding:
+                  type: string
+                  example: '2026-11-19'
+                kode_provinsi:
+                  type: string
+                  example: '35'
+                kode_kab_kota:
+                  type: string
+                  example: '3519'
+      responses:
+        '200':
+          description: Berhasil mengambil data harga pasar komoditas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Harga pasar komoditas berhasil diambil
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SP2KPCommodityPrice'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '500':
+          description: Gagal mengambil data harga pasar SP2KP Kemendag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /commodities/{id}:
+    get:
+      tags:
+      - Pantauan Harga & Komoditas
+      summary: Detail Komoditas
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Detail komoditas ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Detail komoditas berhasil diambil
+                  data:
+                    $ref: '#/components/schemas/Commodity'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '404':
+          description: Komoditas tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/register:
+    post:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Registrasi Akun Pengguna Baru
+      description: 'Mendaftarkan akun baru (farmer, middleman, atau buyer) beserta
+        informasi lokasi opsional. Anda dapat mengisi langsung melalui Form Input
+        di bagian **Parameters** di bawah ini, atau memilih contoh JSON melalui **Request
+        body**.
+
+        '
+      parameters:
+      - name: name
+        in: query
+        description: Nama lengkap pengguna (Wajib)
+        required: false
+        schema:
+          type: string
+          example: Pak Joko Tani
+      - name: phone
+        in: query
+        description: Nomor Handphone 10-13 digit (Wajib)
+        required: false
+        schema:
+          type: string
+          example: 081234567890
+      - name: password
+        in: query
+        description: Password minimal 6 karakter (Wajib)
+        required: false
+        schema:
+          type: string
+          format: password
+          example: rahasia123
+      - name: role
+        in: query
+        description: Peran akun dalam sistem (Wajib)
+        required: false
+        schema:
+          type: string
+          enum:
+          - farmer
+          - middleman
+          - buyer
+          example: farmer
+      - name: nik
+        in: query
+        description: NIK KTP 16 digit angka (Opsional)
+        required: false
+        schema:
+          type: string
+          example: '3201010101010077'
+      - name: is_bisnis
+        in: query
+        description: Apakah akun bisnis / perusahaan
+        required: false
+        schema:
+          type: boolean
+          default: false
+          example: false
+      - name: address
+        in: query
+        description: Alamat lokasi kebun / gudang / toko (Opsional)
+        required: false
+        schema:
+          type: string
+          example: Jl. Pertanian Makmur No. 20
+      - name: latitude
+        in: query
+        description: Titik koordinat Latitude (Opsional)
+        required: false
+        schema:
+          type: number
+          format: double
+          example: -6.7456
+      - name: longitude
+        in: query
+        description: Titik koordinat Longitude (Opsional)
+        required: false
+        schema:
+          type: number
+          format: double
+          example: 107.0872
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              petani_lengkap:
+                summary: "\U0001F9D1\u200D\U0001F33E 1. Petani (Lengkap dengan Koordinat\
+                  \ Kebun)"
+                value:
+                  nik: '3201010101010099'
+                  name: Pak Slamet Petani
+                  phone: 081399998888
+                  password: secretPassword123
+                  role: farmer
+                  is_bisnis: false
+                  location:
+                    label: Kebun Cabai Utama
+                    address: Jl. Raya Pertanian No. 12
+                    village: Cikanyere
+                    district: Sukaresmi
+                    city: Kabupaten Cianjur
+                    province: Jawa Barat
+                    latitude: -6.7456
+                    longitude: 107.0872
+              tengkulak_bisnis:
+                summary: "\U0001F3E2 2. Tengkulak (Akun Bisnis + Gudang)"
+                value:
+                  nik: '3201010101010088'
+                  name: CV Tani Berkah Bersama
+                  phone: 081288887777
+                  password: secretPassword123
+                  role: middleman
+                  is_bisnis: true
+                  location:
+                    label: Gudang Konsolidasi
+                    address: Jl. Pergudangan Agrobisnis No. 8
+                    village: Sukamaju
+                    district: Cianjur
+                    city: Kabupaten Cianjur
+                    province: Jawa Barat
+                    latitude: -6.8173
+                    longitude: 107.1394
+              pembeli_individu:
+                summary: "\U0001F6D2 3. Pembeli (Simple tanpa Lokasi)"
+                value:
+                  name: Resto Padang Sejahtera
+                  phone: 081177776666
+                  password: secretPassword123
+                  role: buyer
+                  is_bisnis: false
+      responses:
+        '201':
+          description: Berhasil mendaftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Registrasi akun berhasil
+                  data:
+                    $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Data masukan tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Nomor handphone atau NIK sudah terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/login:
+    post:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Login Pengguna
+      description: 'Autentikasi pengguna menggunakan Nomor Handphone atau NIK sebagai
+        username dan password. Mengembalikan token sesi berbasis JWT (JSON Web Token)
+        yang digunakan untuk otorisasi endpoint terlindungi. Anda dapat mengisi langsung
+        melalui Form Input di bagian **Parameters** di bawah ini, atau mengirim JSON
+        payload melalui **Request body**.
+
+        '
+      parameters:
+      - name: username
+        in: query
+        description: Nomor Handphone (10-13 digit) atau NIK (16 digit angka)
+        required: false
+        schema:
+          type: string
+          example: 081399998888
+      - name: password
+        in: query
+        description: Password akun pengguna
+        required: false
+        schema:
+          type: string
+          format: password
+          example: secretPassword123
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              login_phone:
+                summary: "\U0001F4F1 1. Login menggunakan Nomor Handphone"
+                value:
+                  username: 081399998888
+                  password: secretPassword123
+              login_nik:
+                summary: "\U0001FAAA 2. Login menggunakan NIK KTP"
+                value:
+                  username: '3201010101010099'
+                  password: secretPassword123
+      responses:
+        '200':
+          description: Login berhasil, token JWT diterbitkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Login berhasil
+                  data:
+                    $ref: '#/components/schemas/LoginResponseData'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Username atau password tidak diisi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Kredensial tidak valid (Nomor HP/NIK atau password salah)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Akun tidak aktif atau dinonaktifkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/me:
+    get:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Profil Pengguna Aktif (Sesi JWT)
+      description: Mengambil data profil pengguna yang saat ini sedang login berdasarkan
+        token JWT di header Authorization.
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Profil pengguna berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Profil pengguna berhasil diambil
+                  data:
+                    $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Token otorisasi tidak valid atau telah kedaluwarsa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Pengguna tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/logout:
+    post:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Logout Pengguna
+      description: 'Mengakhiri sesi pengguna aktif dan memasukkan token JWT ke dalam
+        daftar hitam (blacklist) sehingga token tersebut tidak dapat digunakan lagi
+        untuk otorisasi.
+
+        '
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Logout berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Logout berhasil
+                  data:
+                    nullable: true
+                    example: null
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Token otorisasi tidak valid, telah kedaluwarsa, atau sudah
+            dibatalkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/profile:
+    put:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Update Profil Pengguna
+      description: 'Memperbarui data diri pengguna seperti nama lengkap, nomor handphone,
+        foto profil (avatar_url atau upload file), status bisnis, serta informasi
+        alamat lokasi. Data sensitif seperti NIK, role, dan password dilindungi dan
+        tidak dapat diubah melalui endpoint ini. Mendukung format JSON maupun multipart/form-data
+        (bila mengunggah berkas foto via field ''avatar'').
+
+        '
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            example:
+              name: Pak Slamet Petani Makmur
+              phone: 081399998888
+              avatar_url: https://storage.tandur.com/avatars/new-profile.jpg
+              is_bisnis: false
+              address: Jl. Pertanian Modern No. 5
+              latitude: -6.7456
+              longitude: 107.0872
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                is_bisnis:
+                  type: boolean
+                avatar:
+                  type: string
+                  format: binary
+                  description: Berkas gambar foto profil baru (JPG, PNG, atau WEBP,
+                    maks 5 MB)
+                address:
+                  type: string
+                latitude:
+                  type: number
+                  format: double
+                longitude:
+                  type: number
+                  format: double
+      responses:
+        '200':
+          description: Profil pengguna berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Profil pengguna berhasil diperbarui
+                  data:
+                    $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Data masukan tidak valid atau mencoba mengubah data sensitif
+            (NIK, role, password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Pengguna tidak terautentikasi atau token tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Nomor handphone baru sudah digunakan oleh pengguna lain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Update Sebagian Profil Pengguna
+      description: Memperbarui sebagian field profil pengguna (identik dengan PUT
+        /auth/profile).
+      security:
+      - BearerAuth: []
+      requestBody:
+        $ref: '#/components/schemas/requestBody'
+      responses:
+        '200':
+          $ref: '#/components/schemas/200'
+        '400':
+          $ref: '#/components/schemas/400'
+        '401':
+          $ref: '#/components/schemas/401'
+        '409':
+          $ref: '#/components/schemas/409'
+  /auth/profile/photo:
+    post:
+      tags:
+      - Autentikasi & Pengguna
+      summary: Upload dan Ganti Foto Profil Pengguna
+      description: Mengunggah berkas foto profil baru (JPG, PNG, WEBP, maks 5 MB)
+        dan langsung memperbarui foto profil pengguna aktif.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - avatar
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: Berkas gambar foto profil baru (JPG, PNG, WEBP maks
+                    5 MB)
+      responses:
+        '200':
+          description: Foto profil berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Foto profil berhasil diperbarui
+                  data:
+                    type: object
+                    properties:
+                      avatar_url:
+                        type: string
+                        example: http://localhost:3900/tandur/avatars/user-id/random.jpg
+                      user:
+                        $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Berkas foto tidak valid atau bukan gambar yang diizinkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Pengguna tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /farmer/verification:
+    get:
+      tags:
+      - Verifikasi Kemitraan Petani
+      summary: Status Verifikasi Kemitraan Petani
+      description: Memeriksa status verifikasi identitas e-KTP petani, hasil pembacaan
+        OCR, dan hak jual panen.
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Status verifikasi petani berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Status verifikasi kemitraan petani
+                  data:
+                    $ref: '#/components/schemas/FarmerVerificationResponse'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Belum terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+      - Verifikasi Kemitraan Petani
+      summary: Kirim Dokumen Verifikasi e-KTP Petani
+      description: Mengunggah berkas foto e-KTP asli dan data kependudukan hasil pembacaan
+        OCR untuk mengaktifkan status kemitraan resmi dan membuka kuota jual panen.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FarmerVerificationInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FarmerVerificationInput'
+      responses:
+        '200':
+          description: Dokumen e-KTP berhasil diverifikasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Dokumen e-KTP berhasil diverifikasi. Kemitraan resmi
+                      aktif dan Anda dapat mulai menjual hasil panen.
+                  data:
+                    $ref: '#/components/schemas/FarmerVerificationResponse'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Validasi gagal (NIK tidak valid, foto KTP kosong, atau pernyataan
+            belum disetujui)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Hanya akun dengan role petani yang dapat melakukan verifikasi
+            kemitraan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: NIK sudah digunakan oleh akun lain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /farmer/listings:
+    get:
+      tags:
+      - Penjualan Panen Petani
+      summary: Daftar Hasil Panen Petani (Berpaginasi)
+      description: Mengambil seluruh riwayat dan daftar hasil panen yang didaftarkan
+        oleh petani dengan dukungan pagination dan filter status.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: page
+        in: query
+        description: Nomor halaman (default 1)
+        required: false
+        schema:
+          type: integer
+          default: 1
+          example: 1
+      - name: limit
+        in: query
+        description: Jumlah data per halaman (default 10, maksimal 100)
+        required: false
+        schema:
+          type: integer
+          default: 10
+          example: 10
+      - name: status
+        in: query
+        description: Filter status listing (all, draft, published, reserved, completed,
+          cancelled)
+        required: false
+        schema:
+          type: string
+          example: published
+      - name: commodity_id
+        in: query
+        description: Filter berdasarkan UUID komoditas
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Daftar panen berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    post:
+      tags:
+      - Penjualan Panen Petani
+      summary: Jual Hasil Panen (Daftarkan Listing Panen)
+      description: 'Mendaftarkan komoditas panen untuk dijual. Petani WAJIB berstatus
+        terverifikasi (e-KTP diverifikasi). Wajib menyertakan minimal 1 foto sampel
+        panen, maksimal 1 video opsional (total maksimal 5 berkas media), dan bobot
+        panen minimal 500 kg.
+
+        '
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListingInput'
+      responses:
+        '201':
+          description: Hasil panen berhasil didaftarkan untuk dijual
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Validasi gagal (bobot kurang dari 500 kg atau aturan komposisi
+            media tidak dipenuhi)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Petani belum terverifikasi (FARMER_NOT_VERIFIED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /farmer/listings/{id}:
+    get:
+      tags:
+      - Penjualan Panen Petani
+      summary: Detail Listing Panen
+      description: Mengambil data rinci satu listing penjualan panen milik petani.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        description: ID unik listing panen
+        required: true
+        schema:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+      responses:
+        '200':
+          description: Detail listing panen ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '404':
+          description: Listing panen tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+      - Penjualan Panen Petani
+      summary: Update Data Jual Panen
+      description: Memperbarui informasi listing panen (harga, bobot, tanggal siap
+        muat, foto sampel). Hanya dapat dilakukan saat status masih draft atau published.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        description: ID unik listing panen
+        required: true
+        schema:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateListingInput'
+      responses:
+        '200':
+          description: Data panen berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '409':
+          description: Listing sudah terkunci / disepakati dengan tengkulak
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+      - Penjualan Panen Petani
+      summary: Batalkan / Hapus Listing Panen (Soft Delete)
+      description: Membatalkan listing panen yang belum bertransaksi. Status listing
+        diubah menjadi 'cancelled' dan dicatat waktu penghapusannya.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        description: ID unik listing panen
+        required: true
+        schema:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+      responses:
+        '200':
+          description: Listing panen berhasil dibatalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    nullable: true
+                    example: null
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /farmer/listings/upload-media:
+    post:
+      tags:
+      - Penjualan Panen Petani
+      summary: Upload Berkas Media Sampel Panen (Foto / Video)
+      description: 'Mengunggah berkas media sampel panen ke Garage Object Storage
+        (S3 publik). Divalidasi ketat dengan inspeksi magic bytes biner, anti-polyglot,
+        dan pencegahan double extension. Foto maksimal 5 MB (JPG, PNG, WebP), Video
+        maksimal 25 MB (MP4, MOV, WebM).
+
+        '
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - media
+              properties:
+                media:
+                  type: string
+                  format: binary
+                  description: Berkas foto (JPG/PNG/WebP maks 5MB) atau video (MP4/MOV/WebM
+                    maks 25MB)
+      responses:
+        '201':
+          description: Berkas media berhasil diunggah dan diverifikasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/UploadMediaResponse'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Berkas tidak valid (magic bytes mismatch, melebihi batas ukuran,
+            atau terdeteksi skrip)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /farmer/orders:
+    get:
+      tags:
+      - Pesanan & Penjualan Petani
+      summary: Daftar Pesanan & Penjualan Petani
+      description: 'Mengambil daftar penawaran dan pesanan masuk dari tengkulak/pembeli
+        bisnis ke petani. Mendukung tab status (all, waiting_confirmation, scheduled_pickup,
+        completed, cancelled), pencarian kode/nama, filter tanggal bulan, pagination,
+        dan summary card penjualan.
+
+        '
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        description: Filter tab status pesanan
+        required: false
+        schema:
+          type: string
+          enum:
+          - all
+          - waiting_confirmation
+          - scheduled_pickup
+          - completed
+          - cancelled
+          default: all
+      - name: search
+        in: query
+        description: Pencarian berdasarkan kode transaksi, nama pembeli, atau komoditas
+        required: false
+        schema:
+          type: string
+      - name: month
+        in: query
+        description: Filter bulan transaksi (format YYYY-MM)
+        required: false
+        schema:
+          type: string
+          example: 2025-02
+      - name: page
+        in: query
+        description: Nomor halaman
+        required: false
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        description: Jumlah pesanan per halaman
+        required: false
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar pesanan petani berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/FarmerOrderSummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
+        '401':
+          description: Belum terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /farmer/orders/{id}/accept:
+    post:
+      tags:
+      - Pesanan & Penjualan Petani
+      summary: Terima Penawaran & Jadwalkan Penjemputan
+      description: Petani menerima penawaran dari tengkulak. Stok panen akan dialokasikan
+        dan status menjadi dijadwalkan dijemput.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID pesanan
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Penawaran berhasil diterima dan dijadwalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran berhasil disetujui dan jadwal penjemputan telah
+                      ditetapkan
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /farmer/orders/{id}/negotiate:
+    post:
+      tags:
+      - Pesanan & Penjualan Petani
+      summary: Negosiasi Harga Penawaran
+      description: Petani mengajukan harga counter dan catatan kepada pembeli/tengkulak.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID pesanan
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NegotiateOrderInput'
+      responses:
+        '200':
+          description: Tawaran negosiasi berhasil dikirimkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Negosiasi harga berhasil dikirimkan ke pembeli
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /farmer/orders/{id}/reject:
+    post:
+      tags:
+      - Pesanan & Penjualan Petani
+      summary: Tolak Penawaran Tengkulak
+      description: Petani menolak penawaran yang diajukan dengan memberikan alasan
+        penolakan.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID pesanan
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: Harga tidak sesuai dengan mutu gabah
+      responses:
+        '200':
+          description: Penawaran berhasil ditolak
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran berhasil ditolak
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /farmer/orders/{id}/confirm-ready:
+    post:
+      tags:
+      - Pesanan & Penjualan Petani
+      summary: Konfirmasi Siap Muat
+      description: Petani memberi notifikasi bahwa armada dapat langsung melakukan
+        penimbangan dan muat panen di lumbung/gudang.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID pesanan
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Status siap muat berhasil dikonfirmasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Kesiapan muat berhasil dikonfirmasi
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/dashboard:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Dashboard Beranda Tengkulak
+      description: Menampilkan ringkasan metrik 4 kartu, jadwal muat & timbang lapangan
+        armada, serta acuan harga pasar real-time penggilingan Demak.
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Data dashboard berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/MiddlemanDashboard'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/listings:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tengkulak - Cari Petani & Listing Panen
+      description: 'Katalog pencarian listing panen petani khusus untuk tengkulak
+        dan pembeli agribisnis. Mendukung filter komoditas, lokasi/radius PostGIS,
+        rentang harga, dan pagination.
+
+        '
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: commodity_id
+        in: query
+        schema:
+          type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 12
+      responses:
+        '200':
+          description: Daftar listing petani berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/orders:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Riwayat Pesanan & Transaksi Surat Pesanan (PO)
+      description: Mengambil seluruh riwayat transaksi PO dengan tab filter status
+        (all, waiting_confirmation, delivery_order, weighing, completed, cancelled),
+        pencarian kode/petani/komoditas, dan summary metrik 3 kartu.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - waiting_confirmation
+          - delivery_order
+          - weighing
+          - completed
+          - cancelled
+          default: all
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: period
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Riwayat transaksi tengkulak berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/MiddlemanOrdersSummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Buat Penawaran Pembelian Panen
+      description: Tengkulak mengajukan penawaran pembelian ke petani dengan spesifikasi
+        kuantitas (min. 500 kg), harga, dan estimasi armada logistik.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderOfferInput'
+      responses:
+        '201':
+          description: Penawaran berhasil diajukan ke petani
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran berhasil diajukan ke petani
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/orders/export:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Export Laporan Transaksi PO (Excel / CSV)
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Berkas laporan transaksi berformat CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+  /middleman/orders/{id}:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Detail Pesanan / Penawaran Tengkulak
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detail transaksi berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    put:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Edit Transaksi & Surat Pesanan (PO)
+      description: Memperbarui tonase timbang, harga tebas, estimasi jadwal timbang
+        sawah, armada, dan catatan khusus lapangan.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderPOInput'
+      responses:
+        '200':
+          description: Surat Pesanan PO berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Transaksi & Surat Pesanan (PO) berhasil diperbarui
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    delete:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Batalkan / Hapus Surat Pesanan (PO)
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Surat pesanan berhasil dibatalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Surat Pesanan (PO) berhasil dibatalkan
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/orders/{id}/logistics:
+    put:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Perbarui Jadwal & Armada Logistik
+      description: Memperbarui jadwal jemput, estimasi slot waktu kedatangan armada,
+        jenis kendaraan, dan identitas supir.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLogisticsInput'
+      responses:
+        '200':
+          description: Data logistik berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/orders/{id}/weighing-and-complete:
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Timbangan Digital & Pelunasan Transaksi
+      description: Menyelesaikan penimbangan digital hasil panen di lokasi, mencatat
+        bobot riil, mengunggah sertifikat timbang, dan menerbitkan pelunasan.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteWeighingInput'
+      responses:
+        '200':
+          description: Transaksi berhasil diselesaikan dan dilunasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penimbangan dan pelunasan transaksi berhasil diselesaikan
+                  data:
+                    $ref: '#/components/schemas/FarmerPurchaseOrder'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/offers:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Daftar Penawaran & Kesepakatan Harga
+      description: Menampilkan kartu penawaran harga tebas sawah dengan filter tab
+        (all, active, waiting_response, agreed, cancelled), komoditas, dan wilayah.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - active
+          - waiting_response
+          - agreed
+          - cancelled
+          default: all
+      - name: commodity
+        in: query
+        schema:
+          type: string
+      - name: region
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar penawaran berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanOfferItem'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/offers/{id}/counter:
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tawar Susulan ke Petani
+      description: Mengirimkan penawaran harga susulan ketika penawaran sebelumnya
+        masih menunggu respon atau dalam negosiasi.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CounterOfferInput'
+      responses:
+        '200':
+          description: Tawaran susulan berhasil diajukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Tawaran susulan berhasil diajukan ke petani
+                  data:
+                    $ref: '#/components/schemas/MiddlemanOfferItem'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/inventory:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Inventaris Stok Gudang
+      description: Menampilkan tabel inventaris stok gudang dan ringkasan 4 kartu
+        metrik kapasitas, nilai estimasi, dan peringatan stok.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: category
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - beras
+          - gabah
+          - palawija
+          default: all
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - aman
+          - menipis
+          - perlu_tindakan
+          default: all
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar stok gudang berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanInventory'
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/MiddlemanInventorySummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tambah Stok Masuk Gudang (Internal)
+      description: Mencatat penerimaan stok baru hasil tebas mandiri atau pasokan
+        mitra ke gudang internal.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryInput'
+      responses:
+        '201':
+          description: Stok berhasil ditambahkan ke inventaris
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Stok baru berhasil ditambahkan ke inventaris gudang
+                  data:
+                    $ref: '#/components/schemas/MiddlemanInventory'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/inventory/mutations:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Riwayat Keluar-Masuk Gudang (Mutasi Stok)
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Riwayat mutasi berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanInventoryMutation'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/inventory/{id}:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Detail Komoditas Stok Gudang
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detail stok berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/MiddlemanInventory'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+    delete:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Hapus Lot Stok Gudang
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Stok berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Stok inventaris berhasil dihapus
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Jual Stok Gudang
+      description: Menampilkan halaman penjualan stok komoditas gabah dan beras ke
+        rice mill / pedagang pasar dengan 4 kartu ringkasan.
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: tab
+        in: query
+        schema:
+          type: string
+          enum:
+          - all
+          - gabah_basah
+          - beras_premium
+          - palawija
+          default: all
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+      responses:
+        '200':
+          description: Daftar komoditas siap jual berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MiddlemanSalesListing'
+                  meta:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: '#/components/schemas/MiddlemanSalesSummary'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      trace:
+                        $ref: '#/components/schemas/Trace'
+    post:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Buka Penawaran Jual Baru (Ke Rice Mill / Grosir)
+      description: Membuka lelang/listing penjualan dari stok gudang yang tersedia
+        ke jaringan pembeli skala besar.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSaleListingInput'
+      responses:
+        '201':
+          description: Listing penjualan berhasil dipublikasikan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Penawaran jual komoditas ke pasar/rice mill berhasil
+                      dipublikasikan
+                  data:
+                    $ref: '#/components/schemas/MiddlemanSalesListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales/{id}:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Detail Listing Penjualan Stok
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detail listing penjualan berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/MiddlemanSalesListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales/{id}/close:
+    put:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Tutup / Arsipkan Listing Penjualan Stok
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Listing penjualan berhasil ditutup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Listing penjualan berhasil ditutup
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /middleman/sales/{id}/bids:
+    get:
+      tags:
+      - Tengkulak & Pembeli Bisnis
+      summary: Penawaran Pembeli Masuk ke Listing Jual Stok
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Daftar penawaran masuk dari pembeli grosir berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        buyer_name:
+                          type: string
+                          example: Penggilingan Padi Sri Makmur
+                        offered_price_per_kg:
+                          type: number
+                          example: 7200
+                        requested_tons:
+                          type: number
+                          example: 10.0
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /marketplace/listings:
+    get:
+      tags:
+      - Marketplace Hasil Panen
+      summary: Katalog Publik Hasil Panen Petani
+      description: Endpoint publik untuk menjelajahi seluruh hasil panen petani terverifikasi
+        yang siap dibeli.
+      parameters:
+      - name: commodity_id
+        in: query
+        schema:
+          type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 12
+      responses:
+        '200':
+          description: Daftar hasil panen berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+  /marketplace/listings/{id}:
+    get:
+      tags:
+      - Marketplace Hasil Panen
+      summary: Detail Publik Hasil Panen Petani
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detail hasil panen berhasil dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/FarmerListing'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Masukkan token JWT yang diperoleh dari endpoint /auth/login
+  schemas:
+    Commodity:
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - unit
+      - base_price
+      - current_market_price
+      properties:
+        id:
+          type: string
+          example: cabai-merah
+        name:
+          type: string
+          example: Cabai Merah Keriting
+        category:
+          type: string
+          example: Hortikultura
+        unit:
+          type: string
+          example: kg
+        base_price:
+          type: number
+          format: float
+          example: 40000
+        current_market_price:
+          type: number
+          format: float
+          example: 45000
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SP2KPCommodityPrice:
+      type: object
+      required:
+      - variant_id
+      - variant_nama
+      - satuan_display
+      - tanggal
+      - harga
+      properties:
+        variant_id:
+          type: integer
+          example: 2
+        variant_nama:
+          type: string
+          example: Cabai Merah Keriting
+        satuan_display:
+          type: string
+          example: kg
+        tanggal:
+          type: string
+          example: '2026-11-20'
+        harga:
+          type: number
+          example: 48667
+        tanggal_pembanding:
+          type: string
+          example: '2026-11-19'
+        harga_pembanding:
+          type: number
+          example: 48667
+        delta_harga:
+          type: number
+          example: 0
+        persen_perubahan:
+          type: number
+          example: 0
+        status_perubahan:
+          type: string
+          example: Tidak Berubah
+        is_regional:
+          type: boolean
+          example: false
+        region:
+          type: array
+          items:
+            $ref: '#/components/schemas/SP2KPRegionPrice'
+    SP2KPRegionPrice:
+      type: object
+      properties:
+        region:
+          type: string
+          example: Region A
+        satuan_display:
+          type: string
+          example: kg
+        harga:
+          type: number
+          example: 14082
+        harga_pembanding:
+          type: number
+          example: 14087
+        persen_perubahan:
+          type: number
+          example: -0.035
+        status_perubahan:
+          type: string
+          example: Turun
+    DashboardCommodityPrice:
+      type: object
+      required:
+      - commodity_id
+      - commodity_name
+      - unit
+      - average_price
+      - yesterday_price
+      - delta_price
+      - percentage_change
+      - trend
+      - trend_label
+      - last_updated_at
+      - source
+      properties:
+        commodity_id:
+          type: string
+          example: '52'
+        commodity_name:
+          type: string
+          example: Beras Medium
+        unit:
+          type: string
+          example: kg
+        average_price:
+          type: number
+          example: 7200
+        yesterday_price:
+          type: number
+          example: 7050
+        delta_price:
+          type: number
+          example: 150
+        percentage_change:
+          type: number
+          example: 2.13
+        trend:
+          type: string
+          enum:
+          - UP
+          - DOWN
+          - STABLE
+          example: UP
+        trend_label:
+          type: string
+          example: +Rp 150
+        last_updated_at:
+          type: string
+          format: date-time
+          example: '2026-11-21T07:30:00Z'
+        source:
+          type: string
+          example: tandur_real_market
+    PriceGuide:
+      type: object
+      required:
+      - commodity_name
+      - benchmark_price
+      - allowed_min_price
+      - allowed_max_price
+      - margin_percentage
+      - unit
+      - message
+      properties:
+        commodity_name:
+          type: string
+          example: Gabah Kering Panen
+        benchmark_price:
+          type: number
+          example: 7200
+        allowed_min_price:
+          type: number
+          example: 6120
+        allowed_max_price:
+          type: number
+          example: 8280
+        margin_percentage:
+          type: number
+          example: 15.0
+        unit:
+          type: string
+          example: kg
+        source:
+          type: string
+          example: tandur_real_market
+        message:
+          type: string
+          example: "Harga jual disarankan antara Rp 6.120 s/d Rp 8.280 per kg (toleransi\
+            \ \xB115% dari harga pasar)"
+    ErrorResponse:
+      type: object
+      required:
+      - status
+      - error
+      - meta
+      properties:
+        status:
+          type: string
+          example: error
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+        meta:
+          $ref: '#/components/schemas/ErrorMeta'
+    ErrorDetail:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          example: INVALID_CREDENTIALS
+          description: Kode error unik huruf kapital standar
+        message:
+          type: string
+          example: Nomor HP/NIK atau password salah
+          description: Deskripsi pesan error
+    ErrorMeta:
+      type: object
+      required:
+      - trace
+      properties:
+        trace:
+          $ref: '#/components/schemas/TraceMeta'
+    Meta:
+      type: object
+      required:
+      - trace
+      properties:
+        trace:
+          $ref: '#/components/schemas/TraceMeta'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+    TraceMeta:
+      type: object
+      required:
+      - request_id
+      - trace_id
+      - timestamp
+      properties:
+        request_id:
+          type: string
+          example: req_8f92a3b4-1c2d-4e5f-9a8b-7c6d5e4f3a2b
+        correlation_id:
+          type: string
+          example: corr_11223344-5566-7788-99aa-bbccddeeff00
+        trace_id:
+          type: string
+          example: 4bf92f3577b34da6a3ce929d0e0e4736
+        span_id:
+          type: string
+          example: 00f067aa0ba902b7
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-11-21T02:31:00.123Z'
+        api_version:
+          type: string
+          example: v1.0.0
+        processing_time_ms:
+          type: integer
+          example: 42
+        service_node:
+          type: string
+          example: tandur-api-dev
+    PaginationMeta:
+      type: object
+      required:
+      - page
+      - per_page
+      - total_items
+      - total_pages
+      - has_next
+      - has_prev
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 478
+        total_pages:
+          type: integer
+          example: 24
+        has_next:
+          type: boolean
+          example: true
+        has_prev:
+          type: boolean
+          example: false
+    Inventory:
+      type: object
+      required:
+      - id
+      - commodity_id
+      - owner_id
+      - quantity
+      - unit
+      - quality_grade
+      - location_name
+      - latitude
+      - longitude
+      - harvest_date
+      properties:
+        id:
+          type: string
+          example: inv-001
+        commodity_id:
+          type: string
+          example: cabai-merah
+        owner_id:
+          type: string
+          example: usr-petani-001
+        quantity:
+          type: number
+          format: float
+          example: 500
+        unit:
+          type: string
+          example: kg
+        quality_grade:
+          type: string
+          enum:
+          - GRADE_A
+          - GRADE_B
+          - GRADE_C
+          example: GRADE_A
+        location_name:
+          type: string
+          example: Cikajang, Garut
+        latitude:
+          type: number
+          format: float
+          example: -7.3486
+        longitude:
+          type: number
+          format: float
+          example: 107.8184
+        harvest_date:
+          type: string
+          format: date
+          example: '2026-11-14'
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        nik:
+          type: string
+          nullable: true
+          maxLength: 16
+          example: '3201010101010099'
+        name:
+          type: string
+          maxLength: 150
+          example: Pak Slamet Petani
+        phone:
+          type: string
+          maxLength: 13
+          example: 081399998888
+        role:
+          type: string
+          enum:
+          - farmer
+          - middleman
+          - buyer
+          example: farmer
+        is_bisnis:
+          type: boolean
+          default: false
+          example: false
+        is_active:
+          type: boolean
+          default: true
+          example: true
+        is_verified:
+          type: boolean
+          default: false
+          example: true
+        verification_status:
+          type: string
+          enum:
+          - unverified
+          - pending
+          - verified
+          - rejected
+          example: verified
+        can_sell_harvest:
+          type: boolean
+          example: true
+        avatar_url:
+          type: string
+          nullable: true
+          example: https://storage.tandur.com/avatars/user-avatar.jpg
+        ktp_photo_url:
+          type: string
+          nullable: true
+          example: https://storage.tandur.com/ktp/3321041405760002.jpg
+        birth_place:
+          type: string
+          nullable: true
+          example: Demak
+        birth_date:
+          type: string
+          nullable: true
+          example: '1978-05-14'
+        ktp_address:
+          type: string
+          nullable: true
+          example: RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten
+            Demak, Jawa Tengah 59566
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-11-21T07:30:00Z'
+        rejection_reason:
+          type: string
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-11-19T18:10:18Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2026-11-19T18:10:18Z'
+        location:
+          $ref: '#/components/schemas/UserLocation'
+    UserLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 562e7d5c-d1af-42d6-b64d-858c49e28b8d
+        user_id:
+          type: string
+          format: uuid
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        label:
+          type: string
+          example: Kebun Cabai Utama
+        address:
+          type: string
+          example: Jl. Raya Pertanian No. 12
+        village:
+          type: string
+          example: Cikanyere
+        district:
+          type: string
+          example: Sukaresmi
+        city:
+          type: string
+          example: Kabupaten Cianjur
+        province:
+          type: string
+          example: Jawa Barat
+        latitude:
+          type: number
+          format: double
+          example: -6.7456
+        longitude:
+          type: number
+          format: double
+          example: 107.0872
+        is_primary:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RegisterRequest:
+      type: object
+      required:
+      - name
+      - phone
+      - password
+      - role
+      properties:
+        nik:
+          type: string
+          maxLength: 16
+          example: '3201010101010099'
+        name:
+          type: string
+          maxLength: 150
+          example: Pak Slamet Petani
+        phone:
+          type: string
+          maxLength: 13
+          example: 081399998888
+        password:
+          type: string
+          minLength: 6
+          format: password
+          example: secretPassword123
+        role:
+          type: string
+          enum:
+          - farmer
+          - middleman
+          - buyer
+          example: farmer
+        is_bisnis:
+          type: boolean
+          default: false
+          example: false
+        location:
+          type: object
+          required:
+          - address
+          - latitude
+          - longitude
+          properties:
+            label:
+              type: string
+              example: Kebun Cabai Utama
+            address:
+              type: string
+              example: Jl. Raya Pertanian No. 12
+            village:
+              type: string
+              example: Cikanyere
+            district:
+              type: string
+              example: Sukaresmi
+            city:
+              type: string
+              example: Kabupaten Cianjur
+            province:
+              type: string
+              example: Jawa Barat
+            latitude:
+              type: number
+              format: double
+              example: -6.7456
+            longitude:
+              type: number
+              format: double
+              example: 107.0872
+    LoginRequest:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+          description: Nomor Handphone (10-13 digit) atau NIK (16 digit angka)
+          example: 081399998888
+        password:
+          type: string
+          format: password
+          description: Password akun pengguna
+          example: secretPassword123
+    LoginResponseData:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JSON Web Token (JWT) untuk autentikasi sesi
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        token_type:
+          type: string
+          example: Bearer
+        expires_at:
+          type: string
+          format: date-time
+          example: '2026-11-23T15:30:00Z'
+        user:
+          $ref: '#/components/schemas/User'
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+          description: Nama lengkap pengguna
+          example: Pak Slamet Petani Makmur
+        phone:
+          type: string
+          maxLength: 13
+          description: Nomor Handphone 10-13 digit
+          example: 081399998888
+        avatar_url:
+          type: string
+          description: URL tautan foto profil baru
+          example: https://storage.tandur.com/avatars/new-profile.jpg
+        is_bisnis:
+          type: boolean
+          description: Status akun bisnis/perorangan
+          example: false
+        label:
+          type: string
+          description: Label penamaan lokasi (cth. Kebun Utama, Rumah, Gudang)
+          example: Rumah Utama
+        address:
+          type: string
+          description: Alamat lengkap lokasi pengguna
+          example: Jl. Pertanian Modern No. 5
+        village:
+          type: string
+          example: Cikanyere
+        district:
+          type: string
+          example: Sukaresmi
+        city:
+          type: string
+          example: Kabupaten Cianjur
+        province:
+          type: string
+          example: Jawa Barat
+        latitude:
+          type: number
+          format: double
+          example: -6.7456
+        longitude:
+          type: number
+          format: double
+          example: 107.0872
+    FarmerVerificationInput:
+      type: object
+      required:
+      - nik
+      - name
+      - ktp_address
+      - ktp_photo_url
+      - declaration_accepted
+      properties:
+        nik:
+          type: string
+          pattern: ^[0-9]{16}$
+          example: '3321041405760002'
+        name:
+          type: string
+          example: SUGENG RIYADI
+        birth_place:
+          type: string
+          example: Demak
+        birth_date:
+          type: string
+          example: '1978-05-14'
+        ktp_address:
+          type: string
+          example: RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten
+            Demak, Jawa Tengah 59566
+        ktp_photo_url:
+          type: string
+          example: https://storage.tandur.com/ktp/3321041405760002.jpg
+        declaration_accepted:
+          type: boolean
+          example: true
+    FarmerVerificationResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        nik:
+          type: string
+          example: '3321041405760002'
+        name:
+          type: string
+          example: SUGENG RIYADI
+        verification_status:
+          type: string
+          enum:
+          - unverified
+          - pending
+          - verified
+          - rejected
+          example: verified
+        is_verified:
+          type: boolean
+          example: true
+        can_sell_harvest:
+          type: boolean
+          example: true
+        avatar_url:
+          type: string
+          nullable: true
+          example: https://storage.tandur.com/avatars/user-avatar.jpg
+        ktp_photo_url:
+          type: string
+          example: https://storage.tandur.com/ktp/3321041405760002.jpg
+        birth_place:
+          type: string
+          example: Demak
+        birth_date:
+          type: string
+          example: '1978-05-14'
+        ktp_address:
+          type: string
+          example: RT 03 / RW 02, Desa Karangawen, Kecamatan Karangawen, Kabupaten
+            Demak, Jawa Tengah 59566
+        verified_at:
+          type: string
+          format: date-time
+          example: '2026-11-21T07:30:00Z'
+        message:
+          type: string
+          example: Dokumen e-KTP berhasil diverifikasi. Kemitraan resmi aktif dan
+            Anda dapat mulai menjual hasil panen.
+    FarmerListing:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+        farmer_id:
+          type: string
+          format: uuid
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        commodity_id:
+          type: string
+          example: gabah-kering-panen
+        commodity_name:
+          type: string
+          example: Gabah GKP
+        category:
+          type: string
+          example: Gabah GKP
+        title:
+          type: string
+          example: Gabah GKP Super Siap Panen Kualitas Prima
+        description:
+          type: string
+          example: Varietas Inpari 32 (Standar Bulir Sedang). Dipanen memakai mesin
+            Combine Harvester, bersih tanpa jerami dan batu.
+        estimated_quantity:
+          type: number
+          example: 8500
+        available_quantity:
+          type: number
+          example: 8500
+        min_order_quantity:
+          type: number
+          example: 500
+        unit:
+          type: string
+          example: kg
+        price_per_unit:
+          type: number
+          example: 7300
+        estimated_gross_revenue:
+          type: number
+          example: 62050000
+        ready_date:
+          type: string
+          example: '2025-02-07'
+        estimated_harvest_date:
+          type: string
+          example: '2025-02-07'
+        pickup_address:
+          type: string
+          example: Sukamaju, Ngawi
+        media_urls:
+          type: array
+          items:
+            type: string
+          example:
+          - http://localhost:3900/tandur/listings/user1/sample1.jpg
+          - http://localhost:3900/tandur/listings/user1/video1.mp4
+        status:
+          type: string
+          example: published
+        latitude:
+          type: number
+          example: -7.4045
+        longitude:
+          type: number
+          example: 111.4452
+        created_at:
+          type: string
+          example: '2026-11-21T07:30:00Z'
+    CreateListingInput:
+      type: object
+      required:
+      - commodity_id
+      - title
+      - estimated_quantity
+      - price_per_unit
+      - media_urls
+      properties:
+        commodity_id:
+          type: string
+          example: gabah-kering-panen
+        commodity_name:
+          type: string
+          example: Gabah GKP
+        category:
+          type: string
+          example: Gabah GKP
+        title:
+          type: string
+          example: Gabah GKP Super Siap Panen Kualitas Prima
+        description:
+          type: string
+          example: Varietas Inpari 32. Dipanen memakai mesin Combine Harvester, bersih
+            tanpa jerami dan batu.
+        estimated_quantity:
+          type: number
+          description: Estimasi bobot (minimal 500 kg)
+          example: 8500
+        min_order_quantity:
+          type: number
+          default: 500
+          example: 500
+        unit:
+          type: string
+          default: kg
+          example: kg
+        price_per_unit:
+          type: number
+          description: Harga harapan petani per kilogram
+          example: 7300
+        ready_date:
+          type: string
+          description: Tanggal siap timbang dan muat (YYYY-MM-DD)
+          example: '2025-02-07'
+        estimated_harvest_date:
+          type: string
+          example: '2025-02-07'
+        pickup_address:
+          type: string
+          description: Titik muat atau lokasi gudang tani
+          example: Sukamaju, Ngawi
+        media_urls:
+          type: array
+          description: Berkas media (minimal 1 foto, maksimal 1 video, total maksimal
+            5 berkas)
+          items:
+            type: string
+          example:
+          - http://localhost:3900/tandur/listings/user1/sampel_gabah_bkkk.jpg
+        latitude:
+          type: number
+          example: -7.4045
+        longitude:
+          type: number
+          example: 111.4452
+    UpdateListingInput:
+      type: object
+      properties:
+        commodity_id:
+          type: string
+          example: gabah-kering-panen
+        commodity_name:
+          type: string
+          example: Gabah GKP
+        category:
+          type: string
+          example: Gabah GKP
+        title:
+          type: string
+          example: Gabah GKP Super Siap Panen Update
+        description:
+          type: string
+          example: Varietas Inpari 32 kadar air 21% bersih
+        estimated_quantity:
+          type: number
+          example: 9000
+        min_order_quantity:
+          type: number
+          example: 500
+        price_per_unit:
+          type: number
+          example: 7350
+        ready_date:
+          type: string
+          example: '2025-02-08'
+        pickup_address:
+          type: string
+          example: Sukamaju, Ngawi
+        media_urls:
+          type: array
+          items:
+            type: string
+        latitude:
+          type: number
+          example: -7.4045
+        longitude:
+          type: number
+          example: 111.4452
+    UploadMediaResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          example: http://localhost:3900/tandur/listings/user1/uuid.jpg
+        key:
+          type: string
+          example: listings/user1/uuid.jpg
+        media_type:
+          type: string
+          enum:
+          - photo
+          - video
+          example: photo
+        mime_type:
+          type: string
+          example: image/jpeg
+        size_bytes:
+          type: integer
+          example: 1450000
+    FarmerPurchaseOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 9e81b672-0e24-419b-a320-b6f790c68123
+        order_code:
+          type: string
+          example: '#TND-ORD-2025-0894'
+        listing_id:
+          type: string
+          example: d4c69c62-8844-4da0-84af-4a62f2b47ec4
+        farmer_id:
+          type: string
+          example: e445499d-4f26-424c-9e70-10ffcc8b2a35
+        middleman_id:
+          type: string
+          example: c77b819a-9e33-4f9e-a890-7bf12f7b3011
+        status:
+          type: string
+          enum:
+          - waiting_confirmation
+          - in_negotiation
+          - scheduled_pickup
+          - completed
+          - cancelled
+          example: waiting_confirmation
+        status_label:
+          type: string
+          example: Menunggu Persetujuan Anda
+        commodity_id:
+          type: string
+          example: jagung-pipil-kering
+        commodity_name:
+          type: string
+          example: Jagung Pipil Kering Hibrida
+        category:
+          type: string
+          example: Jagung Pipil Kering Hibrida
+        listing_title:
+          type: string
+          example: Jagung Pipil Kering Standar Pakan Ternak
+        unit:
+          type: string
+          example: kg
+        buyer_name:
+          type: string
+          example: PT Sentosa Pakan Ternak Jatim
+        buyer_type:
+          type: string
+          example: Pembeli Kontrak Skala Menengah
+        buyer_city:
+          type: string
+          example: Sidoarjo
+        buyer_rating:
+          type: number
+          example: 4.9
+        offered_quantity:
+          type: number
+          example: 5000
+        offered_price:
+          type: number
+          example: 5750
+        total_offered_price:
+          type: number
+          example: 28750000
+        agreed_price:
+          type: number
+          example: 5750
+        total_price:
+          type: number
+          example: 28750000
+        benchmark_price:
+          type: number
+          example: 5600
+        margin_amount:
+          type: number
+          example: 750000
+        margin_percentage:
+          type: number
+          example: 2.68
+        margin_note:
+          type: string
+          example: Harga Ditawarkan Rp 150/kg Di Atas Rata-rata Pasar
+        pickup_date:
+          type: string
+          example: '2025-02-13'
+        pickup_time_slot:
+          type: string
+          example: 09.00 - 11.00 WIB
+        vehicle_type:
+          type: string
+          example: Truk Isuzu Elf
+        vehicle_plate:
+          type: string
+          example: AD 8291 QA
+        driver_name:
+          type: string
+          example: Pak Suparno
+        is_ready_for_pickup:
+          type: boolean
+          example: true
+    FarmerOrderSummary:
+      type: object
+      properties:
+        total_sales_this_month:
+          type: number
+          example: 188000000
+        partner_rating:
+          type: number
+          example: 4.9
+        all_count:
+          type: integer
+          example: 18
+        waiting_confirmation_count:
+          type: integer
+          example: 2
+        scheduled_pickup_count:
+          type: integer
+          example: 3
+        completed_paid_count:
+          type: integer
+          example: 9
+        cancelled_count:
+          type: integer
+          example: 4
+    CreateOrderOfferInput:
+      type: object
+      required:
+      - listing_id
+      - offered_quantity
+      - offered_price
+      properties:
+        listing_id:
+          type: string
+          example: d4c69c62-8844-4da0-84af-4a62f2b47ec4
+        offered_quantity:
+          type: number
+          description: Kuantitas yang diajukan (minimal 500 kg)
+          example: 5000
+        offered_price:
+          type: number
+          description: Harga tawaran per kg
+          example: 5750
+        notes:
+          type: string
+          example: Pengambilan siap dilakukan dengan armada sendiri
+        pickup_date:
+          type: string
+          example: '2025-02-13'
+        pickup_time_slot:
+          type: string
+          example: 09.00 - 11.00 WIB
+        vehicle_type:
+          type: string
+          example: Truk Isuzu Elf
+        vehicle_plate:
+          type: string
+          example: AD 8291 QA
+        driver_name:
+          type: string
+          example: Pak Suparno
+        driver_phone:
+          type: string
+          example: 081234567899
+    NegotiateOrderInput:
+      type: object
+      required:
+      - counter_price
+      properties:
+        counter_price:
+          type: number
+          example: 6000
+        counter_quantity:
+          type: number
+          example: 5000
+        counter_notes:
+          type: string
+          example: Bisa dinaikkan sedikit ke Rp 6.000 mengingat kualitas kadar air
+            sangat rendah.
+    UpdateLogisticsInput:
+      type: object
+      properties:
+        pickup_date:
+          type: string
+          example: '2025-02-13'
+        pickup_time_slot:
+          type: string
+          example: 09.00 - 11.00 WIB
+        vehicle_type:
+          type: string
+          example: Truk Isuzu Elf
+        vehicle_plate:
+          type: string
+          example: AD 8291 QA
+        driver_name:
+          type: string
+          example: Pak Suparno
+        driver_phone:
+          type: string
+          example: 081234567899
+    CompleteWeighingInput:
+      type: object
+      required:
+      - actual_weight
+      - final_price_per_unit
+      properties:
+        actual_weight:
+          type: number
+          description: Hasil timbangan digital di lokasi (kg)
+          example: 12040
+        final_price_per_unit:
+          type: number
+          example: 8100
+        weighing_certificate_url:
+          type: string
+          example: http://localhost:3900/tandur/certificates/cert_123.pdf
+        invoice_url:
+          type: string
+          example: http://localhost:3900/tandur/invoices/inv_123.pdf
+    MiddlemanDashboard:
+      type: object
+      properties:
+        greeting:
+          type: string
+          example: Selamat Pagi, Haji Supardi
+        role_label:
+          type: string
+          example: Mitra Pengumpul Demak
+        work_area:
+          type: string
+          example: Karangawen, Demak
+        total_transactions:
+          type: object
+          properties:
+            value:
+              type: string
+              example: 3 Kontrak
+            description:
+              type: string
+              example: 2 Siap Timbang, 1 Menuju Gudang
+        used_capacity:
+          type: object
+          properties:
+            total_tons:
+              type: number
+              example: 55.5
+            warehouse_tons:
+              type: number
+              example: 38.2
+            otw_tons:
+              type: number
+              example: 17.3
+            description:
+              type: string
+              example: 38,2 Ton di Gudang, 17,3 Ton OTW
+        scheduled_truck:
+          type: object
+          properties:
+            next_schedule:
+              type: string
+              example: Besok, 08:30
+            commodity_detail:
+              type: string
+              example: 'Kedatangan: 7,5 Ton GKP'
+        partner_farmers:
+          type: object
+          properties:
+            total_count:
+              type: integer
+              example: 14
+            description:
+              type: string
+              example: Wilayah Kab. Demak & Kudus
+        scheduled_pickups:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              order_code:
+                type: string
+                example: '#PO-TND-2025-0112'
+              vehicle:
+                type: string
+                example: Truk Isuzu Elf (#01)
+              driver_name:
+                type: string
+                example: Budi (Driver Timbang)
+              commodity_name:
+                type: string
+                example: Jagung Hibrida
+              quantity_tons:
+                type: number
+                example: 5.0
+              status_label:
+                type: string
+                example: Armada Menuju Lokasi
+              scheduled_time:
+                type: string
+                example: Besok, 08:30 WIB
+              pickup_address:
+                type: string
+                example: Desa Karangawen, Demak
+        benchmark_prices:
+          type: array
+          items:
+            type: object
+            properties:
+              commodity_name:
+                type: string
+                example: GKP Ciherang
+              price_per_kg:
+                type: number
+                example: 6800
+              change_amount:
+                type: number
+                example: 150
+              trend:
+                type: string
+                example: up
+    MiddlemanOrdersSummary:
+      type: object
+      properties:
+        total_active_contracts_amount:
+          type: number
+          example: 151850000
+        total_volume_in_delivery_tons:
+          type: number
+          example: 55.0
+        nearest_weighing_schedule:
+          type: string
+          example: Besok 08:30 (Karangawen)
+    MiddlemanOfferItem:
+      type: object
+      properties:
+        id:
+          type: string
+        offer_code:
+          type: string
+          example: '#OFF-TND-011'
+        farmer_name:
+          type: string
+          example: Gapoktan Sumber Makmur
+        location:
+          type: string
+          example: Demak Karangawen
+        commodity_name:
+          type: string
+          example: GKP Ciherang
+        quantity_tons:
+          type: number
+          example: 10.0
+        offered_price:
+          type: number
+          example: 6750
+        farmer_asking_price:
+          type: number
+          example: 6800
+        total_amount:
+          type: number
+          example: 67500000
+        status_label:
+          type: string
+          example: Aktif Berjalan
+        can_counter:
+          type: boolean
+          example: true
+    MiddlemanInventory:
+      type: object
+      properties:
+        id:
+          type: string
+        lot_code:
+          type: string
+          example: LOT-DEM-2025-0142
+        commodity_name:
+          type: string
+          example: Gabah Kering Panen (GKP)
+        category:
+          type: string
+          example: gabah
+        variety:
+          type: string
+          example: Ciherang Super
+        warehouse_name:
+          type: string
+          example: Gudang A - Demak
+        total_weight_tons:
+          type: number
+          example: 18.5
+        average_buy_price:
+          type: number
+          example: 6800
+        current_market_price:
+          type: number
+          example: 7250
+        margin_per_unit:
+          type: number
+          example: 450
+        status:
+          type: string
+          example: aman
+    MiddlemanInventorySummary:
+      type: object
+      properties:
+        total_stock_tons:
+          type: number
+          example: 38.2
+        warehouse_capacity_tons:
+          type: number
+          example: 50.0
+        capacity_percentage:
+          type: number
+          example: 76.4
+        estimated_stock_value:
+          type: number
+          example: 312450000
+        available_capacity_tons:
+          type: number
+          example: 11.8
+        stock_warnings_count:
+          type: integer
+          example: 2
+    CreateInventoryInput:
+      type: object
+      required:
+      - commodity_name
+      - buy_price_per_kg
+      properties:
+        commodity_id:
+          type: string
+        commodity_name:
+          type: string
+          example: Gabah Kering Giling (GKG)
+        category:
+          type: string
+          example: gabah
+        variety:
+          type: string
+          example: Ciherang Super
+        source_gapoktan:
+          type: string
+          example: Gapoktan Sumber Makmur - Demak
+        warehouse_name:
+          type: string
+          example: Gudang Karangawen
+        weight_tons:
+          type: number
+          example: 10.0
+        buy_price_per_kg:
+          type: number
+          example: 7800
+        market_price_per_kg:
+          type: number
+          example: 8300
+        moisture_content:
+          type: number
+          example: 13.5
+        notes:
+          type: string
+          example: Penerimaan hasil panen kelompok tani
+    MiddlemanInventoryMutation:
+      type: object
+      properties:
+        id:
+          type: string
+        lot_code:
+          type: string
+          example: LOT-Dem-0417
+        mutation_type:
+          type: string
+          example: in
+        commodity_name:
+          type: string
+          example: Gabah GKG
+        quantity_tons:
+          type: number
+          example: 10.0
+        partner_name:
+          type: string
+          example: Gapoktan Sumber Makmur
+    MiddlemanSalesSummary:
+      type: object
+      properties:
+        ready_to_sell_tons:
+          type: number
+          example: 28.0
+        active_listings_count:
+          type: integer
+          example: 4
+        incoming_bids_count:
+          type: integer
+          example: 6
+        average_sell_margin:
+          type: string
+          example: +Rp 450 / kg
+    MiddlemanSalesListing:
+      type: object
+      properties:
+        id:
+          type: string
+        inventory_id:
+          type: string
+        lot_code:
+          type: string
+          example: 'LOT: GKP-DEM-0142'
+        commodity_name:
+          type: string
+          example: Gabah Kering Panen (GKP)
+        variety:
+          type: string
+          example: Ciherang
+        offered_tons:
+          type: number
+          example: 10.0
+        cost_price_per_kg:
+          type: number
+          example: 6800
+        selling_price_per_kg:
+          type: number
+          example: 7250
+        total_selling_value:
+          type: number
+          example: 72500000
+        target_margin_per_kg:
+          type: number
+          example: 450
+        delivery_option:
+          type: string
+          example: warehouse_pickup
+        status:
+          type: string
+          example: active
+    CreateSaleListingInput:
+      type: object
+      required:
+      - inventory_id
+      - offered_tons
+      - selling_price_per_kg
+      properties:
+        inventory_id:
+          type: string
+        offered_tons:
+          type: number
+          example: 10.0
+        min_order_tons:
+          type: number
+          example: 2.0
+        selling_price_per_kg:
+          type: number
+          example: 7250
+        delivery_option:
+          type: string
+          example: warehouse_pickup
+        target_markets:
+          type: array
+          items:
+            type: string
+          example:
+          - rice_mill
+          - wholesaler
+        validity_days:
+          type: integer
+          example: 3
+    UpdateOrderPOInput:
+      type: object
+      properties:
+        offered_quantity:
+          type: number
+          example: 5000
+        offered_price:
+          type: number
+          example: 6800
+        pickup_date:
+          type: string
+          example: '2025-05-15'
+        pickup_time_slot:
+          type: string
+          example: 08:30 WIB
+        vehicle_type:
+          type: string
+          example: Truk Engkel (4 Roda)
+        notes:
+          type: string
+          example: Pastikan karung 50 kg cukup dan timbangan digital sudah dikalibrasi.
+    CounterOfferInput:
+      type: object
+      required:
+      - counter_price
+      properties:
+        counter_price:
+          type: number
+          example: 6850
+        counter_notes:
+          type: string
+          example: Penawaran harga susulan disesuaikan dengan mutu gabah super.
