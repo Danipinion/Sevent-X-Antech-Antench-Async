@@ -58,13 +58,23 @@ func SetupRoutes(app *fiber.App, handler *Handler) {
 	app.Get("/openapi.json", docsHandler.OpenAPISpecJSON)
 	app.Get("/openapi.yaml", docsHandler.OpenAPISpecYAML)
 
+	// Storage Root Routing
+	app.Get("/tandur/*", handler.ServeStorage)
+	app.Head("/tandur/*", handler.ServeStorage)
+	app.Get("/storage/*", handler.ServeStorage)
+	app.Head("/storage/*", handler.ServeStorage)
+
 	// API v1 Routing
 	v1 := app.Group("/api/v1")
 	v1.Get("/health", handler.HealthCheck)
 	v1.Get("/swagger", docsHandler.SwaggerUI)
 	v1.Get("/docs", docsHandler.SwaggerUI)
 	v1.Get("/storage/:bucket/*", handler.ServeStorage)
+	v1.Head("/storage/:bucket/*", handler.ServeStorage)
 	v1.Get("/storage/*", handler.ServeStorage)
+	v1.Head("/storage/*", handler.ServeStorage)
+	v1.Get("/tandur/*", handler.ServeStorage)
+	v1.Head("/tandur/*", handler.ServeStorage)
 	v1.Get("/commodities", handler.ListCommodities)
 	v1.Get("/commodities/realtime-prices", handler.GetRealtimeDashboardPrices)
 	v1.Get("/commodities/price-guide", handler.GetPriceGuide)

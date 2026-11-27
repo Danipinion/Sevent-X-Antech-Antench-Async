@@ -546,23 +546,56 @@ func (h *Handler) ServeStorage(c fiber.Ctx) error {
 	}
 
 	cleanKey := filepath.Clean(key)
+	trimmedKey := strings.TrimPrefix(strings.TrimPrefix(cleanKey, "/"), bucket+"/")
 	storageDir := "uploads/garage"
 
 	// Cek berkas langsung berdasarkan path relatif key
 	filePath := filepath.Join(storageDir, cleanKey)
 	data, err := os.ReadFile(filePath)
+	if err != nil && trimmedKey != cleanKey {
+		filePath = filepath.Join(storageDir, trimmedKey)
+		data, err = os.ReadFile(filePath)
+	}
 	if err != nil {
 		// Coba path alternatif jika key menyertakan nama bucket
 		altPath := filepath.Join(storageDir, bucket, cleanKey)
 		data, err = os.ReadFile(altPath)
+		if err != nil && trimmedKey != cleanKey {
+			altPath = filepath.Join(storageDir, bucket, trimmedKey)
+			data, err = os.ReadFile(altPath)
+		}
 	}
 	if err != nil {
 		return RespondError(c, fiber.StatusNotFound, "NOT_FOUND", "Berkas tidak ditemukan di storage Garage")
 	}
 
+	contentType := http.DetectContentType(data)
+	if strings.HasPrefix(contentType, "text/plain") || contentType == "application/octet-stream" {
+		ext := strings.ToLower(filepath.Ext(cleanKey))
+		switch ext {
+		case ".jpg", ".jpeg":
+			contentType = "image/jpeg"
+		case ".png":
+			contentType = "image/png"
+		case ".webp":
+			contentType = "image/webp"
+		case ".svg":
+			contentType = "image/svg+xml"
+		case ".gif":
+			contentType = "image/gif"
+		case ".mp4":
+			contentType = "video/mp4"
+		}
+	}
+
 	c.Set("Access-Control-Allow-Origin", "*")
 	c.Set("Cache-Control", "public, max-age=86400")
-	c.Set("Content-Type", http.DetectContentType(data))
+	c.Set("Content-Type", contentType)
+
+	if c.Method() == fiber.MethodHead {
+		return c.SendStatus(fiber.StatusOK)
+	}
+
 	return c.Send(data)
 }
 
