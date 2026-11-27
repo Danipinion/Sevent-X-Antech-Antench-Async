@@ -48,6 +48,6 @@ export const middlemanMenu: MenuItem[] = [
    Menu Pembeli / Katalog Storefront (Buyer)
    ========================================================================= */
 export const buyerMenu: MenuItem[] = [
-  { label: "Katalog Belanja", to: "/produk", icon: Sprout },
+  { label: "Katalog Belanja", to: "/", icon: Sprout },
   { label: "Keranjang Belanja", to: "/keranjang", icon: ShoppingCart },
 ];

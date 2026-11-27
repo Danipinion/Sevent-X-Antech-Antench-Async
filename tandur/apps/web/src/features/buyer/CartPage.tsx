@@ -309,7 +309,7 @@ export const CartPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <Link
-              to="/produk"
+              to="/"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-[#236B37] hover:underline mb-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -346,7 +346,7 @@ export const CartPage: React.FC = () => {
               </p>
             </div>
             <Link
-              to="/produk"
+              to="/"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs sm:text-sm font-bold transition-colors"
             >
               Jelajahi Katalog Produk

@@ -138,7 +138,7 @@ export const ProductDetailPage: React.FC = () => {
             </p>
           </div>
           <Link
-            to="/produk"
+            to="/"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs sm:text-sm font-bold transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -231,7 +231,7 @@ export const ProductDetailPage: React.FC = () => {
         {/* Back Breadcrumb */}
         <div>
           <Link
-            to="/produk"
+            to="/"
             className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-[#236B37] hover:underline"
           >
             <ArrowLeft className="w-4 h-4" />

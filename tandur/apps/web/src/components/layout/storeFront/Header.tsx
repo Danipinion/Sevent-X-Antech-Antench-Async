@@ -197,9 +197,9 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
     e.preventDefault();
     const query = searchTerm.trim();
     if (query) {
-      navigate(`/produk?search=${encodeURIComponent(query)}`);
+      navigate(`/?search=${encodeURIComponent(query)}`);
     } else {
-      navigate("/produk");
+      navigate("/");
     }
   };
 
@@ -366,6 +366,26 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
               <Bell size={22} />
             </button>
 
+            {/* Tombol Cepat Dashboard bagi Mitra Petani / Tengkulak */}
+            {user?.role === "farmer" && (
+              <Link
+                to="/farmer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-700 hover:bg-green-800 text-white text-xs font-bold transition shadow-xs"
+              >
+                <LayoutDashboard size={14} />
+                <span className="hidden sm:inline">Dashboard Petani</span>
+              </Link>
+            )}
+            {user?.role === "middleman" && (
+              <Link
+                to="/middleman"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-700 hover:bg-green-800 text-white text-xs font-bold transition shadow-xs"
+              >
+                <LayoutDashboard size={14} />
+                <span className="hidden sm:inline">Dashboard Tengkulak</span>
+              </Link>
+            )}
+
             {/* Profile Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
@@ -399,31 +419,39 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
                             <span className="inline-block rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 capitalize">
                               {user.role === "farmer"
                                 ? "Mitra Petani"
-                                : "Mitra Pembeli"}
+                                : user.role === "middleman"
+                                ? "Mitra Tengkulak"
+                                : "Pembeli"}
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="py-1 text-sm">
-                        {user.role === "farmer" && (
+                      {/* Tombol Aksi Menuju Dashboard bagi Petani / Tengkulak */}
+                      {user.role === "farmer" && (
+                        <div className="p-2 border-b border-gray-100 bg-green-50/70">
                           <Link
                             to="/farmer"
                             onClick={() => setUserDropdownOpen(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-green-50 hover:text-green-800"
+                            className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-green-700 hover:bg-green-800 text-white font-bold text-xs shadow-xs transition"
                           >
-                            <LayoutDashboard size={16} /> Dashboard Petani
+                            <LayoutDashboard size={15} /> Buka Dashboard Petani
                           </Link>
-                        )}
-                        {user.role === "middleman" && (
+                        </div>
+                      )}
+                      {user.role === "middleman" && (
+                        <div className="p-2 border-b border-gray-100 bg-green-50/70">
                           <Link
                             to="/middleman"
                             onClick={() => setUserDropdownOpen(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-green-50 hover:text-green-800"
+                            className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-green-700 hover:bg-green-800 text-white font-bold text-xs shadow-xs transition"
                           >
-                            <LayoutDashboard size={16} /> Dashboard Mitra
+                            <LayoutDashboard size={15} /> Buka Dashboard Tengkulak
                           </Link>
-                        )}
+                        </div>
+                      )}
+
+                      <div className="py-1 text-sm">
                         <Link
                           to={
                             user.role === "farmer"
@@ -531,7 +559,7 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
               {categoryDropdownOpen && (
                 <div className="absolute left-0 top-full z-50 mt-0.5 w-56 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
                   <Link
-                    to="/produk"
+                    to="/"
                     onClick={() => setCategoryDropdownOpen(false)}
                     className="block border-b border-gray-100 px-4 py-2 text-xs font-semibold text-green-800 hover:bg-green-50"
                   >
@@ -578,7 +606,7 @@ export default function Header({ cartCount = 0 }: { cartCount?: number }) {
             </li>
             <li>
               <Link
-                to="/produk"
+                to="/"
                 onClick={() => setMenuOpen(false)}
                 className="block py-3 font-semibold text-green-800"
               >

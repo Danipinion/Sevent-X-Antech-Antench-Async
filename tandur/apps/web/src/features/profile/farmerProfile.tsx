@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import {
   CheckCircle2,
@@ -16,6 +17,8 @@ import {
   LocateFixed,
   Loader2,
   ExternalLink,
+  LayoutDashboard,
+  Store,
 } from 'lucide-react';
 import { fetchApi, type UserDomain } from '@/services/api';
 
@@ -35,17 +38,43 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
 
   const currentRole = role || storedUser?.role || "farmer";
   const isMiddleman = currentRole === "middleman";
+  const isBuyer = currentRole === "buyer";
+  const isFarmer = currentRole === "farmer";
 
-  const defaultName = storedUser?.name || (isMiddleman ? "Haji Supardi" : "Sugeng Santoso");
-  const defaultNik = storedUser?.nik || (isMiddleman ? "3521092804750008" : "3521092804750002");
-  const defaultPhone = storedUser?.phone || (isMiddleman ? "813-2890-5678" : "812-8990-1234");
+  const defaultName =
+    storedUser?.name ||
+    (isMiddleman
+      ? "Haji Supardi"
+      : isBuyer
+      ? "Pelanggan Tandur"
+      : "Sugeng Santoso");
+  const defaultNik =
+    storedUser?.nik ||
+    (isMiddleman
+      ? "3521092804750008"
+      : isBuyer
+      ? "3521092804750010"
+      : "3521092804750002");
+  const defaultPhone =
+    storedUser?.phone ||
+    (isMiddleman
+      ? "0813-2890-5678"
+      : isBuyer
+      ? "0812-3456-7890"
+      : "0812-8990-1234");
   const defaultEmail =
     storedUser?.email ||
-    (isMiddleman ? "supardi.tengkulak.demak@gmail.com" : "sugeng.santoso.tani@gmail.com");
+    (isMiddleman
+      ? "supardi.tengkulak.demak@gmail.com"
+      : isBuyer
+      ? "pembeli.tandur@gmail.com"
+      : "sugeng.santoso.tani@gmail.com");
   const defaultAddress =
     storedUser?.ktp_address ||
     (isMiddleman
       ? "Gudang Komoditas Utama Demak, Jl. Raya Pantura No. 45, Kec. Karanganyar, Kab. Demak, Jawa Tengah"
+      : isBuyer
+      ? "Jl. Pemuda No. 12, Kel. Bintoro, Kec. Demak, Kab. Demak, Jawa Tengah"
       : "Desa Karangawen, RT 03 / RW 02, Kec. Karangawen, Kab. Demak, Jawa Tengah\n(Patokan: Sebelah Barat Penggilingan Padi Berkah)");
 
   const memberId = storedUser?.id
@@ -54,6 +83,8 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
       : storedUser.id
     : isMiddleman
     ? "TNDR-TGLK-1092"
+    : isBuyer
+    ? "TNDR-BYR-5520"
     : "TNDR-DMK-2804";
 
   const [fullName, setFullName] = useState<string>(defaultName);
@@ -239,18 +270,50 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#EFECE6]">
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1C241E]">
-              Data Diri {isMiddleman ? "Mitra Tengkulak" : "Petani"}
+              Data Diri {isMiddleman ? "Mitra Tengkulak" : isBuyer ? "Pembeli" : "Mitra Petani"}
             </h1>
             <p className="text-xs sm:text-sm text-[#5C635E]">
               {isMiddleman
                 ? "Kelola informasi identitas resmi dan kontak aktif Anda untuk kelancaran pengadaan komoditas dan logistik gudang."
+                : isBuyer
+                ? "Kelola informasi profil, kontak aktif, dan alamat pengiriman Anda untuk kemudahan transaksi komoditas."
                 : "Kelola informasi identitas resmi dan kontak aktif Anda untuk kelancaran verifikasi timbang gabah serta transfer hasil panen."}
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-2 self-start sm:self-center px-3.5 py-2 rounded-full bg-[#E8F5EC] text-[#156E33] text-xs font-bold shrink-0">
-            <CheckCircle2 className="w-4 h-4 fill-[#156E33] text-white" />
-            Dukcapil &amp; Distan Terhubung
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isFarmer && (
+              <Link
+                to="/farmer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-bold shadow-xs transition"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard Petani
+              </Link>
+            )}
+            {isMiddleman && (
+              <Link
+                to="/middleman"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-bold shadow-xs transition"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard Tengkulak
+              </Link>
+            )}
+            {isBuyer && (
+              <Link
+                to="/"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#156E33] hover:bg-[#105728] text-white text-xs font-bold shadow-xs transition"
+              >
+                <Store className="w-4 h-4" />
+                Katalog Belanja
+              </Link>
+            )}
+
+            <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-[#E8F5EC] text-[#156E33] text-xs font-bold shrink-0">
+              <CheckCircle2 className="w-4 h-4 fill-[#156E33] text-white" />
+              {isBuyer ? "Akun Terverifikasi" : "Dukcapil & Distan Terhubung"}
+            </div>
           </div>
         </div>
 
@@ -269,6 +332,8 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
                 <p className="text-xs text-[#7A827C]">
                   {isMiddleman
                     ? "Data ini digunakan sebagai dasar kerja sama pengadaan dan distribusi hasil panen."
+                    : isBuyer
+                    ? "Data ini digunakan sebagai identitas akun pembeli dan verifikasi pengiriman pesanan."
                     : "Data ini digunakan sebagai dasar hukum akad jual beli gabah."}
                 </p>
               </div>
@@ -373,11 +438,15 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
             </div>
           </div>
 
-          {/* Row 3: Alamat Domisili & Titik Kumpul */}
+          {/* Row 3: Alamat Domisili & Titik Kumpul / Pengiriman */}
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-bold text-[#1C241E]">
-                Alamat Domisili &amp; Titik Kumpul Hasil Panen
+                {isBuyer
+                  ? "Alamat Domisili & Titik Pengiriman Pesanan"
+                  : isMiddleman
+                  ? "Alamat Gudang & Titik Muat Komoditas"
+                  : "Alamat Domisili & Titik Kumpul Hasil Panen"}
               </label>
 
               <div className="flex items-center gap-3">
@@ -423,7 +492,11 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
                 rows={3}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Klik 'Gunakan Lokasi Saat Ini' atau ketik alamat lengkap titik jemput armada..."
+                placeholder={
+                  isBuyer
+                    ? "Klik 'Gunakan Lokasi Saat Ini' atau ketik alamat lengkap pengiriman pesanan Anda..."
+                    : "Klik 'Gunakan Lokasi Saat Ini' atau ketik alamat lengkap titik jemput armada..."
+                }
                 className="w-full bg-transparent text-sm font-medium text-[#1C241E] leading-relaxed outline-none resize-none"
               />
             </div>
@@ -431,7 +504,11 @@ export default function FarmerProfilePage({ role }: ProfilePageProps = {}) {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-[#7A827C]">
               <p className="flex items-center gap-1.5">
                 <Truck className="w-3.5 h-3.5 shrink-0" />
-                Digunakan sopir truk Tandur saat menjemput gabah basah langsung dari tepi sawah.
+                {isBuyer
+                  ? "Digunakan kurir dan armada pengantaran Tandur untuk mengirim pesanan komoditas ke alamat Anda."
+                  : isMiddleman
+                  ? "Digunakan mitra pengadaan dan logistik untuk titik muat atau bongkar komoditas gudang."
+                  : "Digunakan sopir truk Tandur saat menjemput gabah basah langsung dari tepi sawah."}
               </p>
               {coords && (
                 <span className="font-mono text-[#156E33] font-semibold">

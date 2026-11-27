@@ -71,8 +71,8 @@ const Login = () => {
           : user?.role === "middleman"
           ? "/middleman"
           : user?.role === "buyer"
-          ? "/produk"
-          : "/farmer";
+          ? "/"
+          : "/";
 
       navigate(targetRoute, { replace: true });
     } catch (err) {

@@ -233,7 +233,7 @@ export const BuyerOrdersPage: React.FC = () => {
         {/* Back link & Header */}
         <div>
           <Link
-            to="/produk"
+            to="/"
             className="inline-flex items-center gap-1.5 text-xs font-bold text-[#236B37] hover:underline mb-2"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -250,7 +250,7 @@ export const BuyerOrdersPage: React.FC = () => {
             </div>
 
             <Link
-              to="/produk"
+              to="/"
               className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-bold transition shadow-xs"
             >
               <ShoppingBag className="w-4 h-4" />
@@ -360,7 +360,7 @@ export const BuyerOrdersPage: React.FC = () => {
               </p>
             </div>
             <Link
-              to="/produk"
+              to="/"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#236B37] hover:bg-[#1B552B] text-white text-xs font-bold transition"
             >
               Mulai Belanja Komoditas

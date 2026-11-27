@@ -153,7 +153,7 @@ function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
       if (user.role === "farmer") return <Navigate to="/farmer" replace />;
       if (user.role === "middleman")
         return <Navigate to="/middleman" replace />;
-      if (user.role === "buyer") return <Navigate to="/produk" replace />;
+      if (user.role === "buyer") return <Navigate to="/" replace />;
       return <Navigate to="/login" replace />;
     }
   } catch {
@@ -227,26 +227,6 @@ function MiddlemanDashboardWrapper() {
   );
 }
 
-// Komponen penentu root route berdasarkan session/role login
-function RootRedirect() {
-  const token =
-    localStorage.getItem("token") || sessionStorage.getItem("token");
-  const userStr =
-    localStorage.getItem("user") || sessionStorage.getItem("user");
-  if (token && userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      if (user.role === "farmer") return <Navigate to="/farmer" replace />;
-      if (user.role === "middleman")
-        return <Navigate to="/middleman" replace />;
-      if (user.role === "buyer") return <Navigate to="/produk" replace />;
-    } catch {
-      // ignore JSON parse error
-    }
-  }
-  // Tamu umum / unauthenticated diarahkan ke etalase produk pembeli
-  return <Navigate to="/produk" replace />;
-}
 
 // Komponen pengarah link jual hasil panen
 function JualRedirect() {
@@ -335,9 +315,6 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rute Awal / Root */}
-        <Route path="/" element={<RootRedirect />} />
-
         {/* Otentikasi */}
         <Route path="/login" element={<Login />} />
         <Route path="/auth/login" element={<Navigate to="/login" replace />} />
@@ -352,8 +329,10 @@ export default function App() {
 
         {/* Katalog / Pembeli / Storefront: header + footer */}
         <Route element={<Layout cartCount={cartCount} />}>
-          <Route path="/produk" element={<BuyerHomePage />} />
-          <Route path="/katalog" element={<Navigate to="/produk" replace />} />
+          {/* Halaman Utama / Etalase Produk langsung di root URL / */}
+          <Route path="/" element={<BuyerHomePage />} />
+          <Route path="/produk" element={<Navigate to="/" replace />} />
+          <Route path="/katalog" element={<Navigate to="/" replace />} />
           <Route path="/kategori/:category" element={<BuyerHomePage />} />
           <Route path="/kategori" element={<BuyerHomePage />} />
           <Route path="/promo" element={<BuyerHomePage />} />
