@@ -360,11 +360,21 @@ export const BuyerHomePage: React.FC = () => {
           currentCart[existingIdx].subtotal =
             currentCart[existingIdx].quantity * unitPrice;
         } else {
+          const itemSource = product.source || ((product.seller as any)?.role === 'farmer' ? 'farmer' : 'middleman');
+          const pSeller: any = product.seller || {};
+          const sellerRole = itemSource === 'farmer' ? 'farmer' : (pSeller.role || 'middleman');
           currentCart.push({
             id: `cart-${Date.now()}`,
             product_id: product.id,
             product_name: title,
-            seller_name: product.seller?.name || product.seller_name || 'Mitra Penjual',
+            seller_name: pSeller.name || (product as any).seller_name || (sellerRole === 'farmer' ? 'Mitra Petani' : 'Mitra Gudang Tandur'),
+            seller_role: sellerRole,
+            source: itemSource,
+            seller: {
+              id: pSeller.id || (product as any).seller_id || 'seller-1',
+              name: pSeller.name || (product as any).seller_name || (sellerRole === 'farmer' ? 'Mitra Petani' : 'Mitra Gudang Tandur'),
+              role: sellerRole,
+            },
             unit_price: unitPrice,
             quantity: minQty,
             unit: product.unit || 'kg',

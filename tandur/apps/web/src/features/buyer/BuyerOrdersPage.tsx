@@ -14,6 +14,7 @@ import {
   Building2,
   Sprout,
   XCircle,
+  Scale,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { resolveMediaUrl } from '@/services/api';
@@ -49,7 +50,7 @@ export interface BuyerOrderItem {
   pickup_schedule: string;
   pickup_address: string;
   buyer_note?: string;
-  status: 'pending' | 'ready_for_pickup' | 'completed' | 'cancelled';
+  status: 'pending' | 'scheduled' | 'ready_for_pickup' | 'completed' | 'cancelled';
   status_label: string;
   created_at: string;
   updated_at: string;
@@ -201,6 +202,85 @@ export const BuyerOrdersPage: React.FC = () => {
 
   const handlePrintPO = (_order: BuyerOrderItem) => {
     window.print();
+  };
+
+  const handleViewTeraCertificate = (order: BuyerOrderItem) => {
+    const qty = Number(order.total_quantity || 1000);
+    const unitPrice = order.items?.[0]?.price_per_unit || Math.round(order.total_amount / (qty || 1));
+    const totalAmount = order.total_amount || 0;
+    const orderNum = order.order_number || order.id || '#TND-ORD';
+    const taraKg = Math.round(qty * 0.01);
+    const brutoKg = qty + taraKg;
+    const isDirectFarmer = order.seller_role === 'farmer';
+
+    Swal.fire({
+      title: 'Surat Bukti Timbang Tera Sah',
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6; font-family: inherit;">
+          <div style="background: #F4EFE6; padding: 12px 14px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #E6DFD2;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <p style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #156E33; margin: 0;">SERTIFIKASI METROLOGI LEGAL REPUBLIK INDONESIA</p>
+                <p style="font-weight: 800; font-size: 14px; color: #1A201A; margin: 2px 0 0 0;">No. Tera: #TERA-TNDR-${String(orderNum).replace(/[^a-zA-Z0-9]/g, '').slice(-6) || '82910'}</p>
+              </div>
+              <span style="background: #E8F5EC; color: #156E33; font-weight: bold; font-size: 11px; padding: 4px 8px; border-radius: 6px;">SAH & TANGGUH</span>
+            </div>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px;">
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Pihak Penjual:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #1A201A;">${order.seller_name} ${isDirectFarmer ? '(Petani / Lumbung Panen)' : '(Mitra Gudang)'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Pihak Pembeli:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #1A201A;">${order.buyer_name || 'Pembeli Bisnis (B2B)'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Komoditas:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #1A201A;">${order.items?.[0]?.product_name || 'Komoditas Panen'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Bobot Kotor (Bruto):</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: 600;">${brutoKg.toLocaleString('id-ID')} Kg</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Tara Kemasan Karung:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: 600; color: #9A4D16;">- ${taraKg.toLocaleString('id-ID')} Kg</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1; background: #FAF8F4;">
+              <td style="padding: 8px 6px; font-weight: bold; color: #156E33;">Bobot Bersih (Netto Sah):</td>
+              <td style="padding: 8px 6px; text-align: right; font-weight: 800; font-size: 14px; color: #156E33;">${qty.toLocaleString('id-ID')} ${order.unit || 'Kg'} (${(qty / 1000).toFixed(1)} Ton)</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Uji Kadar Air (KA):</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #1A201A;">13.8% (Standar SNI Mutu I)</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #F0EAE1;">
+              <td style="padding: 6px 0; color: #7A827C;">Harga Satuan:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #1A201A;">Rp ${unitPrice.toLocaleString('id-ID')} / ${order.unit || 'kg'}</td>
+            </tr>
+            <tr style="background: #E8F5EC;">
+              <td style="padding: 8px 6px; font-weight: bold; color: #156E33;">Total Pelunasan Transaksi:</td>
+              <td style="padding: 8px 6px; text-align: right; font-weight: 800; font-size: 15px; color: #156E33;">Rp ${totalAmount.toLocaleString('id-ID')}</td>
+            </tr>
+          </table>
+
+          <p style="font-size: 11px; color: #5C635E; margin: 0; text-align: center;">
+            ✓ Sesuai ketentuan Undang-Undang Metrologi Legal No. 2 Tahun 1981 dan standar timbang digital terintegrasi Tandur.
+          </p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Cetak Lembar Tera Sah',
+      cancelButtonText: 'Tutup',
+      confirmButtonColor: '#236B37',
+      cancelButtonColor: '#7A827A',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        window.print();
+      }
+    });
   };
 
   const filteredOrders = useMemo(() => {
@@ -406,7 +486,15 @@ export const BuyerOrdersPage: React.FC = () => {
                       {isPending && (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF7ED] border border-[#FFEDD5] text-[#C25E00] text-xs font-bold">
                           <Hourglass className="w-3.5 h-3.5 animate-spin" />
-                          Menunggu Konfirmasi Penjual
+                          {order.seller_role === 'farmer'
+                            ? 'Menunggu Konfirmasi Petani'
+                            : 'Menunggu Konfirmasi Penjual'}
+                        </span>
+                      )}
+                      {order.status === 'scheduled' && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-xs font-bold">
+                          <Clock className="w-3.5 h-3.5" />
+                          Dikonfirmasi - Jadwal Timbang Lapangan
                         </span>
                       )}
                       {isReady && (
@@ -434,13 +522,23 @@ export const BuyerOrdersPage: React.FC = () => {
                   <div className="px-4 sm:px-5 py-3 border-b border-[#F4EFE6] flex items-center justify-between text-xs text-[#555D55]">
                     <div className="flex items-center gap-2">
                       {order.seller_role === 'farmer' ? (
-                        <Sprout className="w-4 h-4 text-[#236B37]" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E8F5EC] text-[#156E33] text-[10px] font-bold border border-[#CDEBD4]">
+                            <Sprout className="w-3.5 h-3.5 text-[#156E33]" />
+                            Langsung dari Lumbung Petani (B2B)
+                          </span>
+                          <span>
+                            Petani: <strong>{order.seller_name}</strong>
+                          </span>
+                        </div>
                       ) : (
-                        <Building2 className="w-4 h-4 text-[#8A5A19]" />
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="w-4 h-4 text-[#8A5A19]" />
+                          <span>
+                            Penjual: <strong>{order.seller_name}</strong> ({order.seller_role_label || 'Mitra Tandur'})
+                          </span>
+                        </div>
                       )}
-                      <span>
-                        Penjual: <strong>{order.seller_name}</strong> ({order.seller_role_label || 'Mitra Tandur'})
-                      </span>
                     </div>
                     <div className="flex items-center gap-1 text-[#7A827A]">
                       <MapPin className="w-3.5 h-3.5 text-[#8A5A19]" />
@@ -538,6 +636,17 @@ export const BuyerOrdersPage: React.FC = () => {
                         </button>
                       )}
 
+                      {(isCompleted || isReady) && (
+                        <button
+                          type="button"
+                          onClick={() => handleViewTeraCertificate(order)}
+                          className="px-3.5 py-2 rounded-xl bg-[#E8F5EC] hover:bg-[#D5EEDC] text-[#156E33] text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-[#C2E5CB]"
+                        >
+                          <Scale className="w-3.5 h-3.5" />
+                          Bukti Timbang Tera Sah
+                        </button>
+                      )}
+
                       {isPending && (
                         <button
                           type="button"
@@ -554,7 +663,7 @@ export const BuyerOrdersPage: React.FC = () => {
                         className="px-3 py-2 rounded-xl bg-[#F4EFE6] hover:bg-[#EAE2D3] text-[#2D332D] text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
                       >
                         <Printer className="w-3.5 h-3.5" />
-                        Cetak Bukti
+                        Cetak Bukti PO
                       </button>
                     </div>
                   </div>

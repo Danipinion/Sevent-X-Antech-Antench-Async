@@ -85,7 +85,7 @@ func main() {
 	farmerService := application.NewFarmerService(userRepo, listingRepo)
 	orderService := application.NewOrderService(orderRepo, listingRepo, userRepo, commodityService)
 	middlemanService := application.NewMiddlemanService(middlemanRepo, orderRepo, listingRepo, commodityService)
-	buyerService := application.NewBuyerService(buyerRepo, userRepo)
+	buyerService := application.NewBuyerService(buyerRepo, userRepo, orderRepo)
 
 	// 6. Initialize HTTP Handlers & Adapter
 	httpHandler := adapterHttp.NewHandler(cfg, dbPool, commodityService, authService, farmerService, orderService, middlemanService, buyerService)

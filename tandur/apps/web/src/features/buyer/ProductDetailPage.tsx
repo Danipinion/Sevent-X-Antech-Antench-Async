@@ -202,12 +202,23 @@ export const ProductDetailPage: React.FC = () => {
           currentCart[existingIdx].subtotal =
             currentCart[existingIdx].quantity * pPrice;
         } else {
+          const pSeller: any = product.seller || {};
+          const itemSource = product.source || (pSeller.role === 'farmer' ? 'farmer' : 'middleman');
+          const sellerRole = itemSource === 'farmer' ? 'farmer' : (pSeller.role || 'middleman');
           currentCart.push({
             id: `cart-${Date.now()}`,
             product_id: product.id,
             product_name: pName,
             title: pName,
             seller_name: pSellerName,
+            seller_role: sellerRole,
+            source: itemSource,
+            seller: {
+              id: pSeller.id || (product as any).seller_id || 'seller-1',
+              name: pSellerName,
+              role: sellerRole,
+              city: pSellerLocation,
+            },
             price_per_kg: pPrice,
             unit_price: pPrice,
             quantity: quantityKg,
@@ -278,8 +289,10 @@ export const ProductDetailPage: React.FC = () => {
               </div>
 
               <div className="relative z-10 inline-flex items-center gap-2 text-xs font-bold text-[#7D5318] bg-white/80 px-3 py-1 rounded-md w-fit">
-                <Sprout className="w-4 h-4" />
-                Panen Segar Langsung dari Lumbung Mitra Tandur
+                <Sprout className="w-4 h-4 text-[#236B37]" />
+                {product.source === 'farmer' || product.seller?.role === 'farmer'
+                  ? '🌾 Pasokan Panen Langsung dari Lumbung Petani (B2B Kontrak)'
+                  : 'Panen Segar Langsung dari Lumbung Mitra Tandur'}
               </div>
             </div>
 

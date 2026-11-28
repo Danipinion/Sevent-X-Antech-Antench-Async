@@ -16,13 +16,18 @@ import (
 type BuyerService struct {
 	buyerRepo domain.BuyerRepository
 	userRepo  domain.UserRepository
+	orderRepo domain.OrderRepository
 }
 
-func NewBuyerService(buyerRepo domain.BuyerRepository, userRepo domain.UserRepository) *BuyerService {
-	return &BuyerService{
+func NewBuyerService(buyerRepo domain.BuyerRepository, userRepo domain.UserRepository, orderRepo ...domain.OrderRepository) *BuyerService {
+	s := &BuyerService{
 		buyerRepo: buyerRepo,
 		userRepo:  userRepo,
 	}
+	if len(orderRepo) > 0 {
+		s.orderRepo = orderRepo[0]
+	}
+	return s
 }
 
 // CanAccessFarmerSource memeriksa apakah pengguna diizinkan melihat/membeli pasokan langsung dari petani
@@ -355,6 +360,60 @@ func (s *BuyerService) CreateOrders(ctx context.Context, buyerID string, input d
 			rollbackReserved()
 			return nil, err
 		}
+
+		// Bila penjual adalah Petani, sinkronkan ke daftar pesanan petani (farmer_purchases)
+		if s.orderRepo != nil && (strings.ToLower(order.SellerRole) == "farmer" || (len(orderItems) > 0 && orderItems[0].ProductSource == domain.ProductSourceFarmer)) {
+			var firstCommodityName string
+			var totalQty float64
+			var unitPrice float64
+			var listingID string
+			if len(orderItems) > 0 {
+				firstCommodityName = orderItems[0].ProductName
+				listingID = orderItems[0].ProductID
+				unitPrice = orderItems[0].UnitPrice
+				for _, it := range orderItems {
+					totalQty += it.Quantity
+				}
+			}
+			buyerName := "Pembeli Bisnis (B2B)"
+			buyerPhone := ""
+			if s.userRepo != nil {
+				if bu, errU := s.userRepo.GetByID(ctx, buyerID); errU == nil && bu != nil {
+					if bu.Name != "" {
+						buyerName = bu.Name
+					}
+					buyerPhone = bu.Phone
+				}
+			}
+
+			fOrder := &domain.FarmerPurchaseOrder{
+				ID:                order.ID,
+				OrderCode:         order.OrderNumber,
+				ListingID:         listingID,
+				FarmerID:          order.SellerID,
+				MiddlemanID:       order.BuyerID,
+				Status:            domain.OrderStatusWaitingConfirmation,
+				StatusLabel:       "Menunggu Persetujuan Anda",
+				CommodityName:     firstCommodityName,
+				Unit:              "kg",
+				BuyerName:         buyerName,
+				BuyerPhone:        buyerPhone,
+				BuyerType:         "Pembeli Bisnis (B2B)",
+				OfferedQuantity:   totalQty,
+				OfferedPrice:      unitPrice,
+				TotalOfferedPrice: order.TotalAmount,
+				AgreedPrice:       unitPrice,
+				TotalPrice:        order.TotalAmount,
+				Notes:             order.Notes,
+				PickupDate:        time.Now().Format("2006-01-02"),
+				PickupAddress:     order.PickupAddress,
+				FarmerBusinessName: order.SellerName,
+				CreatedAt:         time.Now(),
+				UpdatedAt:         time.Now(),
+			}
+			_ = s.orderRepo.Create(ctx, fOrder)
+		}
+
 		createdOrders = append(createdOrders, *order)
 	}
 

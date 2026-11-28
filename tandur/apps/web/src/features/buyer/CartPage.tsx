@@ -207,8 +207,19 @@ export const CartPage: React.FC = () => {
     } catch {}
 
     const firstSeller: any = items[0]?.seller || {};
-    const sellerName = items[0]?.seller_name || firstSeller.name || 'Mitra Gudang Tandur';
-    const isFarmerSeller = (items[0] as any)?.source === 'farmer' || firstSeller.role === 'farmer';
+    const isFarmerSeller =
+      (items[0] as any)?.source === 'farmer' ||
+      (items[0] as any)?.seller_role === 'farmer' ||
+      firstSeller.role === 'farmer' ||
+      items.some((it: any) => it.source === 'farmer' || it.seller_role === 'farmer');
+    const sellerName =
+      items[0]?.seller_name ||
+      firstSeller.name ||
+      (isFarmerSeller ? 'Mitra Petani / Kelompok Tani' : 'Mitra Gudang Tandur');
+    const isB2b =
+      authUser?.is_bisnis === true ||
+      authUser?.buyer_type === 'business' ||
+      totalWeightKg >= 500;
 
     const newOrder = {
       id: `ORD-${Date.now()}`,
@@ -216,12 +227,12 @@ export const CartPage: React.FC = () => {
       buyer_id: authUser?.id || 'buyer-1',
       buyer_name: authUser?.name || 'Pak Budi Santoso',
       buyer_phone: authUser?.phone || '0812-3456-7890',
-      buyer_segment: totalWeightKg >= 1000 ? 'b2b' : 'b2c',
-      buyer_segment_label: totalWeightKg >= 1000 ? 'Pengadaan Bisnis & Grosir' : 'Konsumen Rumah Tangga',
+      buyer_segment: isB2b ? 'b2b' : 'b2c',
+      buyer_segment_label: isB2b ? 'Pembeli Bisnis (B2B)' : 'Konsumen Rumah Tangga',
       seller_id: firstSeller.id || 'seller-1',
       seller_name: sellerName,
       seller_role: isFarmerSeller ? 'farmer' : 'middleman',
-      seller_role_label: isFarmerSeller ? 'Mitra Petani' : 'Mitra Gudang / Tengkulak',
+      seller_role_label: isFarmerSeller ? 'Mitra Petani / Kelompok Tani' : 'Mitra Gudang / Tengkulak',
       seller_location: firstSeller.city || 'Gudang Utama - Madiun',
       items: items.map((it) => ({
         id: it.id,

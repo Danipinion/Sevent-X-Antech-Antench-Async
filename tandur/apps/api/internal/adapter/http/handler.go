@@ -72,7 +72,13 @@ func NewHandler(cfg *config.Config, dbPool *pgxpool.Pool, commodityService *appl
 		} else {
 			buyerRepo = persistence.NewMemoryBuyerRepository()
 		}
-		bs = application.NewBuyerService(buyerRepo, userRepo)
+		var orderRepo domain.OrderRepository
+		if dbPool != nil {
+			orderRepo = persistence.NewPostgresOrderRepository(dbPool)
+		} else {
+			orderRepo = persistence.NewMemoryOrderRepository()
+		}
+		bs = application.NewBuyerService(buyerRepo, userRepo, orderRepo)
 	}
 
 	var objStorage storage.ObjectStorage
