@@ -12,9 +12,10 @@ import {
   CheckCircle2,
   ShieldCheck,
   Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { BuyerApi, type CartItem } from '@/services/api';
+import { BuyerApi, getAuthToken, type CartItem } from '@/services/api';
 
 const CART_STORAGE_KEY = 'tandur_buyer_cart';
 
@@ -174,6 +175,22 @@ export const CartPage: React.FC = () => {
     e.preventDefault();
     if (items.length === 0) return;
 
+    if (!getAuthToken()) {
+      const result = await Swal.fire({
+        icon: 'warning',
+        title: 'Masuk Terlebih Dahulu',
+        text: 'Anda harus login untuk melakukan checkout dan memproses transaksi pesanan.',
+        showCancelButton: true,
+        confirmButtonText: 'Login Sekarang',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#236B37',
+      });
+      if (result.isConfirmed) {
+        navigate('/login');
+      }
+      return;
+    }
+
     setIsCheckingOut(true);
     const nowIso = new Date().toISOString();
     const orderNumber = `TND-ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -181,7 +198,12 @@ export const CartPage: React.FC = () => {
 
     let authUser: any = null;
     try {
-      authUser = JSON.parse(localStorage.getItem('tandur_auth_user') || '{}');
+      authUser = JSON.parse(
+        localStorage.getItem('user') ||
+          sessionStorage.getItem('user') ||
+          localStorage.getItem('tandur_auth_user') ||
+          '{}'
+      );
     } catch {}
 
     const firstSeller: any = items[0]?.seller || {};
@@ -483,6 +505,15 @@ export const CartPage: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {!getAuthToken() && (
+                <div className="p-3 rounded-xl bg-[#FEF3C7] border border-[#FCD34D] text-[#92400E] text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-[#D97706]" />
+                  <span>
+                    Anda belum login. Silakan <strong>masuk ke akun</strong> untuk menyelesaikan transaksi.
+                  </span>
+                </div>
+              )}
 
               <button
                 type="submit"

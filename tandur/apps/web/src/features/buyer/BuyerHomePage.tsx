@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useSearchParams, useParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   Search,
   MapPin,
@@ -21,6 +21,7 @@ import {
   BuyerApi,
   resolveMediaUrl,
   getEffectiveCartCount,
+  getAuthToken,
   type BuyerProduct,
   type ProductCategory,
 } from '@/services/api';
@@ -28,6 +29,8 @@ import {
 const LOCAL_SELL_OFFERS_KEY = 'tandur_local_sell_offers';
 
 export const BuyerHomePage: React.FC = () => {
+  const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [products, setProducts] = useState<BuyerProduct[]>([]);
   const [popularProducts, setPopularProducts] = useState<BuyerProduct[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -36,6 +39,31 @@ export const BuyerHomePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [cartCount, setCartCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Periksa apakah akun yang login adalah akun bisnis / tengkulak
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+      if (raw) {
+        setCurrentUser(JSON.parse(raw));
+      }
+    } catch {}
+  }, []);
+
+  const isBusinessAccount = Boolean(
+    currentUser &&
+      (currentUser.is_bisnis === true ||
+        currentUser.buyer_type === 'business_buyer' ||
+        currentUser.buyer_type === 'business' ||
+        currentUser.role === 'middleman')
+  );
+
+  // Jika bukan akun bisnis, kunci segmentasi ke mode retail (konsumen biasa)
+  useEffect(() => {
+    if (!isBusinessAccount && buyerSegment !== 'retail') {
+      setBuyerSegment('retail');
+    }
+  }, [isBusinessAccount]);
 
   const [searchParams] = useSearchParams();
   const params = useParams();
@@ -253,21 +281,19 @@ export const BuyerHomePage: React.FC = () => {
     return products.filter((item) => {
       const catName = (item.category_name || item.category || '').toLowerCase();
       const titleStr = (item.name || item.title || '').toLowerCase();
-      const minQty = Number(item.min_order_quantity ?? item.min_order_kg ?? 1);
 
       // SEGMENTASI PASAR: RUMAH TANGGA (KG) VS PENGADAAN BISNIS (TON)
-      const isRawFarmerHarvest =
-        item.source === 'farmer' ||
+      // Gabah mentah petani (gabah kering panen / gabah kering giling) hanya untuk pengadaan bisnis / pabrik
+      const isRawGabah =
         catName.includes('gabah') ||
         titleStr.includes('gabah') ||
         titleStr.includes('gkp') ||
-        titleStr.includes('gkg') ||
-        minQty >= 100;
+        titleStr.includes('gkg');
 
       if (buyerSegment === 'retail') {
-        // Mode Konsumen Rumah Tangga: Hanya produk olahan / siap masak (Beras, Sayur, Minyak, Gula, Palawija)
-        // Gabah mentah petani atau pasokan partai besar (>= 100 kg) TIDAK TAMPIL untuk pembeli rumahan biasa!
-        if (isRawFarmerHarvest) return false;
+        // Mode Konsumen Rumah Tangga: Sembunyikan gabah mentah yang butuh mesin penggilingan
+        // Produk beras konsumsi (Medium, Premium, SPHP, Mentik) & sayur/buah dari tengkulak maupun petani tetap muncul
+        if (isRawGabah) return false;
       }
 
       const matchCategory =
@@ -299,6 +325,22 @@ export const BuyerHomePage: React.FC = () => {
   }, [products, selectedCategory, searchQuery, buyerSegment]);
 
   const handleQuickAddCart = async (product: BuyerProduct) => {
+    if (!getAuthToken()) {
+      const result = await Swal.fire({
+        icon: 'warning',
+        title: 'Masuk Terlebih Dahulu',
+        text: 'Silakan login ke akun Anda untuk menambahkan produk ke keranjang belanja dan bertransaksi.',
+        showCancelButton: true,
+        confirmButtonText: 'Login Sekarang',
+        cancelButtonText: 'Nanti Saja',
+        confirmButtonColor: '#236B37',
+      });
+      if (result.isConfirmed) {
+        navigate('/login');
+      }
+      return;
+    }
+
     const minQty = product.min_order_quantity || product.min_order_kg || 1;
     const unitPrice = product.price || product.price_per_kg || 0;
     const title = product.name || product.title || 'Komoditas';
@@ -389,53 +431,71 @@ export const BuyerHomePage: React.FC = () => {
 
       {/* Main Catalog Section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Segment Switcher: Konsumen Rumah Tangga (Kg) vs Pengadaan Bisnis & Grosir (Ton) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-white border border-[#ECE6DA] shadow-xs">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#236B37]">
-                {buyerSegment === 'retail' ? 'Mode Belanja Konsumen' : 'Mode Pengadaan Bisnis (B2B)'}
-              </span>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                buyerSegment === 'retail' ? 'bg-[#E1F3E5] text-[#236B37]' : 'bg-[#FADEC9] text-[#9A4D16]'
-              }`}>
-                {buyerSegment === 'retail' ? 'Satuan Kilogram (Kg)' : 'Satuan Tonase / Grosir'}
-              </span>
+        {/* Segment Switcher: Hanya ditampilkan jika akun adalah Akun Bisnis / B2B */}
+        {isBusinessAccount ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-white border border-[#ECE6DA] shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#236B37]">
+                  {buyerSegment === 'retail' ? 'Mode Belanja Konsumen' : 'Mode Pengadaan Bisnis (B2B)'}
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  buyerSegment === 'retail' ? 'bg-[#E1F3E5] text-[#236B37]' : 'bg-[#FADEC9] text-[#9A4D16]'
+                }`}>
+                  {buyerSegment === 'retail' ? 'Satuan Kilogram (Kg)' : 'Satuan Tonase / Grosir'}
+                </span>
+              </div>
+              <p className="text-xs text-[#6D756D] mt-1">
+                {buyerSegment === 'retail'
+                  ? 'Menampilkan beras & komoditas siap masak untuk dapur rumah tangga (satuan kg).'
+                  : 'Menampilkan pasokan panen langsung dari petani (gabah berton-ton) dan lumbung tengkulak untuk pabrik/grosir.'}
+              </p>
             </div>
-            <p className="text-xs text-[#6D756D] mt-1">
-              {buyerSegment === 'retail'
-                ? 'Menampilkan beras & komoditas siap masak untuk dapur rumah tangga (satuan kg, tanpa gabah mentah berton-ton).'
-                : 'Menampilkan pasokan panen langsung dari petani (gabah berton-ton) dan lumbung tengkulak untuk pabrik/grosir.'}
-            </p>
-          </div>
 
-          <div className="inline-flex p-1 rounded-xl bg-[#F4EFE6] border border-[#E8E2D5] gap-1 shrink-0 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => setBuyerSegment('retail')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                buyerSegment === 'retail'
-                  ? 'bg-white text-[#1A201A] shadow-xs'
-                  : 'text-[#6D756D] hover:text-[#1A201A]'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-[#236B37]" />
-              Konsumen Rumah Tangga (Kg)
-            </button>
-            <button
-              type="button"
-              onClick={() => setBuyerSegment('business')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                buyerSegment === 'business'
-                  ? 'bg-[#236B37] text-white shadow-xs'
-                  : 'text-[#6D756D] hover:text-[#236B37]'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              Pengadaan Bisnis &amp; Grosir (Ton)
-            </button>
+            <div className="inline-flex p-1 rounded-xl bg-[#F4EFE6] border border-[#E8E2D5] gap-1 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setBuyerSegment('retail')}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  buyerSegment === 'retail'
+                    ? 'bg-white text-[#1A201A] shadow-xs'
+                    : 'text-[#6D756D] hover:text-[#1A201A]'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-[#236B37]" />
+                Konsumen Rumah Tangga (Kg)
+              </button>
+              <button
+                type="button"
+                onClick={() => setBuyerSegment('business')}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  buyerSegment === 'business'
+                    ? 'bg-[#236B37] text-white shadow-xs'
+                    : 'text-[#6D756D] hover:text-[#236B37]'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Pengadaan Bisnis &amp; Grosir (Ton)
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#ECE6DA] shadow-xs flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#236B37]">
+                  Katalog Belanja Konsumen
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E1F3E5] text-[#236B37]">
+                  Satuan Kilogram (Kg)
+                </span>
+              </div>
+              <p className="text-xs text-[#6D756D] mt-1">
+                Menampilkan aneka beras berkualitas & komoditas pangan siap masak langsung dari mitra lumbung dan petani.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Search & Filter Toolbar */}
         <div className="bg-white rounded-2xl border border-[#ECE6DA] p-4 sm:p-5 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.015)]">

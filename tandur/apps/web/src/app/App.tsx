@@ -348,8 +348,22 @@ export default function App() {
           />
           <Route path="/produk/:id" element={<ProductDetailPage />} />
           <Route path="/keranjang" element={<CartPage />} />
-          <Route path="/pesanan-saya" element={<BuyerOrdersPage />} />
-          <Route path="/pesanan" element={<BuyerOrdersPage />} />
+          <Route
+            path="/pesanan-saya"
+            element={
+              <ProtectedRoute allowedRoles={["buyer", "middleman", "farmer"]}>
+                <BuyerOrdersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pesanan"
+            element={
+              <ProtectedRoute allowedRoles={["buyer", "middleman", "farmer"]}>
+                <BuyerOrdersPage />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         {/* Mitra Petani: header + sidebar dashboard (farmerMenu) */}

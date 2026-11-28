@@ -15,7 +15,7 @@ import {
   PackageOpen,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { BuyerApi, resolveMediaUrl, type BuyerProduct } from '@/services/api';
+import { BuyerApi, resolveMediaUrl, getAuthToken, type BuyerProduct } from '@/services/api';
 
 const LOCAL_SELL_OFFERS_KEY = 'tandur_local_sell_offers';
 const CART_STORAGE_KEY = 'tandur_buyer_cart';
@@ -171,6 +171,22 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleAddToCart = async (redirectToCart = false) => {
+    if (!getAuthToken()) {
+      const result = await Swal.fire({
+        icon: 'warning',
+        title: 'Masuk Terlebih Dahulu',
+        text: 'Silakan login ke akun Anda untuk melakukan pemesanan dan transaksi.',
+        showCancelButton: true,
+        confirmButtonText: 'Login Sekarang',
+        cancelButtonText: 'Nanti Saja',
+        confirmButtonColor: '#236B37',
+      });
+      if (result.isConfirmed) {
+        navigate('/login');
+      }
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await BuyerApi.addToCart(product.id, quantityKg, product.source);

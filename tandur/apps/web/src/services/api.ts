@@ -324,15 +324,14 @@ export function normalizeMarketplaceListingToProduct(item: any): BuyerProduct {
   const primaryImg =
     item.primary_image_url || item.image_url || (mediaUrls.length > 0 ? mediaUrls[0] : '');
 
-  const isFarmer =
-    item.farmer_id ||
-    item.source === 'farmer' ||
-    (!item.middleman_id && !item.inventory_id && !item.selling_price_per_kg);
+  const isFarmer = item.source
+    ? item.source === 'farmer'
+    : (Boolean(item.farmer_id) || Boolean(item.estimated_harvest_date));
 
   return {
     id: String(item.id),
     source: (item.source || (isFarmer ? 'farmer' : 'middleman')) as 'farmer' | 'middleman',
-    source_label: item.source_label || (isFarmer ? 'Petani Mitra' : 'Mitra Gudang'),
+    source_label: item.source_label || (isFarmer ? 'Petani Mitra' : 'Tengkulak / Distributor'),
     commodity_id: item.commodity_id,
     commodity_name: item.commodity_name || item.title || 'Komoditas',
     category_id: item.category_id || item.category || 'cat-umum',
@@ -381,16 +380,20 @@ export const BuyerApi = {
     limit?: number;
   }): Promise<{ status: string; data: BuyerProduct[] }> => {
     const q = new URLSearchParams();
-    if (params?.category_id) q.set('commodity_id', params.category_id);
+    if (params?.category_id) q.set('category_id', params.category_id);
     if (params?.search) q.set('search', params.search);
+    if (params?.source) q.set('source', params.source);
+    if (params?.lat !== undefined) q.set('lat', String(params.lat));
+    if (params?.lng !== undefined) q.set('lng', String(params.lng));
+    if (params?.radius !== undefined) q.set('radius', String(params.radius));
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     const qs = q.toString() ? `?${q.toString()}` : '';
 
     let items: BuyerProduct[] = [];
     try {
-      // Prioritaskan endpoint /marketplace/listings untuk katalog pembeli /produk
-      const res = await fetchApi<any>(`/marketplace/listings${qs}`);
+      // 1. Panggil katalog terpadu utama /api/v1/products (mencakup tengkulak & petani)
+      const res = await fetchApi<any>(`/products${qs}`);
       const rawList = Array.isArray(res?.data?.items)
         ? res.data.items
         : Array.isArray(res?.data)
@@ -402,27 +405,31 @@ export const BuyerApi = {
         : [];
       items = rawList.map(normalizeMarketplaceListingToProduct);
     } catch {
-      // Fallback ke endpoint /products bila /marketplace/listings gagal
+      // Fallback
     }
 
-    if (items.length === 0) {
-      try {
-        const pQ = new URLSearchParams();
-        if (params?.category_id) pQ.set('category_id', params.category_id);
-        if (params?.search) pQ.set('search', params.search);
-        const pQs = pQ.toString() ? `?${pQ.toString()}` : '';
-        const fallbackRes = await fetchApi<any>(`/products${pQs}`);
-        const fallbackList = Array.isArray(fallbackRes?.data?.items)
-          ? fallbackRes.data.items
-          : Array.isArray(fallbackRes?.data)
-          ? fallbackRes.data
-          : Array.isArray(fallbackRes)
-          ? fallbackRes
-          : [];
-        items = fallbackList.map(normalizeMarketplaceListingToProduct);
-      } catch {
-        // Abaikan
+    // 2. Lengkapi dengan listing panen aktif dari /marketplace/listings jika ada yang belum termuat
+    try {
+      const mQ = new URLSearchParams();
+      if (params?.category_id) mQ.set('commodity_id', params.category_id);
+      if (params?.search) mQ.set('search', params.search);
+      const mQs = mQ.toString() ? `?${mQ.toString()}` : '';
+      const mRes = await fetchApi<any>(`/marketplace/listings${mQs}`);
+      const mList = Array.isArray(mRes?.data?.items)
+        ? mRes.data.items
+        : Array.isArray(mRes?.data)
+        ? mRes.data
+        : Array.isArray(mRes)
+        ? mRes
+        : [];
+      const mProducts = mList.map(normalizeMarketplaceListingToProduct);
+      for (const mp of mProducts) {
+        if (!items.some((it) => String(it.id) === String(mp.id))) {
+          items.push(mp);
+        }
       }
+    } catch {
+      // Abaikan jika marketplace listings tidak tersedia
     }
 
     return { status: 'success', data: items };
@@ -430,7 +437,8 @@ export const BuyerApi = {
 
   getPopularProducts: async (): Promise<{ status: string; data: BuyerProduct[] }> => {
     try {
-      const res = await fetchApi<any>('/marketplace/listings?limit=6');
+      // Prioritaskan endpoint produk populer terpadu /api/v1/products/popular
+      const res = await fetchApi<any>('/products/popular?limit=6');
       const rawList = Array.isArray(res?.data?.items)
         ? res.data.items
         : Array.isArray(res?.data)
@@ -446,11 +454,17 @@ export const BuyerApi = {
     }
 
     try {
-      const res = await fetchApi<{ status: string; data: BuyerProduct[] }>('/products/popular');
-      const list = Array.isArray((res as any)?.data) ? (res as any).data : [];
-      return { status: 'success', data: list.map(normalizeMarketplaceListingToProduct) };
+      const res = await fetchApi<any>('/marketplace/listings?limit=6');
+      const rawList = Array.isArray(res?.data?.items)
+        ? res.data.items
+        : Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res)
+        ? res
+        : [];
+      return { status: 'success', data: rawList.map(normalizeMarketplaceListingToProduct) };
     } catch {
-      return { status: 'success', data: [] };
+      return { status: 'error', data: [] };
     }
   },
 
